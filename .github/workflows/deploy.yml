@@ -51,10 +51,20 @@ jobs:
       - name: 0/2 — DEBUG list subdomains so we know the real docroot
         run: |
           set -e
-          curl -sS --fail-with-body -X GET \
+          curl -sS -X POST \
             "https://${CPANEL_HOST_CLEAN}:2083/execute/SubDomain/list_subdomains" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-            | jq '.data[] | select(.domain | test("mtt"; "i")) | {domain, dir, documentroot, rootdomain}'
+            --data "" \
+            > /tmp/subdomains.json
+          # Print mtt-related entries verbosely; if jq filter is empty, dump full list.
+          MATCH=$(jq '[.data[]? | select(.domain | test("mtt";"i"))]' /tmp/subdomains.json)
+          if [ "$MATCH" = "[]" ] || [ -z "$MATCH" ]; then
+            echo "--- no mtt match. Full subdomain list:"
+            jq '.data[]? | {domain, dir, documentroot, rootdomain}' /tmp/subdomains.json | head -80
+          else
+            echo "--- mtt entries:"
+            echo "$MATCH" | jq '.'
+          fi
 
       - name: 1/2 — cPanel git fetch + reset to main
         run: |
