@@ -48,16 +48,34 @@ jobs:
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
-      - name: 0/2 — DEBUG list all domains (main+addon+subdomain+parked)
+      - name: 0/2 — DEBUG resolve mtt subdomain's docroot via legacy api2
         run: |
           set -e
+          # Modern UAPI 'WebVhosts/list_domains' would also work, but Hostgator
+          # often retains the legacy api2 SubDomain/listsubdomains which is
+          # known to include 'dir' and 'reldir' fields directly.
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/DomainInfo/list_domains" \
+            "https://${CPANEL_HOST_CLEAN}:2083/json-api/cpanel?cpanel_jsonapi_module=SubDomain&cpanel_jsonapi_func=listsubdomains&cpanel_jsonapi_apiversion=2" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            > /tmp/domains.json
-          echo "=== Full DomainInfo response ==="
-          cat /tmp/domains.json | jq '.'
+            > /tmp/sd.json
+          echo "=== api2 SubDomain.listsubdomains ==="
+          jq '.cpanelresult.data[] | select(.domain | test("mtt";"i"))' /tmp/sd.json || true
+          echo
+          echo "=== UAPI WebVhosts/list_domains ==="
+          curl -sS -X POST \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/WebVhosts/list_domains" \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+            --data "" \
+            > /tmp/wv.json || true
+          jq '.data[] | select(.domain | test("mtt";"i"))' /tmp/wv.json || true
+          echo
+          echo "=== Try userdata directly ==="
+          curl -sS -X POST \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/UserDataGeneral/load_user_domain_data?domain=mtt.thelittlegraduates.in" \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+            --data "" \
+            | jq '.'
 
       - name: 1/2 — cPanel git fetch + reset to main
         run: |
