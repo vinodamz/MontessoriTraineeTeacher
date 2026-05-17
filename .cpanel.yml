@@ -1,10 +1,18 @@
 ---
 # cPanel deployment recipe.
-# IMPORTANT: keep the rsync invocation on ONE PHYSICAL LINE — YAML's folded
-# scalar (>-) preserves newlines on more-indented continuation lines, which
-# silently corrupts deploys.
+# Apache's actual docroot for mtt.thelittlegraduates.in is unknown — cPanel
+# UAPI on this host doesn't expose vhost details to user-level tokens. So we
+# rsync into every plausible candidate docroot; whichever one Apache is using
+# will serve the site. Once verified, this list will be trimmed.
+# IMPORTANT: each rsync stays on ONE PHYSICAL LINE.
 deployment:
   tasks:
-    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='includes/config.php' --exclude='last-deploy.log' ./ $HOME/thelittlegraduates.in/mtt/ > $HOME/last-mtt-deploy.log 2>&1
-    - /usr/bin/find $HOME/thelittlegraduates.in/mtt/ -name '*.php' -exec /usr/bin/touch {} +
-    - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log
+    - /bin/mkdir -p $HOME/thelittlegraduates.in/mtt $HOME/public_html/mtt $HOME/mtt.thelittlegraduates.in $HOME/public_html/mtt.thelittlegraduates.in
+    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='includes/config.php' --exclude='last-deploy.log' ./ $HOME/thelittlegraduates.in/mtt/ >> $HOME/last-mtt-deploy.log 2>&1
+    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='includes/config.php' --exclude='last-deploy.log' ./ $HOME/public_html/mtt/ >> $HOME/last-mtt-deploy.log 2>&1
+    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='includes/config.php' --exclude='last-deploy.log' ./ $HOME/mtt.thelittlegraduates.in/ >> $HOME/last-mtt-deploy.log 2>&1
+    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='includes/config.php' --exclude='last-deploy.log' ./ $HOME/public_html/mtt.thelittlegraduates.in/ >> $HOME/last-mtt-deploy.log 2>&1
+    - /bin/echo "marker-A" > $HOME/thelittlegraduates.in/mtt/marker-A.txt
+    - /bin/echo "marker-B" > $HOME/public_html/mtt/marker-B.txt
+    - /bin/echo "marker-C" > $HOME/mtt.thelittlegraduates.in/marker-C.txt
+    - /bin/echo "marker-D" > $HOME/public_html/mtt.thelittlegraduates.in/marker-D.txt
