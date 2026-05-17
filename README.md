@@ -29,7 +29,8 @@ Live: [mtt.thelittlegraduates.in](https://mtt.thelittlegraduates.in/).
 - **Monthly assessment** form: D/P/N rating per indicator, per-category & overall comments. Pre-fills if a prior assessment exists.
 - **Student progress** page: baseline, monthly summary table, SVG trend chart, all teacher notes. Print-friendly.
 - **Entry baseline** form (one per student).
-- **Admin console**: CRUD for teachers & students; read-only indicator listing.
+- **Admin console**: CRUD for teachers, students, curriculum indicators (with safe-delete that refuses if past assessments reference the indicator), and the D/P/N rating scheme.
+- **Per-student custom indicators** — teachers add ad-hoc indicators that appear only in that student's monthly assessments.
 - Pre-seeded curriculum indicators for Playgroup / Nursery / LKG / UKG.
 
 ## File layout
@@ -42,7 +43,8 @@ MontessoriTraineeTeacher/
 ├── assess.php          # Monthly assessment entry
 ├── progress.php        # Historical view + chart + print
 ├── baseline.php        # Entry baseline editor
-├── admin.php           # Admin console (?tab=teachers|students|indicators)
+├── admin.php           # Admin console (?tab=teachers|students|indicators|rating)
+├── custom_indicators.php # Per-student custom indicators (teacher- or admin-managed)
 ├── install.php         # One-time first-admin bootstrap (delete after)
 ├── .htaccess           # Protects /includes, /sql; security headers
 ├── .cpanel.yml         # rsync recipe used by cPanel deploy
@@ -95,7 +97,6 @@ See [CICD.md](CICD.md) for one-time cPanel + GitHub setup and the deploy flow.
 
 ## Roadmap
 
-- Admin UI for `skill_indicators` and `rating_config` CRUD (currently read-only).
-- Student-level `student_custom_indicators` editor.
-- CSV / PDF report export from the Progress page.
+- CSV / PDF report export from the Progress page (currently uses browser print).
 - Bulk import of students from CSV.
+- Admin-level cross-cutting views of comments and baselines.

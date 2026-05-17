@@ -104,6 +104,7 @@ require __DIR__ . '/includes/header.php';
                 <a class="btn btn-primary" href="assess.php?student_id=<?= $sid ?>&month=<?= e($currentMonth) ?>">Assess</a>
                 <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress</a>
                 <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>"><?= $hasBl ? 'Edit Baseline' : 'Add Baseline' ?></a>
+                <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $sid ?>" title="Manage custom indicators for this student">Custom</a>
             </div>
         </li>
     <?php endforeach; ?>

@@ -101,6 +101,7 @@ require __DIR__ . '/includes/header.php';
     <div class="head-actions">
         <a class="btn" href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Assess this month</a>
         <a class="btn btn-ghost" href="baseline.php?student_id=<?= $studentId ?>"><?= $baseline ? 'Edit baseline' : 'Add baseline' ?></a>
+        <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
         <button type="button" class="btn btn-ghost" onclick="window.print()">Print</button>
     </div>
 </div>

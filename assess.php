@@ -246,6 +246,7 @@ require __DIR__ . '/includes/header.php';
                 <?php endforeach; ?>
             </select>
         </label>
+        <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
         <a class="btn btn-ghost" href="index.php">Back</a>
     </form>
 </div>

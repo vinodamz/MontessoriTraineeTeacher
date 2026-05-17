@@ -305,16 +305,23 @@ textarea:focus, input:focus, select:focus { outline: 2px solid color-mix(in srgb
     font-size: .9rem; font-weight: 500;
 }
 .tabs a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.tabs.subtle a { padding: .25rem .65rem; font-size: .8rem; }
+.tabs.subtle a.on { background: var(--accent); border-color: var(--accent); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: .8rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.card-head h2 { margin: 0; }
+
 .grid-form {
     display: grid; gap: .75rem; grid-template-columns: repeat(2, 1fr);
 }
 .grid-form label { display: flex; flex-direction: column; gap: .25rem; font-weight: 600; font-size: .85rem; color: var(--ink-soft); }
+.grid-form label.full { grid-column: 1 / -1; }
 .grid-form .form-actions { grid-column: 1 / -1; }
 .grid-form .check { display: inline-flex; flex-direction: row; align-items: center; gap: .35rem; font-weight: 500; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .admin-table th, .admin-table td { padding: .55rem .65rem; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
 .admin-table thead th { background: var(--line-soft); }
-.row-actions { white-space: nowrap; display: flex; gap: .25rem; }
+.admin-table tr.is-inactive td { opacity: .55; }
+.row-actions { white-space: nowrap; display: flex; gap: .25rem; flex-wrap: wrap; }
 
 /* ------- responsive tweaks ------- */
 @media (max-width: 640px) {
