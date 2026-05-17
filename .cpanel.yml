@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --delete --exclude='.git/' --exclude='.cpanel.yml' --exclude='.gitignore' --exclude='last-deploy.log' ./ $HOME/thelittlegraduates.in/mtt/ > $HOME/last-mtt-deploy.log 2>&1
+    - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log
