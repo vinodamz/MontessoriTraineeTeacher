@@ -48,29 +48,39 @@ jobs:
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
-      - name: 0/2 — DEBUG dump apache vhost config for mtt
+      - name: 0/2 — DEBUG SSL installed_hosts (docroot Apache actually uses)
         run: |
           set -e
-          echo "=== UAPI WebServer/get_vhost_info ==="
+          echo "=== SSL/installed_hosts (mtt + lgtaskmanager) ==="
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/WebVhosts/get_vhost_info?vhost=mtt.thelittlegraduates.in" \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/SSL/installed_hosts" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            | jq '.' || true
+            | jq '.data[]? | select(.servername | test("mtt|lgtask";"i")) | {servername, documentroot, ip, port, modules, aliases, status}' || true
           echo
-          echo "=== Try direct file read of /var/cpanel/userdata/$USER/mtt.thelittlegraduates.in ==="
+          echo "=== EA4/get_features (does this Hostgator use LiteSpeed?) ==="
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/get_file_content?dir=%2Fvar%2Fcpanel%2Fuserdata%2F${CPANEL_USER}&file=mtt.thelittlegraduates.in" \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/Variables/get_user_information" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            | jq '{status, errors, content_preview: (.data.content // "" | .[0:3000])}' || true
+            | jq '.data | {homedir, user, scriptpath, "user_info_keys": (.|keys)}' || true
+
+      - name: 0a/2 — DEBUG legacy api2 Apache.fetchvhost for mtt + lgtm
+        run: |
+          set -e
+          echo "=== Apache.fetchvhost mtt.thelittlegraduates.in ==="
+          curl -sS -X POST \
+            "https://${CPANEL_HOST_CLEAN}:2083/json-api/cpanel?cpanel_jsonapi_module=Apache&cpanel_jsonapi_func=fetchvhost&cpanel_jsonapi_apiversion=2&servername=mtt.thelittlegraduates.in" \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+            --data "" \
+            | jq '.cpanelresult.data[0]?.vhost // "no result"' || true
           echo
-          echo "=== Diff: same query for the working lgtaskmanager subdomain ==="
+          echo "=== Apache.fetchvhost lgtaskmanager.thelittlegraduates.in (working sibling) ==="
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/get_file_content?dir=%2Fvar%2Fcpanel%2Fuserdata%2F${CPANEL_USER}&file=lgtaskmanager.thelittlegraduates.in" \
+            "https://${CPANEL_HOST_CLEAN}:2083/json-api/cpanel?cpanel_jsonapi_module=Apache&cpanel_jsonapi_func=fetchvhost&cpanel_jsonapi_apiversion=2&servername=lgtaskmanager.thelittlegraduates.in" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            | jq '{status, errors, content_preview: (.data.content // "" | .[0:3000])}' || true
+            | jq '.cpanelresult.data[0]?.vhost // "no result"' || true
 
       - name: 1/2 — cPanel git fetch + reset to main
         run: |
