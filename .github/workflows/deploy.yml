@@ -1,107 +1,61 @@
-name: Build & Deploy to Hostgator (cPanel pull)
+name: Deploy to Hostgator (cPanel pull)
 
-# Strategy
-# --------
-# - main holds the React/TS source.
-# - This workflow runs `npm run build` on every push to main, then force-pushes
-#   the resulting dist/ to an orphan `deploy` branch (single commit, no history).
-# - The `deploy` branch ALSO carries the .cpanel.yml recipe that rsyncs its
-#   contents into the subdomain docroot.
-# - cPanel's Git Version Control is configured to track the `deploy` branch.
-#   GitHub Actions then triggers UAPI:
-#     1. VersionControl/update       → cPanel `git fetch` + reset to deploy
-#     2. VersionControlDeployment/create → cPanel runs .cpanel.yml (rsync)
-#
-# Cost of this approach: dist/ is published to a public branch. That's fine —
-# it's the same bundle that ships to end users.
+# Mirrors the LGTaskManager pipeline. cPanel pulls main directly — no build
+# step, no deploy branch — because PHP runs from source.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write   # required to force-push the deploy branch
-
 concurrency:
   group: deploy-hostgator-mtt
   cancel-in-progress: false
 
 jobs:
-  build_and_deploy:
-    name: Build, publish deploy branch, trigger cPanel pull
+  lint:
+    name: PHP syntax check
     runs-on: ubuntu-latest
-    env:
-      CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
-      CPANEL_USER: ${{ secrets.CPANEL_USER }}
-      CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
-      REPO_ROOT: /home/${{ secrets.CPANEL_USER }}/repos/MontessoriTraineeTeacher
-
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
         with:
-          node-version: '20'
-          cache: 'npm'
+          php-version: '8.1'
+          tools: none
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint (advisory)
-        run: npm run lint
-        continue-on-error: true
-
-      - name: Typecheck (advisory)
-        run: npm run typecheck
-        continue-on-error: true
-
-      - name: Build (gating step — bundle must succeed)
-        run: npm run build
-
-      - name: Publish dist/ to deploy branch (orphan, force-push)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: php -l on every .php file
         run: |
           set -e
-          DEPLOY_DIR="$(mktemp -d)"
-          cp -R "$GITHUB_WORKSPACE/dist/." "$DEPLOY_DIR/"
-          cd "$DEPLOY_DIR"
+          find . -path ./.git -prune -o -name '*.php' -print | while read -r f; do
+            php -l "$f" >/dev/null
+          done
 
-          # .cpanel.yml lives on the deploy branch alongside the built bundle.
-          # IMPORTANT: keep the rsync invocation on ONE PHYSICAL LINE — YAML's
-          # folded scalar would silently corrupt the command.
-          cat > .cpanel.yml <<'EOF'
-          ---
-          deployment:
-            tasks:
-              - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --delete --exclude='.git/' --exclude='.cpanel.yml' --exclude='.gitignore' --exclude='last-deploy.log' ./ $HOME/thelittlegraduates.in/mtt/ > $HOME/last-mtt-deploy.log 2>&1
-              - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log
-          EOF
-
-          git init -q -b deploy
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Build ${GITHUB_SHA}"
-          git push -q --force \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            deploy:deploy
-
+  deploy:
+    name: Trigger cPanel git-pull and deploy
+    needs: lint
+    runs-on: ubuntu-latest
+    env:
+      CPANEL_HOST:  ${{ secrets.CPANEL_HOST }}
+      CPANEL_USER:  ${{ secrets.CPANEL_USER }}
+      CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
+      REPO_ROOT:    /home/${{ secrets.CPANEL_USER }}/repos/MontessoriTraineeTeacher
+    steps:
       - name: Normalise CPANEL_HOST (strip scheme / trailing slash)
         run: |
           HOST=$(printf '%s' "${CPANEL_HOST}" | sed -E 's#^https?://##; s#/+$##')
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
-      - name: 1/2 — cPanel git fetch + reset to deploy branch
+      - name: 1/2 — cPanel git fetch + reset to main
         run: |
           set -e
           curl -sS --fail-with-body -X POST \
             "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControl/update" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data-urlencode "repository_root=${REPO_ROOT}" \
-            --data-urlencode "branch=deploy" \
+            --data-urlencode "branch=main" \
             | tee /tmp/pull.json
           jq -e '.status == 1' /tmp/pull.json > /dev/null || (cat /tmp/pull.json; exit 1)
 

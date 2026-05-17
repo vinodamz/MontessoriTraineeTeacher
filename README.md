@@ -1,70 +1,101 @@
-# Montessori Trainee Teacher
+# Montessori Trainee Teacher Assessment
 
-Curriculum-indicator assessment app for Little Graduates trainee teachers.
-Teachers rate students against indicator skills per term; admins manage
-indicators, evaluation cards, comments, and student baselines.
+Curriculum-indicator assessment portal for Little Graduates trainee teachers.
+Teachers rate students against grade-scoped curriculum indicators each month;
+admins manage teachers, students, and indicators.
 
-Originally generated with [bolt.new](https://bolt.new); now hosted at
-[mtt.thelittlegraduates.in](https://mtt.thelittlegraduates.in/).
+Originally generated with [bolt.new](https://bolt.new) as a Vite/React/Supabase
+SPA — converted to PHP+MySQL to match the LGTaskManager hosting model. The
+original React source is preserved on the [`react-legacy`](https://github.com/vinodamz/MontessoriTraineeTeacher/tree/react-legacy)
+branch.
+
+Live: [mtt.thelittlegraduates.in](https://mtt.thelittlegraduates.in/).
 
 ## Tech
 
 | | |
 |---|---|
-| Build       | Vite 5 + TypeScript + React 18                                         |
-| Styling     | Tailwind CSS, Lucide icons                                             |
-| Backend     | Supabase (Postgres + Row-Level-Security + JWT auth via PIN)            |
-| PDF export  | jsPDF + html2canvas (per-student progress reports)                     |
-| Hosting     | Hostgator cPanel shared hosting (static SPA, no server runtime)        |
-| CI/CD       | GitHub Actions → cPanel UAPI git-pull → rsync into subdomain docroot   |
+| Language | PHP 7.4+ / 8.x                                                       |
+| Database | MySQL (InnoDB, utf8mb4)                                              |
+| Frontend | Server-rendered HTML + a single `style.css` + minimal JS (no build) |
+| Hosting  | Hostgator cPanel shared hosting                                      |
+| CI/CD    | GitHub Actions → cPanel UAPI git-pull → `.cpanel.yml` rsync         |
+
+## Features
+
+- **PIN-only login** — 4–6 digit numeric PIN, bcrypt-hashed, rate-limited.
+- **Profile-card landing** with numpad PIN modal.
+- **Per-student dashboard** with last-assessment status and baseline pill.
+- **Monthly assessment** form: D/P/N rating per indicator, per-category & overall comments. Pre-fills if a prior assessment exists.
+- **Student progress** page: baseline, monthly summary table, SVG trend chart, all teacher notes. Print-friendly.
+- **Entry baseline** form (one per student).
+- **Admin console**: CRUD for teachers & students; read-only indicator listing.
+- Pre-seeded curriculum indicators for Playgroup / Nursery / LKG / UKG.
+
+## File layout
+
+```
+MontessoriTraineeTeacher/
+├── index.php           # Teacher dashboard (student grid)
+├── login.php           # PIN landing + AJAX endpoint
+├── logout.php
+├── assess.php          # Monthly assessment entry
+├── progress.php        # Historical view + chart + print
+├── baseline.php        # Entry baseline editor
+├── admin.php           # Admin console (?tab=teachers|students|indicators)
+├── install.php         # One-time first-admin bootstrap (delete after)
+├── .htaccess           # Protects /includes, /sql; security headers
+├── .cpanel.yml         # rsync recipe used by cPanel deploy
+├── includes/
+│   ├── config.example.php  # Copy to config.php and edit
+│   ├── db.php              # PDO wrapper
+│   ├── auth.php            # Session + PIN auth helpers
+│   ├── functions.php       # View + domain helpers
+│   ├── header.php
+│   └── footer.php
+├── assets/
+│   ├── css/style.css
+│   ├── js/{login.js,assess.js}
+│   └── img/logo.png
+└── sql/
+    ├── schema.sql      # Tables (DROPs first; destructive on existing data)
+    └── seeds.sql       # rating_config + PG/Nur/LKG/UKG indicators
+```
 
 ## Local development
 
-```bash
-npm install
-npm run dev          # http://localhost:5173
-npm run lint
-npm run typecheck
-npm run build        # outputs dist/
-npm run preview      # serves dist/ locally on http://localhost:4173
-```
-
-`.env` is committed (anon-key/URL are publishable by design — see
-[CICD.md](CICD.md)).
-
-## Database
-
-Supabase migrations live under `supabase/migrations/`. To apply them to a fresh
-Supabase project:
+Requires PHP 7.4+ and MySQL.
 
 ```bash
-npx supabase link --project-ref <ref>
-npx supabase db push
+# 1. Create DB and apply schema
+mysql -u root -p -e "CREATE DATABASE mtt_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql -u root -p mtt_dev < sql/schema.sql
+mysql -u root -p mtt_dev < sql/seeds.sql
+
+# 2. Local config
+cp includes/config.example.php includes/config.php
+# edit the db credentials inside includes/config.php
+
+# 3. Built-in PHP server
+php -S 127.0.0.1:8000
+
+# 4. http://127.0.0.1:8000/install.php → create first admin → delete install.php
 ```
-
-Schema summary:
-
-- `teachers` (PIN-authenticated, `role` ∈ {`teacher`, `admin`})
-- `students` (`grade` ∈ {Playgroup, Nursery, LKG, UKG}, owned by a teacher)
-- `skills` + `skill_indicators` — curriculum hierarchy, grade-scoped
-- `evaluation_cards` — term assessments per student per indicator
-- `assessment_comments` — narrative comments per card
-- `student_baselines` — initial term snapshot per student
-- Pre-seeded indicators for Playgroup / Nursery / LKG / UKG curricula
-
-## Pages
-
-| File                                        | Purpose                                        |
-|---------------------------------------------|------------------------------------------------|
-| `src/pages/LoginPage.tsx`                   | PIN login (teacher or admin)                   |
-| `src/pages/TeacherDashboard.tsx`            | Teacher's own students + assessments           |
-| `src/pages/StudentProgress.tsx`             | Per-student progress + PDF export              |
-| `src/pages/AdminDashboard.tsx`              | Admin shell with tabs:                         |
-|   ↳ `components/admin/AssessmentsAdmin.tsx` | All assessments across teachers                |
-|   ↳ `components/admin/EvaluationCardsAdmin` | Manage card templates                          |
-|   ↳ `components/admin/CommentsAdmin.tsx`    | Manage narrative comments                      |
-|   ↳ `components/admin/BaselineAdmin.tsx`    | Student baseline records                       |
 
 ## Deploying
 
 See [CICD.md](CICD.md) for one-time cPanel + GitHub setup and the deploy flow.
+
+## Auth model
+
+- All staff are rows in `teachers`. `role` is either `teacher` or `admin`.
+- PINs are bcrypt-hashed in `pin_hash`. The plaintext PIN never persists.
+- Sessions store `teacher_id` / `teacher_name` / `teacher_role`.
+- `current_user()` / `require_login()` / `require_admin()` enforce access.
+
+## Roadmap
+
+- Admin UI for `skill_indicators` and `rating_config` CRUD (currently read-only).
+- Student-level `student_custom_indicators` editor.
+- CSV / PDF report export from the Progress page.
+- Bulk import of students from CSV.

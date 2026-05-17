@@ -1,0 +1,10 @@
+---
+# cPanel deployment recipe.
+# IMPORTANT: keep the rsync invocation on ONE PHYSICAL LINE — YAML's folded
+# scalar (>-) preserves newlines on more-indented continuation lines, which
+# silently corrupts deploys.
+deployment:
+  tasks:
+    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='includes/config.php' --exclude='last-deploy.log' ./ $HOME/thelittlegraduates.in/mtt/ > $HOME/last-mtt-deploy.log 2>&1
+    - /usr/bin/find $HOME/thelittlegraduates.in/mtt/ -name '*.php' -exec /usr/bin/touch {} +
+    - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log

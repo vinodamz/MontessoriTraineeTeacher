@@ -1,27 +1,13 @@
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Local config — DB credentials never go into git.
+includes/config.php
 
-node_modules
-dist
-dist-ssr
-*.local
-
-.vscode/*
-!.vscode/extensions.json
-.idea
+# OS / editor cruft
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-# .env is intentionally NOT ignored — it contains VITE_SUPABASE_URL and the
-# anon (publishable) key, both of which are baked into the client bundle at
-# build time and are therefore public by design. RLS policies in Supabase
-# gate access, not key secrecy. Any service-role keys must NEVER go here.
-# .env
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Server-generated rsync log
+last-deploy.log

@@ -1,0 +1,20 @@
+# Protect includes and sql directories from direct web access.
+RewriteEngine On
+RewriteRule ^includes/.*$ - [F,L]
+RewriteRule ^sql/.*$      - [F,L]
+
+# Default to index.php
+DirectoryIndex index.php
+
+# Disable directory listings.
+Options -Indexes
+
+# HTTPS redirect is handled by cPanel's "Force HTTPS Redirect" toggle on the
+# Domains page — not from .htaccess. (Hostgator's reverse-proxy makes %{HTTPS}
+# and X-Forwarded-Proto unreliable here.)
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
