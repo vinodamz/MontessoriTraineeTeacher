@@ -48,29 +48,29 @@ jobs:
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
-      - name: 0/2 — DEBUG list files in mtt docroot + read last-mtt-deploy.log
+      - name: 0/2 — DEBUG dump apache vhost config for mtt
         run: |
           set -e
-          echo "=== ls $HOME/thelittlegraduates.in/mtt/ ==="
+          echo "=== UAPI WebServer/get_vhost_info ==="
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/list_files?dir=thelittlegraduates.in/mtt&include_hidden=1&types=file%7Cdir" \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/WebVhosts/get_vhost_info?vhost=mtt.thelittlegraduates.in" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            | jq '{status, errors, count: (.data|length), files: [.data[]? | {file, type, size}]}'
+            | jq '.' || true
           echo
-          echo "=== ls $HOME (looking for last-mtt-deploy.log) ==="
+          echo "=== Try direct file read of /var/cpanel/userdata/$USER/mtt.thelittlegraduates.in ==="
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/list_files?dir=&include_hidden=0&types=file" \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/get_file_content?dir=%2Fvar%2Fcpanel%2Fuserdata%2F${CPANEL_USER}&file=mtt.thelittlegraduates.in" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            | jq '.data[]? | select(.file | test("deploy|mtt|log"; "i")) | {file, type, size}'
+            | jq '{status, errors, content_preview: (.data.content // "" | .[0:3000])}' || true
           echo
-          echo "=== get_file_content last-mtt-deploy.log ==="
+          echo "=== Diff: same query for the working lgtaskmanager subdomain ==="
           curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/get_file_content?dir=&file=last-mtt-deploy.log" \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/get_file_content?dir=%2Fvar%2Fcpanel%2Fuserdata%2F${CPANEL_USER}&file=lgtaskmanager.thelittlegraduates.in" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
             --data "" \
-            | jq '{status, errors, content_preview: (.data.content // "" | .[0:2000])}'
+            | jq '{status, errors, content_preview: (.data.content // "" | .[0:3000])}' || true
 
       - name: 1/2 — cPanel git fetch + reset to main
         run: |
