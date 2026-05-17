@@ -48,6 +48,14 @@ jobs:
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
+      - name: 0/2 — DEBUG list subdomains so we know the real docroot
+        run: |
+          set -e
+          curl -sS --fail-with-body -X GET \
+            "https://${CPANEL_HOST_CLEAN}:2083/execute/SubDomain/list_subdomains" \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+            | jq '.data[] | select(.domain | test("mtt"; "i")) | {domain, dir, documentroot, rootdomain}'
+
       - name: 1/2 — cPanel git fetch + reset to main
         run: |
           set -e
