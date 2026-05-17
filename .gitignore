@@ -20,4 +20,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
+# .env is intentionally NOT ignored — it contains VITE_SUPABASE_URL and the
+# anon (publishable) key, both of which are baked into the client bundle at
+# build time and are therefore public by design. RLS policies in Supabase
+# gate access, not key secrecy. Any service-role keys must NEVER go here.
+# .env
