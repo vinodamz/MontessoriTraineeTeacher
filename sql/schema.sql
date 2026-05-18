@@ -111,7 +111,7 @@ CREATE TABLE evaluation_cards (
     teacher_id          INT UNSIGNED NOT NULL,
     month_year          VARCHAR(8)   NOT NULL,
     indicator_id        INT UNSIGNED NOT NULL,
-    rating              ENUM('D','P','N') NOT NULL,
+    rating              CHAR(1)      NOT NULL,
     is_custom_indicator TINYINT(1)   NOT NULL DEFAULT 0,
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

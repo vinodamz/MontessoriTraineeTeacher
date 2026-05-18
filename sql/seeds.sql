@@ -7,10 +7,13 @@
 SET NAMES utf8mb4;
 
 -- ---------------- rating_config -----------------
+-- 5-level scheme inherited from the legacy Supabase data.
 INSERT INTO rating_config (code, label, color, numeric_value, is_active) VALUES
-  ('D', 'Developed',        '#22c55e', 5, 1),
-  ('P', 'Progressing',      '#f59e0b', 3, 1),
-  ('N', 'Needs Attention',  '#ef4444', 1, 1);
+  ('M', 'Mastered',          '#10b981', 5, 1),
+  ('I', 'Independent',       '#14b8a6', 4, 1),
+  ('P', 'Progressing',       '#0af5e5', 3, 1),
+  ('E', 'Emerging',          '#6366f1', 2, 1),
+  ('N', 'Needs Improvement', '#f97316', 1, 1);
 
 -- ---------------- skill_indicators: Playgroup ----
 INSERT INTO skill_indicators (grade, category, indicator_text, display_order, is_active) VALUES
