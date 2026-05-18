@@ -85,14 +85,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ---------- GET: render landing ----------
+$cfg = app_config();
+
+// Bootstrap gate: if the unified `users` table doesn't exist yet, the database
+// is still on the old `teachers`-only schema and every query below would 500.
+// Render a one-shot "Run setup" page instead — the user clicks through to
+// /migrate.php which runs without auth specifically for this case.
+if (!users_table_exists()) {
+    ?>
+    <!doctype html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Setup needed — <?= e($cfg['app']['name']) ?></title>
+        <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e(asset_version()) ?>">
+        <link rel="stylesheet" href="/assets/css/style.css?v=<?= e(asset_version()) ?>">
+    </head>
+    <body>
+    <main class="container">
+        <h1>One-time database upgrade needed</h1>
+        <p>The new unified app is deployed, but the database is still on the old schema.</p>
+        <p>Click below to run the migration. It's safe — every step is idempotent,
+           and your existing teachers, students, and assessments are preserved.</p>
+        <p style="margin-top: 1.5rem;">
+            <a class="btn btn-primary" href="/migrate.php">Run database upgrade</a>
+        </p>
+        <p class="muted" style="margin-top: 2rem; font-size: .9rem;">
+            After it finishes, come back to <a href="/login.php">/login.php</a> and sign in with your existing PIN.
+        </p>
+    </main>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
 $users = db()->query("
     SELECT id, name, role, modules
     FROM users
     WHERE active = 1
     ORDER BY (role = 'admin') DESC, name ASC
 ")->fetchAll();
-
-$cfg = app_config();
 ?>
 <!doctype html>
 <html lang="en">
