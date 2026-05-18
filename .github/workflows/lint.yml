@@ -1,0 +1,27 @@
+name: PHP lint
+
+# Runs on every push to a branch and every pull request — gives PRs an
+# explicit green/red signal so we know it's safe to merge to main (which
+# triggers the deploy workflow).
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: php -l on every .php file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: none
+      - name: php -l
+        run: |
+          set -e
+          find . -path ./.git -prune -o -name '*.php' -print | while read -r f; do
+            php -l "$f" >/dev/null
+          done
