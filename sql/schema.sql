@@ -25,6 +25,8 @@ DROP TABLE IF EXISTS student_baselines;
 DROP TABLE IF EXISTS student_custom_indicators;
 DROP TABLE IF EXISTS skill_indicators;
 DROP TABLE IF EXISTS rating_config;
+DROP TABLE IF EXISTS fee_payments;
+DROP TABLE IF EXISTS fee_invoices;
 DROP TABLE IF EXISTS attendance;
 DROP TABLE IF EXISTS student_documents;
 DROP TABLE IF EXISTS student_parents;
@@ -141,6 +143,42 @@ CREATE TABLE attendance (
     KEY idx_attendance_date (attendance_date),
     CONSTRAINT fk_att_student FOREIGN KEY (student_id)        REFERENCES students(id) ON DELETE CASCADE,
     CONSTRAINT fk_att_marker  FOREIGN KEY (marked_by_user_id) REFERENCES users(id)    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE fee_invoices (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    student_id          INT UNSIGNED NOT NULL,
+    title               VARCHAR(120) NOT NULL,
+    period              VARCHAR(30)  NULL,
+    amount              DECIMAL(10,2) NOT NULL,
+    issue_date          DATE         NOT NULL,
+    due_date            DATE         NULL,
+    status              ENUM('open','paid','partial','waived','cancelled') NOT NULL DEFAULT 'open',
+    notes               TEXT         NULL,
+    created_by_user_id  INT UNSIGNED NOT NULL,
+    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_fi_student (student_id, issue_date),
+    KEY idx_fi_due     (due_date),
+    CONSTRAINT fk_fi_student FOREIGN KEY (student_id)         REFERENCES students(id) ON DELETE CASCADE,
+    CONSTRAINT fk_fi_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id)    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE fee_payments (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    invoice_id          INT UNSIGNED NOT NULL,
+    amount              DECIMAL(10,2) NOT NULL,
+    paid_on             DATE         NOT NULL,
+    method              ENUM('cash','bank_transfer','upi','card','cheque','cofee','other') NOT NULL DEFAULT 'cash',
+    reference_no        VARCHAR(80)  NULL,
+    notes               TEXT         NULL,
+    recorded_by_user_id INT UNSIGNED NOT NULL,
+    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_fp_invoice (invoice_id, paid_on),
+    CONSTRAINT fk_fp_invoice  FOREIGN KEY (invoice_id)          REFERENCES fee_invoices(id) ON DELETE CASCADE,
+    CONSTRAINT fk_fp_recorder FOREIGN KEY (recorded_by_user_id) REFERENCES users(id)        ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE rating_config (
