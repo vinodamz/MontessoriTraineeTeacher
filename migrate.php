@@ -12,9 +12,22 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_admin();
+// Bootstrap window: if the `users` table doesn't exist yet, we're between the
+// unified code being deployed and the first migration running — there's no
+// admin to log in as, because the auth queries hit a non-existent table.
+// In that case we allow this page to run without auth.  After the migration
+// finishes, `users` exists and admin auth is required again.
+$bootstrap = !users_table_exists();
+if (!$bootstrap) {
+    require_admin();
+}
 
 header('Content-Type: text/plain; charset=utf-8');
+
+if ($bootstrap) {
+    echo "[bootstrap mode] No `users` table found — running unauthenticated.\n";
+    echo "Once the migration succeeds, future runs of /migrate.php will require an admin login.\n\n";
+}
 
 $pdo = db();
 $dir = __DIR__ . '/sql';

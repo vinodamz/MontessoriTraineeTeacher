@@ -92,6 +92,27 @@ function user_modules_from_row(array $row): array
     return array_values(array_filter(array_map('trim', explode(',', $raw))));
 }
 
+/**
+ * Does the unified `users` table exist yet? False during the brief window
+ * between deploying the unified code and running migrate_001_unify_users.sql.
+ *
+ * Login and migrate.php both use this to gate the bootstrap UX so the user
+ * doesn't see a generic 500 while the DB is still on the old `teachers` schema.
+ */
+function users_table_exists(): bool
+{
+    try {
+        $stmt = db()->prepare("
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name = 'users'
+        ");
+        $stmt->execute();
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function logout(): void
 {
     start_session_once();
