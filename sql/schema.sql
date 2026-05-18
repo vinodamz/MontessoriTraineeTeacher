@@ -37,7 +37,7 @@ CREATE TABLE users (
     name        VARCHAR(120) NOT NULL,
     pin_hash    VARCHAR(255) NOT NULL,
     role        ENUM('teacher','admin') NOT NULL DEFAULT 'teacher',
-    modules     SET('tasks','montessori') NOT NULL DEFAULT '',
+    modules     SET('tasks','montessori','students') NOT NULL DEFAULT '',
     active      TINYINT(1)   NOT NULL DEFAULT 1,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -50,17 +50,50 @@ CREATE TABLE users (
 -- ============================================================================
 
 CREATE TABLE students (
-    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    first_name  VARCHAR(80)  NOT NULL,
-    last_name   VARCHAR(80)  NOT NULL DEFAULT '',
-    grade       ENUM('Playgroup','Nursery','LKG','UKG') NOT NULL,
-    teacher_id  INT UNSIGNED NOT NULL,
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    admission_number         VARCHAR(40)  NULL,
+    first_name               VARCHAR(80)  NOT NULL,
+    last_name                VARCHAR(80)  NOT NULL DEFAULT '',
+    gender                   ENUM('Male','Female','Other') NULL,
+    dob                      DATE         NULL,
+    joining_date             DATE         NULL,
+    blood_group              VARCHAR(5)   NULL,
+    allergies                TEXT         NULL,
+    medical_notes            TEXT         NULL,
+    home_address             TEXT         NULL,
+    pickup_person            VARCHAR(120) NULL,
+    pickup_phone             VARCHAR(40)  NULL,
+    emergency_contact_name   VARCHAR(120) NULL,
+    emergency_contact_phone  VARCHAR(40)  NULL,
+    photo_path               VARCHAR(255) NULL,
+    notes                    TEXT         NULL,
+    is_active                TINYINT(1)   NOT NULL DEFAULT 1,
+    grade                    ENUM('Playgroup','Nursery','LKG','UKG') NOT NULL,
+    teacher_id               INT UNSIGNED NOT NULL,
+    created_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_students_admission (admission_number),
     KEY idx_students_teacher (teacher_id),
     KEY idx_students_grade   (grade),
+    KEY idx_students_active  (is_active),
     CONSTRAINT fk_students_teacher
         FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE student_parents (
+    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    student_id  INT UNSIGNED NOT NULL,
+    relation    ENUM('father','mother','guardian','other') NOT NULL DEFAULT 'guardian',
+    name        VARCHAR(120) NOT NULL,
+    phone       VARCHAR(40)  NULL,
+    email       VARCHAR(120) NULL,
+    occupation  VARCHAR(120) NULL,
+    address     TEXT         NULL,
+    is_primary  TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_sp_student (student_id),
+    CONSTRAINT fk_sp_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE rating_config (

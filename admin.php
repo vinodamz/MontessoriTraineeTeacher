@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students']);
     return implode(',', $valid);
 }
 
@@ -164,6 +164,7 @@ require __DIR__ . '/includes/header.php';
                 <label>Modules</label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="montessori" checked><span>Assessment</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="tasks"><span>Tasks</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="students"><span>Students</span></label>
             </div>
         </div>
         <div class="actions">
@@ -194,6 +195,7 @@ require __DIR__ . '/includes/header.php';
         $mods    = user_modules_from_row($u);
         $hasA    = in_array('montessori', $mods, true);
         $hasT    = in_array('tasks', $mods, true);
+        $hasS    = in_array('students', $mods, true);
     ?>
         <li class="team-row" style="--card: <?= e(user_color((int)$u['id'])) ?>;">
             <div class="team-dot"><?= e(user_initials($u['name'])) ?></div>
@@ -223,6 +225,10 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Tasks module">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="tasks" <?= $hasT ? 'checked' : '' ?>>
                     <span>Tasks</span>
+                </label>
+                <label class="checkbox" title="Students module">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="students" <?= $hasS ? 'checked' : '' ?>>
+                    <span>Students</span>
                 </label>
                 <label class="checkbox" title="Active">
                     <input form="<?= $fid ?>" type="checkbox" name="active" value="1" <?= $u['active'] ? 'checked' : '' ?>>

@@ -10,16 +10,18 @@ require_once __DIR__ . '/includes/functions.php';
 
 $user = require_login();
 
-$hasTasks   = user_has_module($user, 'tasks');
-$hasMontess = user_has_module($user, 'montessori');
+$hasTasks    = user_has_module($user, 'tasks');
+$hasMontess  = user_has_module($user, 'montessori');
+$hasStudents = user_has_module($user, 'students');
 
 // Single-module users go straight in.
-if (!$hasTasks && $hasMontess)   redirect('/assessment/index.php');
-if ($hasTasks && !$hasMontess)   redirect('/tasks/index.php');
-if (!$hasTasks && !$hasMontess) {
-    // Admin with no modules set, or misconfigured user — fall through to the
-    // picker with both tiles. (Admins implicitly have access in user_has_module.)
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents;
+if ($moduleCount === 1) {
+    if ($hasTasks)    redirect('/tasks/index.php');
+    if ($hasMontess)  redirect('/assessment/index.php');
+    if ($hasStudents) redirect('/students/index.php');
 }
+// 0 or 2+ modules → render the picker below.
 
 // ---------- Stats for the picker tiles ------------------------------------
 $tasksStats = ['todo' => 0, 'today' => 0, 'overdue' => 0];
@@ -42,6 +44,15 @@ if ($hasTasks) {
             'overdue' => (int)($r['overdue']    ?? 0),
         ];
     } catch (Throwable $e) { /* table may not exist yet — leave zeros */ }
+}
+
+$studentsStats = ['total' => 0, 'active' => 0];
+if ($hasStudents) {
+    try {
+        $studentsStats['total']  = (int)db()->query("SELECT COUNT(*) FROM students")->fetchColumn();
+        // is_active was added by migrate_002 — if it's missing the COALESCE keeps the count correct.
+        $studentsStats['active'] = (int)db()->query("SELECT COUNT(*) FROM students WHERE COALESCE(is_active, 1) = 1")->fetchColumn();
+    } catch (Throwable $e) { /* table may be in mid-migration */ }
 }
 
 $mttStats = ['students' => 0, 'pending_this_month' => 0];
@@ -91,6 +102,20 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <ul class="module-grid" role="list">
+    <?php if ($hasStudents): ?>
+        <li>
+            <a class="module-tile" href="/students/index.php">
+                <h2>Students</h2>
+                <p class="muted">Profiles, parents, contacts, attendance and fees.</p>
+                <div class="module-stats">
+                    <span class="pill"><?= (int)$studentsStats['active'] ?> active</span>
+                    <?php if ($studentsStats['total'] !== $studentsStats['active']): ?>
+                        <span class="pill"><?= (int)$studentsStats['total'] ?> total</span>
+                    <?php endif; ?>
+                </div>
+            </a>
+        </li>
+    <?php endif; ?>
     <?php if ($hasMontess): ?>
         <li>
             <a class="module-tile" href="/assessment/index.php">
@@ -122,7 +147,7 @@ require __DIR__ . '/includes/header.php';
             </a>
         </li>
     <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess): ?>
+    <?php if (!$hasTasks && !$hasMontess && !$hasStudents): ?>
         <li>
             <div class="empty">
                 <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
