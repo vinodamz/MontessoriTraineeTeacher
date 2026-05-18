@@ -87,11 +87,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---------- GET: render landing ----------
 $cfg = app_config();
 
-// Bootstrap gate: if the unified `users` table doesn't exist yet, the database
-// is still on the old `teachers`-only schema and every query below would 500.
-// Render a one-shot "Run setup" page instead — the user clicks through to
-// /migrate.php which runs without auth specifically for this case.
-if (!users_table_exists()) {
+// Bootstrap gate: if the unified `users` table isn't fully in place yet
+// (missing entirely, or present without the `modules` column from a legacy
+// LG schema), every query below would 500. Render a one-shot "Run setup"
+// page instead — the user clicks through to /migrate.php which runs
+// without auth specifically for this case.
+if (!users_table_is_unified()) {
     ?>
     <!doctype html>
     <html lang="en">

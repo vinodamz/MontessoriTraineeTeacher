@@ -93,12 +93,44 @@ function user_modules_from_row(array $row): array
 }
 
 /**
- * Does the unified `users` table exist yet? False during the brief window
- * between deploying the unified code and running migrate_001_unify_users.sql.
+ * Three possible states of the `users` table on the live DB:
+ *   - 'missing'  → table doesn't exist at all.
+ *   - 'legacy'   → table exists but lacks the `modules` column (usually a
+ *                  leftover LG-style users table on the MTT database).
+ *   - 'unified'  → the table we want (has `modules`).
  *
- * Login and migrate.php both use this to gate the bootstrap UX so the user
- * doesn't see a generic 500 while the DB is still on the old `teachers` schema.
+ * Login and migrate.php gate on this so the user doesn't see a generic 500
+ * during any pre-unified state.
  */
+function users_table_state(): string
+{
+    try {
+        $pdo  = db();
+        $stmt = $pdo->prepare("
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name = 'users'
+        ");
+        $stmt->execute();
+        if (!$stmt->fetchColumn()) return 'missing';
+
+        $stmt = $pdo->prepare("
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'modules'
+        ");
+        $stmt->execute();
+        return $stmt->fetchColumn() ? 'unified' : 'legacy';
+    } catch (Throwable $e) {
+        return 'missing';
+    }
+}
+
+/** True only when the table is in its final unified shape. */
+function users_table_is_unified(): bool
+{
+    return users_table_state() === 'unified';
+}
+
+/** Back-compat with the first hotfix. */
 function users_table_exists(): bool
 {
     try {
