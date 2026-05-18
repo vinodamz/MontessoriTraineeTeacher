@@ -1,0 +1,27 @@
+# Block ALL direct web access to anything under /uploads.
+# Uploaded files are served only via /students/document_download.php,
+# which authenticates the request and streams the file from PHP.
+#
+# Even though stored filenames are random, defence-in-depth: we never want
+# the web server handing these out by name. If an attacker guesses the
+# filename, the response is 403 — no file content escapes via Apache.
+
+# Deny everything by default.
+<RequireAll>
+    Require all denied
+</RequireAll>
+
+# Apache 2.2 fallback (Hostgator usually serves 2.4 via LiteSpeed, but just in case).
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
+
+# Belt-and-braces: refuse to execute anything as PHP from this tree, even if
+# someone bypasses the denial above. LiteSpeed and Apache both honour this.
+<FilesMatch "\.(php|phar|phtml|phps|pl|py|sh|cgi)$">
+    SetHandler default-handler
+    ForceType text/plain
+</FilesMatch>
+
+Options -ExecCGI -Indexes

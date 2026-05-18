@@ -11,3 +11,9 @@ Thumbs.db
 
 # Server-generated rsync log
 last-deploy.log
+
+# User-uploaded files live in uploads/student_docs/ on the server.
+# Track the directory structure + .htaccess + .gitkeep but never the
+# actual uploads.
+uploads/student_docs/*
+!uploads/student_docs/.gitkeep

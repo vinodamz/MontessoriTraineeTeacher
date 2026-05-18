@@ -408,3 +408,68 @@ function rating_codes(): array
     usort($codes, fn($a, $b) => $map[$b]['numeric_value'] <=> $map[$a]['numeric_value']);
     return $codes;
 }
+
+// ---------- Student-document upload helpers ---------------------------------
+
+/** Absolute filesystem path to the student-docs directory. Created on demand. */
+function student_docs_dir(): string
+{
+    $dir = realpath(__DIR__ . '/..') . '/uploads/student_docs';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    return $dir;
+}
+
+/** Limits + whitelist. Keep these tight — this is an internal school app, not Dropbox. */
+const STUDENT_DOC_MAX_BYTES   = 10 * 1024 * 1024; // 10 MB
+const STUDENT_DOC_MIME_ALLOW  = [
+    'application/pdf'                                                            => 'pdf',
+    'image/jpeg'                                                                 => 'jpg',
+    'image/png'                                                                  => 'png',
+    'image/gif'                                                                  => 'gif',
+    'image/webp'                                                                 => 'webp',
+    'application/msword'                                                         => 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'    => 'docx',
+    'application/vnd.ms-excel'                                                   => 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'          => 'xlsx',
+    'text/plain'                                                                 => 'txt',
+];
+const STUDENT_DOC_CATEGORIES = [
+    'birth_certificate' => 'Birth certificate',
+    'vaccination'       => 'Vaccination record',
+    'id_proof'          => 'ID proof',
+    'medical'           => 'Medical',
+    'school'            => 'School / academic',
+    'other'             => 'Other',
+];
+
+function format_bytes(int $b): string
+{
+    if ($b < 1024)               return $b . ' B';
+    if ($b < 1024 * 1024)        return number_format($b / 1024, 1) . ' KB';
+    return number_format($b / (1024 * 1024), 1) . ' MB';
+}
+
+function student_doc_category_label(string $code): string
+{
+    return STUDENT_DOC_CATEGORIES[$code] ?? $code;
+}
+
+/**
+ * Detect the MIME of an uploaded file by reading its contents, NOT by
+ * trusting the browser-supplied `type`. Returns null if we can't decide.
+ */
+function sniff_mime_type(string $tmpPath): ?string
+{
+    if (function_exists('finfo_open')) {
+        $f = finfo_open(FILEINFO_MIME_TYPE);
+        $m = finfo_file($f, $tmpPath);
+        finfo_close($f);
+        return $m ?: null;
+    }
+    if (function_exists('mime_content_type')) {
+        return mime_content_type($tmpPath) ?: null;
+    }
+    return null;
+}
