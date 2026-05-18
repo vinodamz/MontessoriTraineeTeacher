@@ -7,8 +7,8 @@
  *
  * GET ?student_id=N → list + add/edit form.
  */
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 $user = require_login();
 
@@ -122,7 +122,7 @@ if (!empty($_GET['edit'])) {
 
 $fullName  = trim($student['first_name'] . ' ' . $student['last_name']);
 $pageTitle = "Custom indicators · $fullName";
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
@@ -209,4 +209,4 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </section>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

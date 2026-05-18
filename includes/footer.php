@@ -1,6 +1,6 @@
 </main>
 <footer class="footer">
-    <small>&copy; <?= date('Y') ?> Little Graduates · Trainee Teacher Assessment</small>
+    <small>&copy; <?= date('Y') ?> Little Graduates</small>
 </footer>
 </body>
 </html>

@@ -3,8 +3,8 @@
  * baseline.php — entry-baseline observations for one student.
  * Single page, GET shows the form pre-filled if a row exists, POST upserts.
  */
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 $user = require_login();
 
@@ -80,7 +80,7 @@ $bl = $stmt->fetch() ?: [];
 
 $fullName  = trim($student['first_name'] . ' ' . $student['last_name']);
 $pageTitle = "Baseline · $fullName";
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
@@ -131,4 +131,4 @@ require __DIR__ . '/includes/header.php';
     </div>
 </form>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>
