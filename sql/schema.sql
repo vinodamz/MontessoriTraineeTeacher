@@ -25,6 +25,9 @@ DROP TABLE IF EXISTS student_baselines;
 DROP TABLE IF EXISTS student_custom_indicators;
 DROP TABLE IF EXISTS skill_indicators;
 DROP TABLE IF EXISTS rating_config;
+DROP TABLE IF EXISTS attendance;
+DROP TABLE IF EXISTS student_documents;
+DROP TABLE IF EXISTS student_parents;
 DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS users;
 
@@ -122,6 +125,22 @@ CREATE TABLE student_documents (
     UNIQUE KEY uq_stored_filename (stored_filename),
     CONSTRAINT fk_sd_student  FOREIGN KEY (student_id)          REFERENCES students(id) ON DELETE CASCADE,
     CONSTRAINT fk_sd_uploader FOREIGN KEY (uploaded_by_user_id) REFERENCES users(id)    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE attendance (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    student_id          INT UNSIGNED NOT NULL,
+    attendance_date     DATE         NOT NULL,
+    status              ENUM('present','absent','late','excused','holiday') NOT NULL DEFAULT 'present',
+    notes               VARCHAR(255) NULL,
+    marked_by_user_id   INT UNSIGNED NOT NULL,
+    marked_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_attendance_student_date (student_id, attendance_date),
+    KEY idx_attendance_date (attendance_date),
+    CONSTRAINT fk_att_student FOREIGN KEY (student_id)        REFERENCES students(id) ON DELETE CASCADE,
+    CONSTRAINT fk_att_marker  FOREIGN KEY (marked_by_user_id) REFERENCES users(id)    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE rating_config (

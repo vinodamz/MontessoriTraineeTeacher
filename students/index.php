@@ -120,13 +120,14 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; endforeach; ?>
         </p>
     </div>
-    <?php if ($canEdit): ?>
-        <div class="actionbar">
+    <div class="actionbar">
+        <a class="btn" href="/students/attendance.php">Mark attendance</a>
+        <?php if ($canEdit): ?>
             <a class="btn" href="/students/yearend.php">Year-end</a>
             <a class="btn" href="/students/withdrawals.php">Withdrawals</a>
             <a class="btn btn-primary" href="/students/edit.php">+ New student</a>
-        </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
 <form method="get" class="filter-row card">

@@ -132,6 +132,7 @@ require __DIR__ . '/../includes/header.php';
             <a class="btn btn-primary" href="/students/edit.php?id=<?= (int)$s['id'] ?>">Edit</a>
             <a class="btn" href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">Documents<?= $docCount ? ' · ' . $docCount : '' ?></a>
         <?php endif; ?>
+        <a class="btn" href="/students/attendance_history.php?student_id=<?= (int)$s['id'] ?>">Attendance</a>
         <?php if (user_has_module($user, 'montessori')): ?>
             <a class="btn" href="/assessment/progress.php?student_id=<?= (int)$s['id'] ?>">Progress</a>
             <a class="btn btn-ghost" href="/assessment/baseline.php?student_id=<?= (int)$s['id'] ?>">Baseline</a>
