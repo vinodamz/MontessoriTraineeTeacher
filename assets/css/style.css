@@ -258,8 +258,62 @@ body.landing { background: var(--bg); }
     font: inherit; color: var(--ink);
 }
 textarea:focus, input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 0; }
-.month-switch { display: flex; align-items: center; gap: .5rem; }
+.month-switch { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .month-switch label { display: flex; align-items: center; gap: .35rem; }
+
+/* ------- month calendar tile picker (assess.php) ------- */
+.month-card { padding: 1rem 1.2rem; margin-bottom: 1rem; }
+.month-card .card-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: .5rem; margin-bottom: .8rem; }
+.month-card .card-head h2 { font-size: 1.05rem; margin: 0; }
+.month-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: .5rem;
+}
+.month-tile {
+    position: relative;
+    display: flex; flex-direction: column; gap: .25rem;
+    padding: .7rem .75rem .65rem;
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--bg-card); color: var(--ink);
+    text-decoration: none; font-size: .9rem;
+    transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.month-tile:hover {
+    text-decoration: none;
+    transform: translateY(-1px);
+    border-color: var(--ink-soft);
+    box-shadow: 0 2px 6px rgba(40,30,20,0.08);
+}
+.month-tile.is-empty { background: var(--bg-card); }
+.month-tile.is-used  { background: #fef0f6; border-color: #f5c6d9; }
+.month-tile.is-used .month-name { color: var(--accent); }
+.month-tile.is-active {
+    background: var(--ink); border-color: var(--ink); color: #fff;
+    box-shadow: 0 4px 10px rgba(40,30,20,0.18);
+}
+.month-tile.is-active .month-name { color: #fff; }
+.month-tile.is-active .month-icon.used  { color: #fff; }
+.month-tile.is-active .month-icon.empty { color: rgba(255,255,255,.7); }
+.month-name { font-weight: 600; line-height: 1.1; }
+.month-status { font-size: .85rem; line-height: 1; color: var(--muted); }
+.month-icon.used  { color: var(--accent); font-weight: 700; }
+.month-icon.empty { color: var(--muted); font-weight: 700; }
+.month-today {
+    position: absolute; top: 4px; right: 6px;
+    font-size: .6rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: var(--warn);
+}
+.month-tile.is-active .month-today { color: #f5b342; }
+
+.legend-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+    vertical-align: middle; margin-right: .15rem; margin-left: .25rem;
+    border: 1px solid var(--line); background: var(--bg-card);
+}
+.legend-dot.is-used   { background: #fef0f6; border-color: #f5c6d9; }
+.legend-dot.is-active { background: var(--ink); border-color: var(--ink); }
 
 /* ------- progress page ------- */
 .card {

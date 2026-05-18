@@ -261,44 +261,45 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
         </p>
     </div>
-    <div class="month-switch">
-        <?php if ($existingMonths): ?>
-            <form method="get" style="display:inline-flex;align-items:center;gap:.35rem">
-                <input type="hidden" name="student_id" value="<?= $studentId ?>">
-                <label style="display:inline-flex;align-items:center;gap:.35rem">
-                    <span class="muted small">View / edit</span>
-                    <select name="month" onchange="this.form.submit()">
-                        <?php foreach (array_reverse($existingMonths) as $my): ?>
-                            <option value="<?= e($my) ?>" <?= $my === $month ? 'selected' : '' ?>>
-                                <?= e(month_year_label($my)) ?>
-                            </option>
-                        <?php endforeach; ?>
-                        <?php if ($isNewMonth): /* keep the new (in-progress) month visible */ ?>
-                            <option value="<?= e($month) ?>" selected>
-                                <?= e(month_year_label($month)) ?> · new
-                            </option>
-                        <?php endif; ?>
-                    </select>
-                </label>
-            </form>
-        <?php endif; ?>
-
-        <?php if ($unusedMonths): ?>
-            <label style="display:inline-flex;align-items:center;gap:.35rem">
-                <span class="muted small">+ Add new</span>
-                <select onchange="if(this.value){window.location.href='assess.php?student_id=<?= $studentId ?>&month='+encodeURIComponent(this.value)}">
-                    <option value="">Pick a month…</option>
-                    <?php foreach ($unusedMonths as $my): ?>
-                        <option value="<?= e($my) ?>"><?= e(month_year_label($my)) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-        <?php endif; ?>
-
+    <div class="head-actions">
         <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
         <a class="btn btn-ghost" href="index.php">Back</a>
     </div>
 </div>
+
+<section class="card month-card no-print">
+    <div class="card-head">
+        <h2>Pick a month</h2>
+        <p class="muted small">
+            <span class="legend-dot is-used"></span> has data ·
+            <span class="legend-dot is-empty"></span> empty ·
+            <span class="legend-dot is-active"></span> viewing now
+        </p>
+    </div>
+    <div class="month-grid">
+        <?php
+        $usedSet = array_flip($existingMonths);
+        $todayMy = current_month_year();
+        foreach ($allAcademic as $my):
+            $isUsed   = isset($usedSet[$my]);
+            $isActive = $my === $month;
+            $isToday  = $my === $todayMy;
+            $classes  = ['month-tile'];
+            $classes[] = $isUsed ? 'is-used' : 'is-empty';
+            if ($isActive) $classes[] = 'is-active';
+            $url = "assess.php?student_id=$studentId&month=" . urlencode($my);
+        ?>
+            <a class="<?= e(implode(' ', $classes)) ?>" href="<?= e($url) ?>" aria-current="<?= $isActive ? 'page' : 'false' ?>">
+                <?php if ($isToday): ?><span class="month-today">today</span><?php endif; ?>
+                <span class="month-name"><?= e(month_year_label($my)) ?></span>
+                <span class="month-status">
+                    <?= $isUsed ? '<span class="month-icon used" aria-label="Has assessment">✓</span>'
+                                : '<span class="month-icon empty" aria-label="No assessment yet">+</span>' ?>
+                </span>
+            </a>
+        <?php endforeach; ?>
+    </div>
+</section>
 
 <?php if (!$byCategory): ?>
     <div class="empty">
