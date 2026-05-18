@@ -145,12 +145,19 @@ body.landing { background: var(--bg); }
     position: fixed; inset: 0;
     background: rgba(20,15,10,0.55); display: flex; align-items: center; justify-content: center;
     z-index: 80; padding: 1rem;
+    /* tasks.css (LG) sets opacity:0 and relies on a `.is-open` class toggle for
+       its fade-in. This app toggles the `hidden` attribute instead, so force
+       full opacity here whenever the overlay isn't hidden. */
+    opacity: 1;
 }
 .pin-overlay[hidden] { display: none; }
 .pin-modal {
     width: 320px; max-width: 100%; padding: 1.5rem 1.2rem 1.2rem;
     background: var(--bg-card); border-radius: 18px; position: relative;
     box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    /* Cancel tasks.css's `transform: translateY(12px)` which is part of the
+       same fade-in animation we're not using. */
+    transform: none;
 }
 .pin-close {
     position: absolute; top: .4rem; right: .4rem; border: 0; background: transparent;
