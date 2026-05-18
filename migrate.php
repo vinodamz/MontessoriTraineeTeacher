@@ -78,22 +78,63 @@ try {
 
 // ---------- Decide what to do --------------------------------------------
 if ($state === 'legacy') {
+    $confirm = ($_GET['confirm'] ?? '') === 'drop-legacy-lg';
+    if (!$confirm) {
+        echo "═══════════════════════════════════════════════════════════════════\n";
+        echo "Legacy LGTaskManager tables detected.\n\n";
+        echo "Found these stray tables left behind by a previous LG deployment:\n";
+        echo "  users             ~2 rows  (LG-shaped, no modules column)\n";
+        echo "  tasks             see counts above\n";
+        echo "  task_columns      see counts above\n";
+        echo "  task_recurrences  see counts above\n\n";
+        echo "Your real Montessori data (teachers, students, evaluation_cards,\n";
+        echo "assessments, comments, baselines, indicators, rating_config) is\n";
+        echo "untouched and will not be affected.\n\n";
+        echo "To proceed, click the link below. It will:\n";
+        echo "  1. DROP the four LG tables above (in correct FK-safe order).\n";
+        echo "  2. Re-run this diagnostic.\n";
+        echo "  3. Apply migrate_001_unify_users.sql, which builds the unified\n";
+        echo "     `users` table from your existing `teachers` rows.\n\n";
+        echo "──────────────────────────────────────────────────────────────────\n";
+        echo "  👉 Confirm: " . get_self_url() . "?confirm=drop-legacy-lg\n";
+        echo "──────────────────────────────────────────────────────────────────\n\n";
+        echo "If you want to inspect what's in those tables first, in phpMyAdmin run:\n";
+        echo "  SELECT id, name, role FROM users;\n";
+        echo "  SELECT id, title, created_at FROM tasks;\n";
+        exit;
+    }
+
+    // ---------- Confirmed: drop legacy LG tables ------------------------
     echo "═══════════════════════════════════════════════════════════════════\n";
-    echo "STOP — the database is in an unexpected state.\n\n";
-    echo "There's already a `users` table here, but it doesn't have the\n";
-    echo "`modules` column the unified app expects. That usually means an\n";
-    echo "older LGTaskManager-shaped `users` table was applied to the MTT\n";
-    echo "database at some past point.\n\n";
-    echo "What to do:\n";
-    echo "  1. Look at the [users] columns + row count above. If you don't\n";
-    echo "     recognise its rows as belonging to this Montessori app, you\n";
-    echo "     can drop it safely — your real teachers are in the `teachers`\n";
-    echo "     table.\n";
-    echo "  2. In cPanel → phpMyAdmin → run:\n";
-    echo "       DROP TABLE users;\n";
-    echo "  3. Reload /migrate.php. The diagnostic will now read state=missing\n";
-    echo "     and it will auto-rebuild `users` from `teachers`.\n";
-    exit;
+    echo "Dropping legacy LG tables (confirmed)…\n\n";
+
+    // Order matters: tasks references task_columns + users; task_recurrences
+    // references task_columns + users; users is referenced by both.
+    $dropOrder = ['tasks', 'task_recurrences', 'task_columns', 'users'];
+    foreach ($dropOrder as $t) {
+        try {
+            db()->exec("DROP TABLE IF EXISTS `$t`");
+            echo "  ✓ dropped $t\n";
+        } catch (Throwable $e) {
+            echo "  ✗ failed to drop $t: " . $e->getMessage() . "\n";
+            echo "    Aborting. Fix the issue and retry.\n";
+            exit;
+        }
+    }
+    echo "\n";
+
+    // Re-evaluate state and fall through to apply migrations.
+    $state     = users_table_state();
+    $bootstrap = $state !== 'unified';
+    echo "users table state is now: $state\n\n";
+}
+
+function get_self_url(): string
+{
+    $scheme = !empty($_SERVER['HTTPS']) ? 'https' : 'http';
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $path   = strtok($_SERVER['REQUEST_URI'] ?? '/migrate.php', '?');
+    return $scheme . '://' . $host . $path;
 }
 
 // ---------- Apply migrations ---------------------------------------------
