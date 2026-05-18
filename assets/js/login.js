@@ -1,5 +1,5 @@
 /* login.js — numpad PIN entry overlay.
- * Wired up on profile-card click. Each card carries data-tid + data-name.
+ * Wired up on profile-card click. Each card carries data-uid + data-name.
  */
 (function () {
     'use strict';
@@ -12,14 +12,14 @@
     const numpad  = document.getElementById('numpad');
     const submit  = document.getElementById('pinSubmit');
 
-    let teacherId = null;
-    let teacherName = '';
+    let userId = null;
+    let userName = '';
     let pin = '';
     let busy = false;
 
-    function openModal(tid, name) {
-        teacherId = tid;
-        teacherName = name;
+    function openModal(uid, name) {
+        userId = uid;
+        userName = name;
         pin = '';
         busy = false;
         hello.textContent = 'Hi, ' + (name.split(/\s+/)[0] || name) + ' —';
@@ -33,7 +33,7 @@
     function closeModal() {
         overlay.hidden = true;
         pin = '';
-        teacherId = null;
+        userId = null;
         document.body.style.overflow = '';
     }
 
@@ -44,7 +44,7 @@
 
     document.querySelectorAll('.profile-card').forEach(btn => {
         btn.addEventListener('click', () => {
-            openModal(parseInt(btn.dataset.tid, 10), btn.dataset.name || '');
+            openModal(parseInt(btn.dataset.uid, 10), btn.dataset.name || '');
         });
     });
 
@@ -75,15 +75,15 @@
     }
 
     function trySubmit() {
-        if (busy || pin.length < 4 || teacherId == null) return;
+        if (busy || pin.length < 4 || userId == null) return;
         busy = true;
         submit.disabled = true;
         errorEl.textContent = '';
         const body = new URLSearchParams();
-        body.set('teacher_id', teacherId);
+        body.set('user_id', userId);
         body.set('pin', pin);
-        body.set('_csrf', window.MTT_CSRF || '');
-        fetch('login.php', { method: 'POST', body }).then(async r => {
+        body.set('_csrf', window.LG_CSRF || '');
+        fetch('/login.php', { method: 'POST', body }).then(async r => {
             const j = await r.json().catch(() => ({}));
             if (j.ok && j.redirect) {
                 window.location.href = j.redirect;

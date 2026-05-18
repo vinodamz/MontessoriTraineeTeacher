@@ -1,7 +1,7 @@
 name: Deploy to Hostgator (cPanel pull)
 
-# Mirrors the LGTaskManager pipeline. cPanel pulls main directly — no build
-# step, no deploy branch — because PHP runs from source.
+# Unified Little Graduates app — cPanel pulls main directly. No build step,
+# no deploy branch — PHP runs from source.
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-hostgator-mtt
+  group: deploy-hostgator-lg
   cancel-in-progress: false
 
 jobs:
@@ -59,7 +59,7 @@ jobs:
             | tee /tmp/pull.json
           jq -e '.status == 1' /tmp/pull.json > /dev/null || (cat /tmp/pull.json; exit 1)
 
-      - name: 2/2 — cPanel run .cpanel.yml (rsync into docroot)
+      - name: 2/3 — cPanel run .cpanel.yml (rsync into docroot)
         run: |
           set -e
           curl -sS --fail-with-body -X POST \
@@ -68,3 +68,17 @@ jobs:
             --data-urlencode "repository_root=${REPO_ROOT}" \
             | tee /tmp/deploy.json
           jq -e '.status == 1' /tmp/deploy.json > /dev/null || (cat /tmp/deploy.json; exit 1)
+
+      - name: 3/3 — Self-test the unified login URL
+        run: |
+          set +e
+          sleep 6
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            "https://mtt.thelittlegraduates.in/login.php?_=$(date +%s)")
+          echo "GET /login.php → HTTP $STATUS"
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ]; then
+            echo "::error::Live URL returned $STATUS — the deploy looks complete but the URL is dead."
+            echo "::error::Check ~/last-mtt-deploy.log on the server and verify file permissions (dirs 755, files 644)."
+            exit 1
+          fi
+          echo "::notice::Site is live."

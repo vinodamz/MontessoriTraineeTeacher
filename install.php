@@ -2,66 +2,71 @@
 /**
  * install.php — first-run admin bootstrap.
  *
- * Open this once in your browser after creating the database and running
- * sql/schema.sql (+ sql/seeds.sql if you want the pre-loaded indicators).
+ * Open this once after creating the database and applying sql/schema.sql
+ * (or sql/migrate_001_unify_users.sql on an existing MTT database).
  *
  * DELETE THIS FILE after the first admin is created.
  */
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-$adminExists = (int)db()->query(
-    "SELECT COUNT(*) FROM teachers WHERE role = 'admin' AND active = 1"
-)->fetchColumn() > 0;
+$adminExists = (int)db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1")
+    ->fetchColumn() > 0;
 
 if ($adminExists) {
     http_response_code(403);
-    echo '<!doctype html><meta charset=utf-8><title>Already installed</title>';
-    echo '<h1>Already installed</h1>';
-    echo '<p>An admin user already exists. Delete <code>install.php</code> from the server now.</p>';
+    echo '<p>An admin user already exists. Delete <code>install.php</code> from the server.</p>';
     exit;
 }
 
-$error = null;
+$err = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $pin  = preg_replace('/\D/', '', $_POST['pin'] ?? '');
     if ($name === '' || strlen($pin) < 4 || strlen($pin) > 6) {
-        $error = 'Name and a 4–6 digit PIN are required.';
+        $err = 'Name and a 4–6 digit PIN are required.';
     } else {
-        $stmt = db()->prepare(
-            "INSERT INTO teachers (name, pin_hash, role, active) VALUES (:n, :h, 'admin', 1)"
-        );
-        $stmt->execute([':n' => $name, ':h' => password_hash($pin, PASSWORD_DEFAULT)]);
-        echo '<!doctype html><meta charset=utf-8><title>Installed</title>';
-        echo '<link rel="stylesheet" href="assets/css/style.css">';
-        echo '<main class="container"><h1>Admin created ✔</h1>';
-        echo '<p>Now <strong>delete <code>install.php</code></strong> from the server, ';
-        echo 'then <a href="login.php">log in</a>.</p></main>';
-        exit;
+        $stmt = db()->prepare("
+            INSERT INTO users (name, pin_hash, role, modules, active)
+            VALUES (:n, :h, 'admin', 'tasks,montessori', 1)
+        ");
+        $stmt->execute([
+            ':n' => $name,
+            ':h' => password_hash($pin, PASSWORD_DEFAULT),
+        ]);
+        flash_set('ok', "Admin \"$name\" created with PIN $pin. Delete install.php now.");
+        redirect('/login.php');
     }
 }
+
+$cfg = app_config();
 ?>
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Install — Trainee Teacher Assessment</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Install — <?= e($cfg['app']['name']) ?></title>
+    <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e(asset_version()) ?>">
+    <link rel="stylesheet" href="/assets/css/style.css?v=<?= e(asset_version()) ?>">
 </head>
 <body>
 <main class="container">
     <h1>Create the first admin</h1>
-    <p class="muted">This page only works because no admin teacher exists yet.</p>
-    <?php if ($error): ?><div class="flash flash-error"><?= e($error) ?></div><?php endif; ?>
-    <form method="post" class="login-card">
-        <label>Your name
-            <input name="name" required maxlength="100" autocomplete="name">
-        </label>
-        <label>PIN (4–6 digits)
+    <p class="muted">This page is only available while no admin exists. Delete it after use.</p>
+    <?php if ($err): ?><div class="flash flash-error"><?= e($err) ?></div><?php endif; ?>
+    <form method="post" class="card card-form">
+        <div class="field">
+            <label>Your name</label>
+            <input name="name" required maxlength="120" autofocus>
+        </div>
+        <div class="field">
+            <label>Choose a PIN (4–6 digits)</label>
             <input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" required>
-        </label>
-        <button class="btn btn-primary">Create admin</button>
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary">Create admin</button>
+        </div>
     </form>
 </main>
 </body>

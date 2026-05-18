@@ -7,8 +7,8 @@
  * POST → transactional save: deletes prior eval_cards/assessments/comments
  *      for (student_id, teacher_id, month_year) then inserts fresh rows.
  */
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 $user = require_login();
 
@@ -245,7 +245,7 @@ $ratingCodes = rating_codes();
 $fullName    = trim($student['first_name'] . ' ' . $student['last_name']);
 
 $pageTitle = "Assess " . $fullName;
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
@@ -379,7 +379,7 @@ require __DIR__ . '/includes/header.php';
         <button class="btn btn-primary" type="submit">Save assessment</button>
     </div>
 </form>
-<script src="assets/js/assess.js?v=<?= e(asset_version()) ?>"></script>
+<script src="/assets/js/assess.js?v=<?= e(asset_version()) ?>"></script>
 <?php endif; ?>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

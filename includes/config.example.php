@@ -5,15 +5,15 @@
 return [
     'db' => [
         'host'     => 'localhost',
-        'name'     => 'cpaneluser_mtt',     // cPanel prefixes DB names with your account
-        'user'     => 'cpaneluser_mtt',
+        'name'     => 'cpaneluser_lg',      // cPanel prefixes DB names with your account
+        'user'     => 'cpaneluser_lg',
         'password' => 'CHANGE_ME',
         'charset'  => 'utf8mb4',
     ],
     'app' => [
-        'name'           => 'Trainee Teacher Assessment',
-        'short_name'     => 'TTA',
-        'session_name'   => 'MTT_SESSION',
+        'name'           => 'Little Graduates',
+        'short_name'     => 'LG',
+        'session_name'   => 'LG_SESSION',
         'max_pin_tries'  => 5,
         'lock_seconds'   => 30,
         'timezone'       => 'Asia/Kolkata',

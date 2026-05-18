@@ -5,8 +5,8 @@
  * The "Print" button uses the browser's print dialog; the @media print rules
  * in style.css hide the topbar and form chrome so the page prints cleanly.
  */
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 $user = require_login();
 
@@ -15,7 +15,7 @@ $studentId = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
 $stmt = db()->prepare("
     SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id, t.name AS teacher_name
     FROM students s
-    LEFT JOIN teachers t ON t.id = s.teacher_id
+    LEFT JOIN users t ON t.id = s.teacher_id
     WHERE s.id = :id
 ");
 $stmt->execute([':id' => $studentId]);
@@ -85,7 +85,7 @@ foreach ($categories as $i => $cat) $catColors[$cat] = $palette[$i % count($pale
 
 $fullName  = trim($student['first_name'] . ' ' . $student['last_name']);
 $pageTitle = "Progress · $fullName";
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head no-print">
@@ -246,4 +246,4 @@ $xFor  = fn($i) => $padL + ($nM > 1 ? $i * $xStep : $plotW / 2);
 </section>
 <?php endif; ?>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

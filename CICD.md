@@ -1,6 +1,6 @@
 # CI/CD — auto-deploy to Hostgator (cPanel pull model)
 
-Identical to the LGTaskManager pipeline. cPanel clones the repo and pulls
+Single repo, single docroot, single subdomain. cPanel clones the repo and pulls
 `main` on every push — no build step, because PHP runs from source.
 
 ## How it works
@@ -30,12 +30,19 @@ from GitHub.
 ### 1. Database
 
 cPanel → **MySQL Databases**:
-- Create DB (e.g. `ideyyfbn_mtt`).
+- Create DB (e.g. `ideyyfbn_lg`).
 - Create user; grant ALL on the DB.
 
 cPanel → **phpMyAdmin** → pick the DB:
-- **Import** → upload `sql/schema.sql` (creates tables; DROPs existing).
+
+**Fresh install** — apply both files:
+- **Import** → upload `sql/schema.sql` (creates all tables; DROPs existing).
 - **Import** → upload `sql/seeds.sql` (rating_config + PG/Nur/LKG/UKG indicators).
+
+**Upgrading the existing MTT database** in-place (preserves all data):
+- Apply `sql/migrate_001_unify_users.sql` via phpMyAdmin → Import, or open
+  `/migrate.php` once after deploying and signing in as admin. The migration
+  is fully idempotent.
 
 ### 2. Subdomain
 
@@ -97,11 +104,18 @@ clobber it.
 3. **Delete `install.php`** via cPanel File Manager (the page also warns you).
 4. Visit `https://mtt.thelittlegraduates.in/login.php` → tap your profile card → enter your PIN.
 
-### 8. Add staff and students
+### 8. Add staff, modules, and students
 
-Once logged in as admin: **Admin → Teachers** to add staff, **Admin → Students**
-to add students and assign each to a teacher. Teachers will then see their
-students on the dashboard.
+Once logged in as admin:
+- **Admin** (root `/admin.php`) — add users, set their role (`teacher` / `admin`)
+  and the modules they can access (`Assessment` and/or `Tasks`).
+- **Assessment → Admin → Students** — add students and assign each to a teacher.
+- **Tasks → Team / Board columns / Recurring tasks** — set up board columns,
+  recurring routines, and the task team list.
+
+Single-module users (e.g. someone with only `Assessment` checked) get
+redirected straight into that module after sign-in. Users with both modules see
+a picker tile screen at `/index.php`.
 
 ## Manual trigger
 
