@@ -1,12 +1,14 @@
 # Little Graduates — unified school app
 
-One PHP app with two modules under a single login:
+One PHP app with three modules under a single login:
 
 - **Assessment** (`/assessment/...`) — trainee teacher curriculum-indicator assessment.
   Monthly D/P/N ratings, per-student baselines, progress charts, print-friendly reports.
 - **Tasks** (`/tasks/...`) — team task board with kanban columns, recurring routines, and a calendar view.
+- **Students** (`/students/...`) — student management: profile + parents/guardians + address/emergency
+  contacts, with attendance/fees/document upload arriving in follow-on PRs.
 
-One `users` table, one PIN login, one admin console. Each user has a role (`teacher` / `admin`) plus a per-module access set (`tasks`, `montessori`, or both).
+One `users` table, one PIN login, one admin console. Each user has a role (`teacher` / `admin`) plus a per-module access set (`tasks`, `montessori`, `students`, or any combination).
 
 Live: [mtt.thelittlegraduates.in](https://mtt.thelittlegraduates.in/).
 
@@ -42,6 +44,9 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
 ├── tasks/                # Task manager module
 │   ├── index.php, tasks.php, calendar.php
 │   ├── admin.php, debug-recurrences.php, reset-opcache.php
+├── students/             # Student management module
+│   ├── index.php (list + search), view.php (profile)
+│   ├── edit.php (add/edit + parents inline)
 ├── assets/
 │   ├── css/{style.css, tasks.css}
 │   ├── js/{login.js, assess.js, kanban.js}
@@ -49,6 +54,7 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
 └── sql/
     ├── schema.sql                       # Fresh-DB unified schema
     ├── migrate_001_unify_users.sql      # In-place migration for the existing MTT DB
+    ├── migrate_002_student_module.sql   # Extends students table + adds student_parents
     └── seeds.sql                        # rating_config + curriculum indicators
 ```
 
