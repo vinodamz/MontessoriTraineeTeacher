@@ -48,27 +48,6 @@ jobs:
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
-      - name: 0/2 — DEBUG re-resolve subdomain after recreate
-        run: |
-          set -e
-          echo "=== api2 SubDomain.listsubdomains — looking for mtt ==="
-          curl -sS -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/json-api/cpanel?cpanel_jsonapi_module=SubDomain&cpanel_jsonapi_func=listsubdomains&cpanel_jsonapi_apiversion=2" \
-            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-            --data "" \
-            > /tmp/sd.json
-          jq '.cpanelresult.data[] | select(.domain | test("mtt|lgtask";"i"))' /tmp/sd.json || true
-          echo
-          echo "=== Try probing each plausible docroot via Fileman ==="
-          for D in "thelittlegraduates.in/mtt" "public_html/thelittlegraduates.in/mtt" "public_html/mtt" "mtt.thelittlegraduates.in" "public_html/mtt.thelittlegraduates.in" "mtt"; do
-            ENC=$(printf '%s' "$D" | jq -sRr @uri)
-            COUNT=$(curl -sS -X POST \
-              "https://${CPANEL_HOST_CLEAN}:2083/execute/Fileman/list_files?dir=${ENC}&include_hidden=0&types=file%7Cdir" \
-              -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" --data "" \
-              | jq '(.data // []) | length')
-            echo "  $D → $COUNT files/dirs"
-          done
-
       - name: 1/2 — cPanel git fetch + reset to main
         run: |
           set -e
