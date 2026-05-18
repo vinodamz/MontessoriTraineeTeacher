@@ -13,11 +13,9 @@ require_once __DIR__ . '/includes/functions.php';
 $user = require_login();
 
 // ---------- Resolve student + month ----------------------------------------
-$studentId = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
-$month     = trim($_REQUEST['month'] ?? '');
-if ($month === '' || !DateTime::createFromFormat('M-y', $month)) {
-    $month = current_month_year();
-}
+$studentId    = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
+$monthParam   = trim($_REQUEST['month'] ?? '');
+$monthChosen  = $monthParam !== '' && DateTime::createFromFormat('M-y', $monthParam);
 
 $stmt = db()->prepare("SELECT id, first_name, last_name, grade, teacher_id FROM students WHERE id = :id");
 $stmt->execute([':id' => $studentId]);
@@ -35,6 +33,30 @@ if ($user['role'] !== 'admin' && (int)$student['teacher_id'] !== (int)$user['id'
 
 // Teacher whose name attaches to this assessment.
 $assessingTeacherId = (int)$user['id'];
+
+// Months with existing data for this student (any teacher), sorted chronologically.
+$stmt = db()->prepare("SELECT DISTINCT month_year FROM evaluation_cards WHERE student_id = :s");
+$stmt->execute([':s' => $studentId]);
+$existingMonths = $stmt->fetchAll(PDO::FETCH_COLUMN);
+usort($existingMonths, 'compare_month_year');
+
+// All academic months minus the ones already used.
+$allAcademic  = academic_months();
+$unusedMonths = array_values(array_diff($allAcademic, $existingMonths));
+usort($unusedMonths, 'compare_month_year');
+
+// Final $month resolution:
+//   url param if valid → use it (could be either an existing or a new month)
+//   else if any existing → most recent existing
+//   else → current month_year (lets the user start a fresh assessment)
+if ($monthChosen) {
+    $month = $monthParam;
+} elseif ($existingMonths) {
+    $month = end($existingMonths);
+} else {
+    $month = current_month_year();
+}
+$isNewMonth = !in_array($month, $existingMonths, true);
 
 // ---------- POST: save -----------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -218,10 +240,9 @@ foreach ($customIndicators as $i) {
     $byCategory[$i['category']]['cust'][] = $i;
 }
 
-$rmap     = rating_config_map();
+$rmap        = rating_config_map();
 $ratingCodes = rating_codes();
-$months   = academic_months();
-$fullName = trim($student['first_name'] . ' ' . $student['last_name']);
+$fullName    = trim($student['first_name'] . ' ' . $student['last_name']);
 
 $pageTitle = "Assess " . $fullName;
 require __DIR__ . '/includes/header.php';
@@ -231,24 +252,52 @@ require __DIR__ . '/includes/header.php';
     <div>
         <h1>Assess <?= e($fullName) ?></h1>
         <p class="muted">
-            <?= e($student['grade']) ?>
-            <?php if (!empty($existing)): ?>· <span class="pill">Editing existing assessment</span><?php endif; ?>
+            <?= e($student['grade']) ?> ·
+            <strong><?= e(month_year_label($month)) ?></strong>
+            <?php if ($isNewMonth): ?>
+                <span class="pill" style="background:#e8f4ff;color:#1c5b9c">New assessment</span>
+            <?php else: ?>
+                <span class="pill">Editing existing</span>
+            <?php endif; ?>
         </p>
     </div>
-    <form method="get" class="month-switch">
-        <input type="hidden" name="student_id" value="<?= $studentId ?>">
-        <label>Month
-            <select name="month" onchange="this.form.submit()">
-                <?php foreach ($months as $my): ?>
-                    <option value="<?= e($my) ?>" <?= $my === $month ? 'selected' : '' ?>>
-                        <?= e(month_year_label($my)) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </label>
+    <div class="month-switch">
+        <?php if ($existingMonths): ?>
+            <form method="get" style="display:inline-flex;align-items:center;gap:.35rem">
+                <input type="hidden" name="student_id" value="<?= $studentId ?>">
+                <label style="display:inline-flex;align-items:center;gap:.35rem">
+                    <span class="muted small">View / edit</span>
+                    <select name="month" onchange="this.form.submit()">
+                        <?php foreach (array_reverse($existingMonths) as $my): ?>
+                            <option value="<?= e($my) ?>" <?= $my === $month ? 'selected' : '' ?>>
+                                <?= e(month_year_label($my)) ?>
+                            </option>
+                        <?php endforeach; ?>
+                        <?php if ($isNewMonth): /* keep the new (in-progress) month visible */ ?>
+                            <option value="<?= e($month) ?>" selected>
+                                <?= e(month_year_label($month)) ?> · new
+                            </option>
+                        <?php endif; ?>
+                    </select>
+                </label>
+            </form>
+        <?php endif; ?>
+
+        <?php if ($unusedMonths): ?>
+            <label style="display:inline-flex;align-items:center;gap:.35rem">
+                <span class="muted small">+ Add new</span>
+                <select onchange="if(this.value){window.location.href='assess.php?student_id=<?= $studentId ?>&month='+encodeURIComponent(this.value)}">
+                    <option value="">Pick a month…</option>
+                    <?php foreach ($unusedMonths as $my): ?>
+                        <option value="<?= e($my) ?>"><?= e(month_year_label($my)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+        <?php endif; ?>
+
         <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
         <a class="btn btn-ghost" href="index.php">Back</a>
-    </form>
+    </div>
 </div>
 
 <?php if (!$byCategory): ?>
