@@ -278,9 +278,11 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="month-grid">
         <?php
-        $usedSet = array_flip($existingMonths);
-        $todayMy = current_month_year();
-        foreach ($allAcademic as $my):
+        $usedSet     = array_flip($existingMonths);
+        $todayMy     = current_month_year();
+        // Most recent month first, so any cell with data lands in the top-left.
+        $monthsOrdered = array_reverse($allAcademic);
+        foreach ($monthsOrdered as $my):
             $isUsed   = isset($usedSet[$my]);
             $isActive = $my === $month;
             $isToday  = $my === $todayMy;
@@ -293,13 +295,20 @@ require __DIR__ . '/includes/header.php';
                 <?php if ($isToday): ?><span class="month-today">today</span><?php endif; ?>
                 <span class="month-name"><?= e(month_year_label($my)) ?></span>
                 <span class="month-status">
-                    <?= $isUsed ? '<span class="month-icon used" aria-label="Has assessment">✓</span>'
-                                : '<span class="month-icon empty" aria-label="No assessment yet">+</span>' ?>
+                    <?= $isUsed ? '<span class="month-icon used" aria-label="Has assessment">✓ has data</span>'
+                                : '<span class="month-icon empty" aria-label="No assessment yet">+ new</span>' ?>
                 </span>
             </a>
         <?php endforeach; ?>
     </div>
 </section>
+
+<?php if ($isNewMonth): ?>
+<div class="flash flash-ok no-print" style="background:#e8f4ff;border-color:#bcd8f5;color:#1c5b9c">
+    <strong>Starting a new assessment for <?= e(month_year_label($month)) ?>.</strong>
+    Pick a rating for each indicator below, optionally add a per-category or overall comment, then <strong>Save</strong>.
+</div>
+<?php endif; ?>
 
 <?php if (!$byCategory): ?>
     <div class="empty">
