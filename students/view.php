@@ -49,6 +49,27 @@ $pstmt = db()->prepare("SELECT * FROM student_parents WHERE student_id = :id ORD
 $pstmt->execute([':id' => $id]);
 $parents = $pstmt->fetchAll();
 
+// Recent documents (just the latest 5 — full list lives on documents.php).
+$docCount = 0;
+$recentDocs = [];
+try {
+    $dstmt = db()->prepare("SELECT COUNT(*) FROM student_documents WHERE student_id = :id");
+    $dstmt->execute([':id' => $id]);
+    $docCount = (int)$dstmt->fetchColumn();
+
+    if ($docCount > 0) {
+        $dstmt = db()->prepare("
+            SELECT id, title, category, original_filename, size_bytes, mime_type, uploaded_at
+            FROM student_documents
+            WHERE student_id = :id
+            ORDER BY uploaded_at DESC, id DESC
+            LIMIT 5
+        ");
+        $dstmt->execute([':id' => $id]);
+        $recentDocs = $dstmt->fetchAll();
+    }
+} catch (Throwable $e) { /* table may not yet exist — Phase 2 migration not run */ }
+
 $full = trim($s['first_name'] . ' ' . $s['last_name']);
 
 /** Render a definition-list row only when the value is non-empty. */
@@ -109,6 +130,7 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn btn-ghost" href="/students/index.php">← Back</a>
         <?php if ($canEdit): ?>
             <a class="btn btn-primary" href="/students/edit.php?id=<?= (int)$s['id'] ?>">Edit</a>
+            <a class="btn" href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">Documents<?= $docCount ? ' · ' . $docCount : '' ?></a>
         <?php endif; ?>
         <?php if (user_has_module($user, 'montessori')): ?>
             <a class="btn" href="/assessment/progress.php?student_id=<?= (int)$s['id'] ?>">Progress</a>
@@ -190,6 +212,39 @@ require __DIR__ . '/../includes/header.php';
                 </li>
             <?php endforeach; ?>
         </ul>
+    <?php endif; ?>
+</section>
+
+<section class="card">
+    <div class="page-head" style="margin:0 0 .5rem;">
+        <h2 style="margin:0;">Documents <?php if ($docCount): ?><span class="pill"><?= (int)$docCount ?></span><?php endif; ?></h2>
+        <?php if ($canEdit): ?>
+            <a class="btn btn-ghost" href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">Manage</a>
+        <?php endif; ?>
+    </div>
+    <?php if (!$recentDocs): ?>
+        <p class="muted">No documents uploaded yet.<?php if ($canEdit): ?> <a href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">Add one</a>.<?php endif; ?></p>
+    <?php else: ?>
+        <ul class="doc-list">
+            <?php foreach ($recentDocs as $d): ?>
+                <li class="doc-row">
+                    <div>
+                        <div class="doc-title">
+                            <a href="/students/document_download.php?id=<?= (int)$d['id'] ?>"><?= e($d['title']) ?></a>
+                            <span class="pill"><?= e(student_doc_category_label($d['category'])) ?></span>
+                        </div>
+                        <div class="doc-meta muted small">
+                            <?= e($d['original_filename']) ?>
+                            · <?= e(format_bytes((int)$d['size_bytes'])) ?>
+                            · <?= e(substr((string)$d['uploaded_at'], 0, 16)) ?>
+                        </div>
+                    </div>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+        <?php if ($docCount > count($recentDocs)): ?>
+            <p class="muted small"><a href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">See all <?= (int)$docCount ?> documents →</a></p>
+        <?php endif; ?>
     <?php endif; ?>
 </section>
 

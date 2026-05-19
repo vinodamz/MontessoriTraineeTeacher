@@ -105,6 +105,25 @@ CREATE TABLE student_parents (
     CONSTRAINT fk_sp_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE student_documents (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    student_id          INT UNSIGNED NOT NULL,
+    category            ENUM('birth_certificate','vaccination','id_proof','medical','school','other')
+                        NOT NULL DEFAULT 'other',
+    title               VARCHAR(160) NOT NULL,
+    original_filename   VARCHAR(255) NOT NULL,
+    stored_filename     VARCHAR(80)  NOT NULL,
+    mime_type           VARCHAR(120) NOT NULL,
+    size_bytes          INT UNSIGNED NOT NULL,
+    uploaded_by_user_id INT UNSIGNED NOT NULL,
+    uploaded_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_sd_student (student_id, uploaded_at),
+    UNIQUE KEY uq_stored_filename (stored_filename),
+    CONSTRAINT fk_sd_student  FOREIGN KEY (student_id)          REFERENCES students(id) ON DELETE CASCADE,
+    CONSTRAINT fk_sd_uploader FOREIGN KEY (uploaded_by_user_id) REFERENCES users(id)    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE rating_config (
     id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
     code          CHAR(1)      NOT NULL,
