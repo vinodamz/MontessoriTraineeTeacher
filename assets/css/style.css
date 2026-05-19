@@ -365,6 +365,28 @@ body.landing { background: var(--bg); }
 .att-summary th { color: var(--ink-soft); font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
 .att-summary tr:last-child td { border-bottom: 0; }
 
+/* ------- fees ------- */
+.invoice-card { padding: .75rem 1rem; }
+.invoice-card summary {
+    list-style: none; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; flex-wrap: wrap;
+}
+.invoice-card summary::-webkit-details-marker { display: none; }
+.invoice-card[open] summary { border-bottom: 1px dashed var(--line); padding-bottom: .6rem; margin-bottom: .6rem; }
+.invoice-title { display: flex; align-items: baseline; gap: .25rem; flex-wrap: wrap; }
+.invoice-figures { display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; font-size: .9rem; color: var(--ink-soft); }
+.invoice-body { padding-top: .25rem; }
+.invoice-body .inline { display: inline-block; }
+
+.inv-open      { background: #fcebc6; color: #6c4612; }
+.inv-paid      { background: #dff1d3; color: #2d6526; }
+.inv-partial   { background: #fdeacd; color: #7a4d12; }
+.inv-waived    { background: #d6e3f3; color: #1f3e63; }
+.inv-cancelled { background: var(--line-soft); color: var(--ink-soft); text-decoration: line-through; }
+
+.pill-warn { background: #fcebc6; color: #6c4612; }
+
 /* status dot */
 .status-dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;

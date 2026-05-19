@@ -123,6 +123,8 @@ require __DIR__ . '/../includes/header.php';
     <div class="actionbar">
         <a class="btn" href="/students/attendance.php">Mark attendance</a>
         <?php if ($canEdit): ?>
+            <a class="btn" href="/students/fees_report.php">Fees report</a>
+            <a class="btn" href="/students/import.php">Bulk import</a>
             <a class="btn" href="/students/yearend.php">Year-end</a>
             <a class="btn" href="/students/withdrawals.php">Withdrawals</a>
             <a class="btn btn-primary" href="/students/edit.php">+ New student</a>
