@@ -57,7 +57,11 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
     ├── schema.sql                       # Fresh-DB unified schema
     ├── migrate_001_unify_users.sql      # In-place migration for the existing MTT DB
     ├── migrate_002_student_module.sql   # Extends students + adds student_parents
-    ├── migrate_006_academic_year.sql    # Academic-year + enrollment_status + withdrawal_reason
+    ├── migrate_003_student_documents.sql # Adds student_documents
+    ├── migrate_004_attendance.sql        # Adds attendance
+    ├── migrate_005_fees.sql              # Adds fee_invoices + fee_payments
+    ├── migrate_006_academic_year.sql     # Academic-year + enrollment_status + withdrawal_reason
+    ├── migrate_007_app_settings.sql      # Adds app_settings (DB-driven app rename)
     └── seeds.sql                        # rating_config + curriculum indicators
 ```
 

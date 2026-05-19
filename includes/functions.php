@@ -6,6 +6,50 @@ function e(?string $s): string
     return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Read a value from the `app_settings` key-value table, falling back to the
+ * supplied default (typically the value from includes/config.php) if the
+ * table doesn't exist yet or the key is missing.
+ *
+ * Cached for the duration of the request.
+ */
+function app_setting(string $key, ?string $default = null): ?string
+{
+    static $cache = null;
+    if ($cache === null || !empty($GLOBALS['_app_setting_dirty'])) {
+        $cache = [];
+        unset($GLOBALS['_app_setting_dirty']);
+        try {
+            $rows = db()->query("SELECT setting_key, setting_value FROM app_settings")->fetchAll();
+            foreach ($rows as $r) $cache[$r['setting_key']] = $r['setting_value'];
+        } catch (Throwable $e) {
+            // app_settings table doesn't exist yet (pre-migration) — fall through.
+        }
+    }
+    return array_key_exists($key, $cache) && $cache[$key] !== null
+        ? $cache[$key]
+        : $default;
+}
+
+function app_setting_clear_cache(): void
+{
+    $GLOBALS['_app_setting_dirty'] = true;
+}
+
+/** App display name (DB-backed, falls back to config.php's `app.name`). */
+function app_name(): string
+{
+    $cfg = app_config();
+    return (string)app_setting('app_name', $cfg['app']['name'] ?? 'Little Graduates');
+}
+
+/** App short name (DB-backed, falls back to config.php's `app.short_name`). */
+function app_short_name(): string
+{
+    $cfg = app_config();
+    return (string)app_setting('app_short_name', $cfg['app']['short_name'] ?? 'LG');
+}
+
 function redirect(string $url): void
 {
     header("Location: $url");

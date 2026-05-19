@@ -15,6 +15,7 @@ SET NAMES utf8mb4;
 SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 -- Drop in reverse-dependency order.
+DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_recurrences;
 DROP TABLE IF EXISTS task_columns;
@@ -37,6 +38,17 @@ DROP TABLE IF EXISTS users;
 -- Users (staff). PINs are bcrypt-hashed. The `modules` SET grants per-module
 -- access; admins implicitly have access to every module regardless.
 -- ----------------------------------------------------------------------------
+CREATE TABLE app_settings (
+    setting_key   VARCHAR(60) NOT NULL,
+    setting_value TEXT        NULL,
+    updated_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO app_settings (setting_key, setting_value) VALUES
+    ('app_name',       'Little Graduates'),
+    ('app_short_name', 'LG');
+
 CREATE TABLE users (
     id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name        VARCHAR(120) NOT NULL,

@@ -99,7 +99,7 @@ if (!users_table_is_unified()) {
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Setup needed — <?= e($cfg['app']['name']) ?></title>
+        <title>Setup needed — <?= e(app_name()) ?></title>
         <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e(asset_version()) ?>">
         <link rel="stylesheet" href="/assets/css/style.css?v=<?= e(asset_version()) ?>">
     </head>
@@ -135,7 +135,7 @@ $users = db()->query("
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#FFF8F0">
-    <title>Sign in — <?= e($cfg['app']['name']) ?></title>
+    <title>Sign in — <?= e(app_name()) ?></title>
     <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e(asset_version()) ?>">
     <link rel="stylesheet" href="/assets/css/style.css?v=<?= e(asset_version()) ?>">
 </head>
@@ -144,7 +144,7 @@ $users = db()->query("
 <header class="topbar">
     <a href="/login.php" class="brand">
         <img src="/assets/img/logo.png" alt="" class="brand-logo">
-        <span class="brand-mark"><?= e($cfg['app']['name']) ?></span>
+        <span class="brand-mark"><?= e(app_name()) ?></span>
     </a>
     <div class="topbar-date muted"><?= e(date('l, j M')) ?></div>
 </header>

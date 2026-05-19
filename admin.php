@@ -119,6 +119,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect('/admin.php');
     }
+
+    if ($op === 'settings_save') {
+        $newName  = trim($_POST['app_name'] ?? '');
+        $newShort = trim($_POST['app_short_name'] ?? '');
+        if ($newName === '') {
+            flash_set('error', 'App name cannot be empty.');
+            redirect('/admin.php');
+        }
+        $upsert = db()->prepare("
+            INSERT INTO app_settings (setting_key, setting_value) VALUES (:k, :v)
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ");
+        $upsert->execute([':k' => 'app_name',       ':v' => substr($newName,  0, 120)]);
+        $upsert->execute([':k' => 'app_short_name', ':v' => substr($newShort, 0, 30)]);
+        app_setting_clear_cache();
+        flash_set('ok', 'App settings saved. The new name appears everywhere on next page load.');
+        redirect('/admin.php');
+    }
 }
 
 $users = db()->query("
@@ -138,6 +156,29 @@ require __DIR__ . '/includes/header.php';
         (<a href="/assessment/admin.php">Assessment admin</a> ·
          <a href="/tasks/admin.php">Tasks admin</a>).</p>
 </div>
+
+<details class="card card-form">
+    <summary>App settings</summary>
+    <form method="post">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="settings_save">
+        <div class="row">
+            <div class="field" style="flex: 2 1 320px;">
+                <label>Display name</label>
+                <input name="app_name" value="<?= e(app_name()) ?>" maxlength="120" required>
+                <span class="muted small">Appears in the top bar, the browser tab title and the login screen.</span>
+            </div>
+            <div class="field">
+                <label>Short name</label>
+                <input name="app_short_name" value="<?= e(app_short_name()) ?>" maxlength="30">
+                <span class="muted small">Reserved for spaces where the long name doesn't fit. Currently unused on UI.</span>
+            </div>
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+    </form>
+</details>
 
 <details class="card card-form" open>
     <summary>Add a user</summary>

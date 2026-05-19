@@ -46,7 +46,7 @@ $cfg = app_config();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Install — <?= e($cfg['app']['name']) ?></title>
+    <title>Install — <?= e(app_name()) ?></title>
     <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e(asset_version()) ?>">
     <link rel="stylesheet" href="/assets/css/style.css?v=<?= e(asset_version()) ?>">
 </head>
