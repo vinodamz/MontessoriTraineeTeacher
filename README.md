@@ -47,6 +47,8 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
 ├── students/             # Student management module
 │   ├── index.php (list + search), view.php (profile)
 │   ├── edit.php (add/edit + parents inline)
+│   ├── yearend.php (June-rollover transition tool)
+│   ├── withdrawals.php (drop-out analytics)
 ├── assets/
 │   ├── css/{style.css, tasks.css}
 │   ├── js/{login.js, assess.js, kanban.js}
@@ -54,7 +56,8 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
 └── sql/
     ├── schema.sql                       # Fresh-DB unified schema
     ├── migrate_001_unify_users.sql      # In-place migration for the existing MTT DB
-    ├── migrate_002_student_module.sql   # Extends students table + adds student_parents
+    ├── migrate_002_student_module.sql   # Extends students + adds student_parents
+    ├── migrate_006_academic_year.sql    # Academic-year + enrollment_status + withdrawal_reason
     └── seeds.sql                        # rating_config + curriculum indicators
 ```
 

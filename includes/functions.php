@@ -274,6 +274,103 @@ function current_month_year(): string
     return (new DateTime('now'))->format('M-y');
 }
 
+/**
+ * Current academic year as "YYYY-YY".
+ * The Indian academic year runs Jun → Mar; June onwards starts a new year.
+ *   e.g. anytime in 2026-06 → 2027-05 returns "2026-27".
+ */
+function current_academic_year(?DateTime $now = null): string
+{
+    $now ??= new DateTime('today');
+    $year  = (int)$now->format('Y');
+    $month = (int)$now->format('n');
+    $startYear = ($month >= 6) ? $year : $year - 1;
+    return $startYear . '-' . substr((string)($startYear + 1), -2);
+}
+
+/** Next academic year after the given one. "2025-26" → "2026-27". */
+function next_academic_year(string $year): string
+{
+    if (!preg_match('/^(\d{4})-(\d{2})$/', $year, $m)) return current_academic_year();
+    $start = (int)$m[1] + 1;
+    return $start . '-' . substr((string)($start + 1), -2);
+}
+
+/** All academic years that have at least one student row, plus the current one. */
+function academic_years_in_use(): array
+{
+    static $years = null;
+    if ($years === null) {
+        try {
+            $rows = db()->query("
+                SELECT DISTINCT academic_year FROM students
+                WHERE academic_year IS NOT NULL AND academic_year <> ''
+                ORDER BY academic_year DESC
+            ")->fetchAll(PDO::FETCH_COLUMN);
+            $years = $rows;
+        } catch (Throwable $e) {
+            $years = [];
+        }
+        $cur = current_academic_year();
+        if (!in_array($cur, $years, true)) array_unshift($years, $cur);
+        // Also offer "next year" so admin can start enrolling for it before
+        // the calendar tips over to June.
+        $next = next_academic_year($cur);
+        if (!in_array($next, $years, true)) array_unshift($years, $next);
+    }
+    return $years;
+}
+
+/** Promote helper — Playgroup→Nursery→LKG→UKG. UKG returns null (graduates). */
+function next_grade(string $grade): ?string
+{
+    return [
+        'Playgroup' => 'Nursery',
+        'Nursery'   => 'LKG',
+        'LKG'       => 'UKG',
+        'UKG'       => null,
+    ][$grade] ?? null;
+}
+
+/**
+ * Enrollment-status display + colour helpers.
+ */
+const ENROLLMENT_STATUSES = [
+    'enrolled'   => 'Enrolled',
+    'promoted'   => 'Promoted',
+    'withdrawn'  => 'Withdrawn',
+    'graduated'  => 'Graduated',
+    'on_break'   => 'On break',
+];
+
+function enrollment_status_label(string $s): string
+{
+    return ENROLLMENT_STATUSES[$s] ?? $s;
+}
+
+/**
+ * Withdrawal reasons. App-side enum — keep the codes short + stable so the
+ * analytics page can group on them. Edit this list and the new option
+ * appears in the dropdown immediately.
+ */
+const WITHDRAWAL_REASONS = [
+    'relocated'    => 'Family relocated',
+    'financial'    => 'Financial difficulty',
+    'distance'     => 'Distance / commute',
+    'dissatisfied' => 'Unhappy with school',
+    'medical'      => 'Medical / health',
+    'switched'     => 'Switched to another school',
+    'homeschool'   => 'Homeschooling',
+    'behavioral'   => 'Behavioural concerns',
+    'completed'    => 'Completed UKG / graduated',
+    'other'        => 'Other (see notes)',
+];
+
+function withdrawal_reason_label(string $code): string
+{
+    return WITHDRAWAL_REASONS[$code] ?? $code;
+}
+
 function grade_badge_class(string $grade): string
 {
     return 'grade grade-' . strtolower(str_replace(' ', '-', $grade));
