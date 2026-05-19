@@ -90,13 +90,17 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="page-head">
     <div>
+        <?php $enrStatus = $s['enrollment_status'] ?? 'enrolled'; ?>
         <h1 style="display:flex; align-items:center; gap:.6rem;">
             <span class="student-avatar" style="--card: <?= e(user_color((int)$s['id'])) ?>;"><?= e(user_initials($full)) ?></span>
             <?= e($full) ?>
-            <?php if (!$s['is_active']): ?><span class="pill">inactive</span><?php endif; ?>
+            <?php if ($enrStatus !== 'enrolled'): ?>
+                <span class="pill enr-<?= e($enrStatus) ?>"><?= e(enrollment_status_label($enrStatus)) ?></span>
+            <?php endif; ?>
         </h1>
         <p class="muted">
             <span class="<?= e(grade_badge_class($s['grade'])) ?>"><?= e($s['grade']) ?></span>
+            <?php if (!empty($s['academic_year'])): ?> · <strong><?= e($s['academic_year']) ?></strong><?php endif; ?>
             <?php if (!empty($s['teacher_name'])): ?> · Teacher: <strong><?= e($s['teacher_name']) ?></strong><?php endif; ?>
             <?php if (!empty($s['admission_number'])): ?> · Admission #<?= e($s['admission_number']) ?><?php endif; ?>
         </p>
@@ -112,6 +116,22 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php if (in_array($enrStatus, ['withdrawn','graduated','on_break'], true)): ?>
+<section class="card enr-callout enr-callout-<?= e($enrStatus) ?>">
+    <h2>Enrollment: <?= e(enrollment_status_label($enrStatus)) ?></h2>
+    <dl class="dl-grid">
+        <?php
+        dl_row('End date', fmt_date($s['withdrawal_date'] ?? null));
+        if (!empty($s['withdrawal_reason'])) dl_row('Reason', withdrawal_reason_label($s['withdrawal_reason']));
+        dl_row('Notes', $s['withdrawal_notes'] ?? null, true);
+        ?>
+        <?php if (empty($s['withdrawal_reason']) && empty($s['withdrawal_date']) && empty($s['withdrawal_notes'])): ?>
+            <p class="muted">No reason recorded.<?php if ($canEdit): ?> <a href="/students/edit.php?id=<?= (int)$s['id'] ?>">Add one</a>.<?php endif; ?></p>
+        <?php endif; ?>
+    </dl>
+</section>
+<?php endif; ?>
 
 <section class="card">
     <h2>Profile</h2>

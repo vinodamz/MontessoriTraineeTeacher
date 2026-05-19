@@ -70,12 +70,21 @@ CREATE TABLE students (
     is_active                TINYINT(1)   NOT NULL DEFAULT 1,
     grade                    ENUM('Playgroup','Nursery','LKG','UKG') NOT NULL,
     teacher_id               INT UNSIGNED NOT NULL,
+    academic_year            VARCHAR(9)   NULL,
+    enrollment_status        ENUM('enrolled','promoted','withdrawn','graduated','on_break')
+                             NOT NULL DEFAULT 'enrolled',
+    withdrawal_date          DATE         NULL,
+    withdrawal_reason        VARCHAR(40)  NULL,
+    withdrawal_notes         TEXT         NULL,
     created_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_students_admission (admission_number),
     KEY idx_students_teacher (teacher_id),
     KEY idx_students_grade   (grade),
     KEY idx_students_active  (is_active),
+    KEY idx_students_year    (academic_year),
+    KEY idx_students_status  (enrollment_status),
+    KEY idx_students_withdrawal_reason (withdrawal_reason),
     CONSTRAINT fk_students_teacher
         FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

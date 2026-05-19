@@ -243,6 +243,63 @@ body.landing { background: var(--bg); }
 .parent-edit { margin-top: .75rem; }
 .parent-edit + .parent-edit { margin-top: .5rem; }
 
+/* ------- enrollment status pills + callout ------- */
+.pill.enr-enrolled  { background: #dff1d3; color: #2d6526; }
+.pill.enr-promoted  { background: #d6e3f3; color: #1f3e63; }
+.pill.enr-withdrawn { background: #fbdcd8; color: #8b1c14; }
+.pill.enr-graduated { background: #fcebc6; color: #6c4612; }
+.pill.enr-on_break  { background: #e6e3df; color: #4d4a44; }
+
+.enr-callout { border-left: 4px solid var(--ink-soft); }
+.enr-callout-withdrawn { border-color: #c53b2c; background: #fff7f6; }
+.enr-callout-graduated { border-color: #F5B342; background: #fffaf0; }
+.enr-callout-on_break  { border-color: #8e8a82; background: #faf8f5; }
+
+.pill-warn { background: #fcebc6; color: #6c4612; }
+
+/* ------- year-end transition tool ------- */
+.ye-help { padding: .65rem 1rem; background: var(--line-soft); border-left: 4px solid var(--warn); font-size: .9rem; }
+.ye-grade { padding: .65rem 1rem; }
+.ye-grade summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+}
+.ye-grade summary::-webkit-details-marker { display: none; }
+.ye-grade[open] summary { border-bottom: 1px dashed var(--line); padding-bottom: .55rem; margin-bottom: .55rem; }
+
+.ye-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .35rem; }
+.ye-row {
+    display: grid; grid-template-columns: 1.4fr 220px 1fr; gap: .65rem; align-items: center;
+    padding: .5rem .75rem; background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+}
+@media (max-width: 800px) {
+    .ye-row { grid-template-columns: 1fr; }
+}
+.ye-who { display: flex; align-items: center; gap: .6rem; }
+.ye-name a { color: inherit; font-weight: 600; }
+.ye-name a:hover { color: var(--accent); }
+.ye-select { width: 100%; }
+.ye-detail { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; }
+.ye-detail input, .ye-detail select { padding: .35rem .55rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-card); }
+.ye-detail input[type=text] { flex: 1 1 180px; min-width: 0; }
+.ye-detail[hidden] { display: none !important; }
+
+.ye-grid-2 { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-top: .5rem; }
+@media (max-width: 720px) { .ye-grid-2 { grid-template-columns: 1fr; } }
+
+/* ------- pure-CSS bar chart for withdrawals.php ------- */
+.bar-row {
+    display: grid; grid-template-columns: 180px 1fr 90px; gap: .65rem; align-items: center;
+    padding: .25rem 0; font-size: .9rem;
+}
+@media (max-width: 720px) { .bar-row { grid-template-columns: 1fr; } .bar-track { display: none; } }
+.bar-label { color: var(--ink); text-decoration: none; font-weight: 600; }
+.bar-label:hover { color: var(--accent); }
+.bar-track { background: var(--line-soft); border-radius: 999px; height: 14px; position: relative; overflow: hidden; }
+.bar-fill { background: linear-gradient(90deg, var(--accent), var(--accent-2)); height: 100%; border-radius: 999px; min-width: 4px; }
+.bar-count { color: var(--ink-soft); font-variant-numeric: tabular-nums; text-align: right; }
+
 /* status dot */
 .status-dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;

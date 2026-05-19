@@ -54,6 +54,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes  = trim($_POST['notes'] ?? '');
     $active = !empty($_POST['is_active']) ? 1 : 0;
 
+    // Enrollment block
+    $acadYear = trim($_POST['academic_year'] ?? '');
+    if (!preg_match('/^\d{4}-\d{2}$/', $acadYear)) $acadYear = current_academic_year();
+    $enrStatus = $_POST['enrollment_status'] ?? 'enrolled';
+    if (!array_key_exists($enrStatus, ENROLLMENT_STATUSES)) $enrStatus = 'enrolled';
+    $wDate    = $_POST['withdrawal_date'] ?? '';
+    $wReason  = trim($_POST['withdrawal_reason'] ?? '');
+    $wNotes   = trim($_POST['withdrawal_notes'] ?? '');
+    // Only keep withdrawal details when the status actually has them.
+    if (!in_array($enrStatus, ['withdrawn','graduated','on_break'], true)) {
+        $wDate = ''; $wReason = ''; $wNotes = '';
+    }
+    if ($wDate === '0000-00-00') $wDate = '';
+    if ($wReason !== '' && !array_key_exists($wReason, WITHDRAWAL_REASONS)) $wReason = 'other';
+    if ($wReason === 'other' && $wNotes === '') {
+        flash_set('error', 'Pick a reason or describe it in the notes.');
+        redirect('/students/edit.php' . ($isEdit ? '?id=' . $postId : ''));
+    }
+
     if ($first === '') { flash_set('error', 'First name is required.'); redirect('/students/edit.php' . ($isEdit ? '?id=' . $postId : '')); }
     if (!in_array($grade, $VALID_GRADES, true)) { flash_set('error', 'Grade is required.'); redirect('/students/edit.php' . ($isEdit ? '?id=' . $postId : '')); }
     if ($tid <= 0) { flash_set('error', 'Teacher is required.'); redirect('/students/edit.php' . ($isEdit ? '?id=' . $postId : '')); }
@@ -75,7 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     home_address = :addr,
                     pickup_person = :pickN, pickup_phone = :pickP,
                     emergency_contact_name = :emN, emergency_contact_phone = :emP,
-                    notes = :notes, is_active = :active
+                    notes = :notes, is_active = :active,
+                    academic_year = :ay, enrollment_status = :es,
+                    withdrawal_date = :wd, withdrawal_reason = :wr, withdrawal_notes = :wn
                 WHERE id = :id
             ");
             $stmt->execute([
@@ -86,6 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':pickN' => $pickN ?: null, ':pickP' => $pickP ?: null,
                 ':emN' => $emN ?: null, ':emP' => $emP ?: null,
                 ':notes' => $notes ?: null, ':active' => $active,
+                ':ay' => $acadYear, ':es' => $enrStatus,
+                ':wd' => $wDate ?: null, ':wr' => $wReason ?: null, ':wn' => $wNotes ?: null,
                 ':id' => $postId,
             ]);
             $studentId = $postId;
@@ -95,11 +118,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (admission_number, first_name, last_name, grade, teacher_id,
                      gender, dob, joining_date, blood_group, allergies, medical_notes,
                      home_address, pickup_person, pickup_phone,
-                     emergency_contact_name, emergency_contact_phone, notes, is_active)
+                     emergency_contact_name, emergency_contact_phone, notes, is_active,
+                     academic_year, enrollment_status,
+                     withdrawal_date, withdrawal_reason, withdrawal_notes)
                 VALUES
                     (:adm, :f, :l, :g, :tid,
                      :gender, :dob, :join, :blood, :allg, :med,
-                     :addr, :pickN, :pickP, :emN, :emP, :notes, :active)
+                     :addr, :pickN, :pickP, :emN, :emP, :notes, :active,
+                     :ay, :es, :wd, :wr, :wn)
             ");
             $stmt->execute([
                 ':adm' => $adm, ':f' => $first, ':l' => $last, ':g' => $grade, ':tid' => $tid,
@@ -109,6 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':pickN' => $pickN ?: null, ':pickP' => $pickP ?: null,
                 ':emN' => $emN ?: null, ':emP' => $emP ?: null,
                 ':notes' => $notes ?: null, ':active' => 1,
+                ':ay' => $acadYear, ':es' => $enrStatus,
+                ':wd' => $wDate ?: null, ':wr' => $wReason ?: null, ':wn' => $wNotes ?: null,
             ]);
             $studentId = (int)$pdo->lastInsertId();
         }
@@ -313,6 +341,64 @@ require __DIR__ . '/../includes/header.php';
             <textarea name="medical_notes" rows="2" maxlength="2000"><?= e($s['medical_notes'] ?? '') ?></textarea>
         </div>
     </div>
+
+    <h2 class="section-h-spaced">Enrollment</h2>
+    <?php
+        $currentAY    = $s['academic_year']     ?? current_academic_year();
+        $currentES    = $s['enrollment_status'] ?? 'enrolled';
+        $currentWDate = $s['withdrawal_date']   ?? '';
+        $currentWR    = $s['withdrawal_reason'] ?? '';
+        $currentWN    = $s['withdrawal_notes']  ?? '';
+        $yearOptions  = academic_years_in_use();
+        if (!in_array($currentAY, $yearOptions, true)) array_unshift($yearOptions, $currentAY);
+    ?>
+    <div class="row">
+        <div class="field">
+            <label>Academic year</label>
+            <select name="academic_year" id="enrYear">
+                <?php foreach ($yearOptions as $y): ?>
+                    <option value="<?= e($y) ?>" <?= $currentAY === $y ? 'selected' : '' ?>><?= e($y) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="field">
+            <label>Status</label>
+            <select name="enrollment_status" id="enrStatus">
+                <?php foreach (ENROLLMENT_STATUSES as $code => $label): ?>
+                    <option value="<?= e($code) ?>" <?= $currentES === $code ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    </div>
+    <div class="row" id="withdrawalBlock" <?= in_array($currentES, ['withdrawn','graduated','on_break'], true) ? '' : 'hidden' ?>>
+        <div class="field">
+            <label>End date</label>
+            <input type="date" name="withdrawal_date" value="<?= e($currentWDate) ?>">
+        </div>
+        <div class="field">
+            <label>Reason</label>
+            <select name="withdrawal_reason">
+                <option value="">— pick one —</option>
+                <?php foreach (WITHDRAWAL_REASONS as $code => $label): ?>
+                    <option value="<?= e($code) ?>" <?= $currentWR === $code ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="field" style="flex: 2 1 320px;">
+            <label>Notes <span class="muted small">(required if reason = Other)</span></label>
+            <input name="withdrawal_notes" maxlength="500" value="<?= e($currentWN) ?>">
+        </div>
+    </div>
+    <script>
+    (() => {
+        // Reveal the withdrawal-detail row only when the status needs it.
+        const sel = document.getElementById('enrStatus');
+        const blk = document.getElementById('withdrawalBlock');
+        if (!sel || !blk) return;
+        const needsDetails = s => ['withdrawn','graduated','on_break'].includes(s);
+        sel.addEventListener('change', () => { blk.hidden = !needsDetails(sel.value); });
+    })();
+    </script>
 
     <h2 class="section-h-spaced">Address &amp; emergency</h2>
     <div class="row">
