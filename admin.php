@@ -145,6 +145,38 @@ $users = db()->query("
     ORDER BY (role='admin') DESC, name
 ")->fetchAll();
 
+// At-a-glance: active students + fee totals. Dues are clamped per-student
+// (mirroring students/fees_report.php) so over-payments don't offset others.
+$activeStudents = (int)db()->query(
+    "SELECT COUNT(*) FROM students WHERE COALESCE(is_active, 1) = 1"
+)->fetchColumn();
+
+$feeTotals = db()->query("
+    SELECT
+        COALESCE(SUM(billed), 0) AS billed,
+        COALESCE(SUM(paid),   0) AS paid,
+        COALESCE(SUM(GREATEST(billed - paid, 0)), 0) AS due
+    FROM (
+        SELECT s.id,
+            COALESCE(SUM(CASE WHEN fi.status NOT IN ('cancelled','waived') THEN fi.amount ELSE 0 END), 0) AS billed,
+            COALESCE((
+                SELECT SUM(fp.amount)
+                FROM fee_payments fp
+                JOIN fee_invoices fi2 ON fi2.id = fp.invoice_id
+                WHERE fi2.student_id = s.id
+                  AND fi2.status NOT IN ('cancelled','waived')
+            ), 0) AS paid
+        FROM students s
+        LEFT JOIN fee_invoices fi ON fi.student_id = s.id
+        WHERE COALESCE(s.is_active, 1) = 1
+        GROUP BY s.id
+    ) t
+")->fetch();
+$feeBilled = (float)($feeTotals['billed'] ?? 0);
+$feePaid   = (float)($feeTotals['paid']   ?? 0);
+$feeDue    = (float)($feeTotals['due']    ?? 0);
+$money     = fn(float $v) => '₹' . number_format($v, 2);
+
 $pageTitle = 'Admin — Users';
 require __DIR__ . '/includes/header.php';
 ?>
@@ -155,6 +187,35 @@ require __DIR__ . '/includes/header.php';
         Module-specific admin lives inside each module
         (<a href="/assessment/admin.php">Assessment admin</a> ·
          <a href="/tasks/admin.php">Tasks admin</a>).</p>
+</div>
+
+<div class="card">
+    <div class="row">
+        <div class="field">
+            <span class="field-label">Active students</span>
+            <a href="/students/index.php" style="font-size:1.4rem;font-weight:600;text-decoration:none;">
+                <?= (int)$activeStudents ?>
+            </a>
+        </div>
+        <div class="field">
+            <span class="field-label">Billed</span>
+            <strong style="font-size:1.1rem;"><?= e($money($feeBilled)) ?></strong>
+        </div>
+        <div class="field">
+            <span class="field-label">Paid</span>
+            <strong style="font-size:1.1rem;"><?= e($money($feePaid)) ?></strong>
+        </div>
+        <div class="field">
+            <span class="field-label">Dues</span>
+            <a href="/students/fees_report.php?status=due" style="text-decoration:none;">
+                <?php if ($feeDue > 0): ?>
+                    <span class="pill pill-warn" style="font-size:1rem;"><?= e($money($feeDue)) ?></span>
+                <?php else: ?>
+                    <span class="pill">All settled</span>
+                <?php endif; ?>
+            </a>
+        </div>
+    </div>
 </div>
 
 <details class="card card-form">
