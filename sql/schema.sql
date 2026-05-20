@@ -18,6 +18,8 @@ SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTIT
 DROP TABLE IF EXISTS notification_preferences;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS app_settings;
+DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS expense_categories;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_recurrences;
 DROP TABLE IF EXISTS task_columns;
@@ -88,7 +90,7 @@ CREATE TABLE users (
     name        VARCHAR(120) NOT NULL,
     pin_hash    VARCHAR(255) NOT NULL,
     role        ENUM('teacher','admin') NOT NULL DEFAULT 'teacher',
-    modules     SET('tasks','montessori','students') NOT NULL DEFAULT '',
+    modules     SET('tasks','montessori','students','expenses') NOT NULL DEFAULT '',
     active      TINYINT(1)   NOT NULL DEFAULT 1,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -400,6 +402,65 @@ CREATE TABLE tasks (
     CONSTRAINT fk_tasks_assigned   FOREIGN KEY (assigned_to_user_id) REFERENCES users(id)             ON DELETE SET NULL,
     CONSTRAINT fk_tasks_creator    FOREIGN KEY (created_by_user_id)  REFERENCES users(id)             ON DELETE RESTRICT,
     CONSTRAINT fk_tasks_recurrence FOREIGN KEY (recurrence_id)       REFERENCES task_recurrences(id)  ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================================
+-- Expenses module
+-- ============================================================================
+
+CREATE TABLE expense_categories (
+    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name          VARCHAR(60)  NOT NULL,
+    display_order INT          NOT NULL DEFAULT 0,
+    is_active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_exp_cat_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO expense_categories (name, display_order) VALUES
+    ('Stationery',        1),
+    ('Cleaning',          2),
+    ('Maintenance',       3),
+    ('Equipment',         4),
+    ('Food & snacks',     5),
+    ('Travel & fuel',     6),
+    ('Utilities',         7),
+    ('Events & decor',    8),
+    ('Teaching aids',     9),
+    ('Other',            99);
+
+CREATE TABLE expenses (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id             INT UNSIGNED NOT NULL,
+    category_id         INT UNSIGNED NULL,
+    merchant            VARCHAR(160) NULL,
+    expense_date        DATE         NOT NULL,
+    amount              DECIMAL(10,2) NOT NULL,
+    currency            CHAR(3)      NOT NULL DEFAULT 'INR',
+    description         TEXT         NULL,
+    payment_method      ENUM('cash','card','upi','bank_transfer','cheque','other')
+                        NOT NULL DEFAULT 'cash',
+    status              ENUM('submitted','approved','rejected','reimbursed')
+                        NOT NULL DEFAULT 'submitted',
+    receipt_filename    VARCHAR(80)  NULL,
+    receipt_original    VARCHAR(255) NULL,
+    receipt_mime        VARCHAR(120) NULL,
+    receipt_size        INT UNSIGNED NULL,
+    ocr_text            MEDIUMTEXT   NULL,
+    reviewed_by_user_id INT UNSIGNED NULL,
+    reviewed_at         DATETIME     NULL,
+    review_notes        TEXT         NULL,
+    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_exp_user_date (user_id, expense_date),
+    KEY idx_exp_status    (status),
+    KEY idx_exp_category  (category_id),
+    CONSTRAINT fk_exp_user     FOREIGN KEY (user_id)             REFERENCES users(id)              ON DELETE RESTRICT,
+    CONSTRAINT fk_exp_category FOREIGN KEY (category_id)         REFERENCES expense_categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_reviewer FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id)              ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- After running this schema, open /install.php to create the first admin.

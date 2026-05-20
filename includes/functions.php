@@ -500,6 +500,75 @@ function student_doc_category_label(string $code): string
     return STUDENT_DOC_CATEGORIES[$code] ?? $code;
 }
 
+// ---------- Expense receipt upload helpers ----------------------------------
+
+/** Absolute filesystem path to the receipts directory. Created on demand. */
+function receipts_dir(): string
+{
+    $dir = realpath(__DIR__ . '/..') . '/uploads/receipts';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    return $dir;
+}
+
+const RECEIPT_MAX_BYTES  = 8 * 1024 * 1024; // 8 MB
+const RECEIPT_MIME_ALLOW = [
+    'application/pdf' => 'pdf',
+    'image/jpeg'      => 'jpg',
+    'image/png'       => 'png',
+    'image/webp'      => 'webp',
+    'image/heic'      => 'heic',
+];
+
+const EXPENSE_STATUSES = [
+    'submitted'  => 'Submitted',
+    'approved'   => 'Approved',
+    'rejected'   => 'Rejected',
+    'reimbursed' => 'Reimbursed',
+];
+
+const EXPENSE_PAYMENT_METHODS = [
+    'cash'          => 'Cash',
+    'card'          => 'Card',
+    'upi'           => 'UPI',
+    'bank_transfer' => 'Bank transfer',
+    'cheque'        => 'Cheque',
+    'other'         => 'Other',
+];
+
+function expense_status_label(string $s): string
+{
+    return EXPENSE_STATUSES[$s] ?? $s;
+}
+
+function expense_status_class(string $s): string
+{
+    return 'exp-status exp-status-' . $s;
+}
+
+function expense_payment_label(string $m): string
+{
+    return EXPENSE_PAYMENT_METHODS[$m] ?? $m;
+}
+
+function expense_categories_active(): array
+{
+    static $rows = null;
+    if ($rows === null) {
+        try {
+            $rows = db()->query("
+                SELECT id, name FROM expense_categories
+                WHERE is_active = 1
+                ORDER BY display_order, name
+            ")->fetchAll();
+        } catch (Throwable $e) {
+            $rows = [];
+        }
+    }
+    return $rows;
+}
+
 /**
  * Detect the MIME of an uploaded file by reading its contents, NOT by
  * trusting the browser-supplied `type`. Returns null if we can't decide.

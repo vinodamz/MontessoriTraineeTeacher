@@ -57,13 +57,15 @@ try {
 $hasTasks    = user_has_module($user, 'tasks');
 $hasMontess  = user_has_module($user, 'montessori');
 $hasStudents = user_has_module($user, 'students');
+$hasExpenses = user_has_module($user, 'expenses');
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasExpenses;
 if ($moduleCount === 1) {
     if ($hasTasks)    redirect('/tasks/index.php');
     if ($hasMontess)  redirect('/assessment/index.php');
     if ($hasStudents) redirect('/students/index.php');
+    if ($hasExpenses) redirect('/expenses/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -97,6 +99,39 @@ if ($hasStudents) {
         // is_active was added by migrate_002 — if it's missing the COALESCE keeps the count correct.
         $studentsStats['active'] = (int)db()->query("SELECT COUNT(*) FROM students WHERE COALESCE(is_active, 1) = 1")->fetchColumn();
     } catch (Throwable $e) { /* table may be in mid-migration */ }
+}
+
+$expensesStats = ['this_month' => 0, 'pending' => 0, 'total' => 0.0];
+if ($hasExpenses) {
+    try {
+        $monthStart = (new DateTime('first day of this month'))->format('Y-m-d');
+        if ($user['role'] === 'admin') {
+            $stmt = db()->prepare("
+                SELECT
+                  COUNT(*)                                                              AS n_month,
+                  SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END)                 AS n_pending,
+                  COALESCE(SUM(CASE WHEN expense_date >= :ms THEN amount ELSE 0 END), 0) AS total_month
+                FROM expenses
+            ");
+            $stmt->execute([':ms' => $monthStart]);
+        } else {
+            $stmt = db()->prepare("
+                SELECT
+                  COUNT(*)                                                              AS n_month,
+                  SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END)                 AS n_pending,
+                  COALESCE(SUM(CASE WHEN expense_date >= :ms THEN amount ELSE 0 END), 0) AS total_month
+                FROM expenses
+                WHERE user_id = :u
+            ");
+            $stmt->execute([':ms' => $monthStart, ':u' => $user['id']]);
+        }
+        $r = $stmt->fetch();
+        $expensesStats = [
+            'this_month' => (int)($r['n_month']     ?? 0),
+            'pending'    => (int)($r['n_pending']   ?? 0),
+            'total'      => (float)($r['total_month'] ?? 0),
+        ];
+    } catch (Throwable $e) { /* table may not exist yet — leave zeros */ }
 }
 
 $mttStats = ['students' => 0, 'pending_this_month' => 0];
@@ -191,7 +226,21 @@ require __DIR__ . '/includes/header.php';
             </a>
         </li>
     <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess && !$hasStudents): ?>
+    <?php if ($hasExpenses): ?>
+        <li>
+            <a class="module-tile" href="/expenses/index.php">
+                <h2>Expenses</h2>
+                <p class="muted">Reimbursable spend — snap a receipt, let OCR pre-fill the amount.</p>
+                <div class="module-stats">
+                    <span class="pill">₹<?= number_format((float)$expensesStats['total'], 2) ?> this month</span>
+                    <?php if ($expensesStats['pending'] > 0): ?>
+                        <span class="pill pill-warn"><?= (int)$expensesStats['pending'] ?> awaiting review</span>
+                    <?php endif; ?>
+                </div>
+            </a>
+        </li>
+    <?php endif; ?>
+    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasExpenses): ?>
         <li>
             <div class="empty">
                 <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
