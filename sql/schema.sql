@@ -15,6 +15,8 @@ SET NAMES utf8mb4;
 SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 -- Drop in reverse-dependency order.
+DROP TABLE IF EXISTS notification_preferences;
+DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_recurrences;
@@ -46,8 +48,40 @@ CREATE TABLE app_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO app_settings (setting_key, setting_value) VALUES
-    ('app_name',       'Little Graduates'),
-    ('app_short_name', 'LG');
+    ('app_name',           'Little Graduates'),
+    ('app_short_name',     'LG'),
+    ('email_from_name',    'Little Graduates'),
+    ('email_from_address', 'no-reply@thelittlegraduates.in');
+
+CREATE TABLE notifications (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id      INT UNSIGNED NOT NULL,
+    category     ENUM('tasks','attendance','fees','students','system') NOT NULL DEFAULT 'system',
+    event_type   VARCHAR(40)  NOT NULL,
+    title        VARCHAR(200) NOT NULL,
+    body         TEXT         NULL,
+    link         VARCHAR(255) NULL,
+    read_at      DATETIME     NULL,
+    email_status ENUM('pending','sent','skipped','failed') NOT NULL DEFAULT 'pending',
+    email_sent_at DATETIME    NULL,
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_notif_user_unread (user_id, read_at, created_at),
+    KEY idx_notif_email_pending (email_status, created_at),
+    CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE notification_preferences (
+    user_id              INT UNSIGNED NOT NULL,
+    email_enabled        TINYINT(1)   NOT NULL DEFAULT 1,
+    tasks_enabled        TINYINT(1)   NOT NULL DEFAULT 1,
+    attendance_enabled   TINYINT(1)   NOT NULL DEFAULT 1,
+    fees_enabled         TINYINT(1)   NOT NULL DEFAULT 1,
+    students_enabled     TINYINT(1)   NOT NULL DEFAULT 1,
+    updated_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id),
+    CONSTRAINT fk_notif_prefs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE users (
     id          INT UNSIGNED NOT NULL AUTO_INCREMENT,

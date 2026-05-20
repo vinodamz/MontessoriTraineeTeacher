@@ -61,6 +61,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':n' => $notes ?: null, ':u' => $user['id'],
             ]);
             flash_set('ok', 'Invoice added.');
+
+            // Notify other admins (skip the creator).
+            require_once __DIR__ . '/../includes/notify.php';
+            $admIds = db()->query("SELECT id FROM users WHERE active = 1 AND role = 'admin' AND id <> " . (int)$user['id'])
+                          ->fetchAll(PDO::FETCH_COLUMN);
+            if ($admIds) {
+                notify(
+                    $admIds, 'fees', 'invoice_created',
+                    'Invoice ₹' . number_format($amount, 2) . ' for ' . $fullName,
+                    ($period !== '' ? "Period: $period\n" : '') . "Title: $title" .
+                    ($due !== '' && $due !== null ? "\nDue: $due" : '') .
+                    "\nCreated by " . $user['name'],
+                    '/students/fees.php?student_id=' . $studentId
+                );
+            }
         } elseif ($op === 'invoice_delete') {
             $iid = (int)($_POST['invoice_id'] ?? 0);
             db()->prepare("DELETE FROM fee_invoices WHERE id = :id AND student_id = :sid")

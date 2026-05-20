@@ -147,8 +147,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':col' => $colId ?: null, ':pos' => $maxPos,
                 ':p' => $priority, ':due' => $due, ':a' => $assignee, ':c' => $user['id'],
             ]);
+            $newTaskId = (int)db()->lastInsertId();
             flash_set('ok', 'Task created.');
+
+            // Notify the assignee (but not if they assigned the task to themselves).
+            if ($assignee && $assignee !== (int)$user['id']) {
+                require_once __DIR__ . '/../includes/notify.php';
+                $bodyLines = [];
+                if ($description !== '') $bodyLines[] = $description;
+                if ($due)                $bodyLines[] = 'Due ' . $due;
+                $bodyLines[] = 'Assigned by ' . $user['name'];
+                notify(
+                    $assignee, 'tasks', 'task_assigned',
+                    'New task: ' . $title,
+                    implode("\n", $bodyLines),
+                    '/tasks/tasks.php?highlight=' . $newTaskId
+                );
+            }
         } else {
+            // Detect a re-assignment so we can notify the new assignee.
+            $prevAssignee = null;
+            try {
+                $q = db()->prepare("SELECT assigned_to_user_id FROM tasks WHERE id = :id");
+                $q->execute([':id' => $id]);
+                $prevAssignee = $q->fetchColumn();
+                $prevAssignee = $prevAssignee === false || $prevAssignee === null ? null : (int)$prevAssignee;
+            } catch (Throwable $e) { /* swallow */ }
+
             $stmt = db()->prepare("
                 UPDATE tasks SET title=:t, description=:d, column_id=:col, priority=:p,
                                  due_date=:due, assigned_to_user_id=:a
@@ -159,6 +184,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':p' => $priority, ':due' => $due, ':a' => $assignee, ':id' => $id,
             ]);
             flash_set('ok', 'Task updated.');
+
+            if ($assignee && $assignee !== $prevAssignee && $assignee !== (int)$user['id']) {
+                require_once __DIR__ . '/../includes/notify.php';
+                notify(
+                    $assignee, 'tasks', 'task_assigned',
+                    'Task assigned to you: ' . $title,
+                    ($due ? "Due $due. " : '') . 'Reassigned by ' . $user['name'],
+                    '/tasks/tasks.php?highlight=' . $id
+                );
+            }
         }
         redirect('tasks.php?' . http_build_query(array_diff_key($_GET, ['edit' => 1])));
     }

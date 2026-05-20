@@ -67,6 +67,44 @@ p { margin: 0 0 1em; }
 .who-out { font-size: .85rem; color: var(--ink-soft); padding: .35rem .6rem; border-radius: 999px; }
 .who-out:hover { background: var(--line-soft); text-decoration: none; }
 
+/* ------- notification bell ------- */
+.bell {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%;
+    color: var(--ink-soft); text-decoration: none; font-size: 1.05rem;
+    transition: background .15s ease;
+}
+.bell:hover { background: var(--line-soft); text-decoration: none; }
+.bell-badge {
+    position: absolute; top: 2px; right: 2px;
+    min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px;
+    background: var(--accent); color: #fff;
+    font-size: .7rem; font-weight: 700; line-height: 18px; text-align: center;
+}
+
+/* ------- notification list ------- */
+.notif-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .35rem; }
+.notif-row {
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: .65rem .85rem;
+    display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between;
+    border-left: 4px solid transparent;
+}
+.notif-row.is-unread { border-left-color: var(--accent); background: #fffbf6; }
+.notif-body { flex: 1 1 auto; min-width: 0; }
+.notif-title { font-weight: 600; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.notif-title a { color: inherit; }
+.notif-title a:hover { color: var(--accent); }
+.notif-text { margin-top: .25rem; color: var(--ink-soft); }
+.notif-meta { margin-top: .25rem; }
+.notif-actions .link-btn { font-size: 1.1rem; padding: .25rem .5rem; }
+
+.pill.cat-tasks      { background: #d6e3f3; color: #1f3e63; }
+.pill.cat-attendance { background: #dff1d3; color: #2d6526; }
+.pill.cat-fees       { background: #fcebc6; color: #6c4612; }
+.pill.cat-students   { background: #fbdcd8; color: #8b1c14; }
+.pill.cat-system     { background: var(--line-soft); color: var(--ink-soft); }
+
 /* ------- containers ------- */
 .container { max-width: 1100px; margin: 0 auto; padding: 1.4rem 1rem 4rem; }
 .page-head {
