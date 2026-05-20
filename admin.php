@@ -189,36 +189,66 @@ require __DIR__ . '/includes/header.php';
          <a href="/tasks/admin.php">Tasks admin</a>).</p>
 </div>
 
-<div class="card">
-    <div class="row">
-        <div class="field">
-            <span class="field-label">Active students</span>
-            <a href="/students/index.php" style="font-size:1.4rem;font-weight:600;text-decoration:none;">
-                <?= (int)$activeStudents ?>
-            </a>
+<ul class="admin-tiles" role="list">
+    <li>
+        <a class="admin-tile" href="/students/index.php">
+            <span class="tile-label">Active students</span>
+            <span class="tile-value"><?= (int)$activeStudents ?></span>
+            <span class="tile-sub">Tap to manage</span>
+        </a>
+    </li>
+    <li>
+        <div class="admin-tile">
+            <span class="tile-label">Billed</span>
+            <span class="tile-value"><?= e($money($feeBilled)) ?></span>
+            <span class="tile-sub">All active students</span>
         </div>
-        <div class="field">
-            <span class="field-label">Billed</span>
-            <strong style="font-size:1.1rem;"><?= e($money($feeBilled)) ?></strong>
+    </li>
+    <li>
+        <div class="admin-tile tile-ok">
+            <span class="tile-label">Paid</span>
+            <span class="tile-value"><?= e($money($feePaid)) ?></span>
+            <span class="tile-sub">Received so far</span>
         </div>
-        <div class="field">
-            <span class="field-label">Paid</span>
-            <strong style="font-size:1.1rem;"><?= e($money($feePaid)) ?></strong>
-        </div>
-        <div class="field">
-            <span class="field-label">Dues</span>
-            <a href="/students/fees_report.php?status=due" style="text-decoration:none;">
-                <?php if ($feeDue > 0): ?>
-                    <span class="pill pill-warn" style="font-size:1rem;"><?= e($money($feeDue)) ?></span>
-                <?php else: ?>
-                    <span class="pill">All settled</span>
-                <?php endif; ?>
-            </a>
-        </div>
-    </div>
-</div>
+    </li>
+    <li>
+        <a class="admin-tile <?= $feeDue > 0 ? 'tile-warn' : 'tile-ok' ?>" href="/students/fees_report.php?status=due">
+            <span class="tile-label">Dues</span>
+            <span class="tile-value"><?= $feeDue > 0 ? e($money($feeDue)) : 'All settled' ?></span>
+            <span class="tile-sub">Open balances</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="/assessment/admin.php">
+            <span class="tile-label">Assessment</span>
+            <span class="tile-value">Admin</span>
+            <span class="tile-sub">Indicators &amp; rating</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="/tasks/admin.php">
+            <span class="tile-label">Tasks</span>
+            <span class="tile-value">Admin</span>
+            <span class="tile-sub">Columns &amp; recurrences</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="/notifications.php">
+            <span class="tile-label">Notifications</span>
+            <span class="tile-value">Inbox</span>
+            <span class="tile-sub">Recent activity</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="#app-settings">
+            <span class="tile-label">App settings</span>
+            <span class="tile-value">Configure</span>
+            <span class="tile-sub">Display name &amp; more</span>
+        </a>
+    </li>
+</ul>
 
-<details class="card card-form">
+<details id="app-settings" class="card card-form">
     <summary>App settings</summary>
     <form method="post">
         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
