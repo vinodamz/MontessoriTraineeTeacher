@@ -134,6 +134,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($skipped)   $summary[] = "$skipped skipped";
         if ($errs)      $summary[] = "$errs error" . ($errs === 1 ? '' : 's');
         flash_set('ok', 'Year-end committed: ' . ($summary ? implode(' · ', $summary) : 'no changes'));
+
+        // Notify other admins about the bulk transition (skip self).
+        if ($promoted + $repeated + $graduated + $withdrawn + $onBreak > 0) {
+            require_once __DIR__ . '/../includes/notify.php';
+            $admIds = $pdo->query("
+                SELECT id FROM users
+                WHERE active = 1 AND role = 'admin' AND id <> " . (int)$user['id']
+            )->fetchAll(PDO::FETCH_COLUMN);
+            if ($admIds) {
+                notify(
+                    $admIds, 'students', 'yearend_committed',
+                    "Year-end $fromYear → $toYear committed",
+                    implode(' · ', $summary) . "\nBy " . $user['name'],
+                    '/students/yearend.php?from=' . $fromYear
+                );
+            }
+        }
     } catch (Throwable $e) {
         $pdo->rollBack();
         flash_set('error', 'Year-end commit failed: ' . $e->getMessage());

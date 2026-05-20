@@ -1,9 +1,11 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/notify.php';
 $cfg  = app_config();
 $user = current_user();
 $v    = asset_version();
+$unreadCount = $user ? unread_count((int)$user['id']) : 0;
 ?>
 <!doctype html>
 <html lang="en">
@@ -36,6 +38,12 @@ $v    = asset_version();
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="/admin.php">Admin</a>
             <?php endif; ?>
+            <a href="/notifications.php" class="bell" title="Notifications" aria-label="Notifications<?= $unreadCount > 0 ? ' (' . $unreadCount . ' unread)' : '' ?>">
+                <span class="bell-icon" aria-hidden="true">🔔</span>
+                <?php if ($unreadCount > 0): ?>
+                    <span class="bell-badge"><?= $unreadCount > 99 ? '99+' : (int)$unreadCount ?></span>
+                <?php endif; ?>
+            </a>
             <span class="who" style="--card: <?= e(user_color((int)$user['id'])) ?>;">
                 <span class="who-avatar"><?= e(user_initials($user['name'])) ?></span>
                 <span>

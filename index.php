@@ -7,8 +7,52 @@
  */
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/notify.php';
 
 $user = require_login();
+
+// ---- Lazy attendance reminder ----
+// After 11:00 local time, if the teacher hasn't marked attendance for any of
+// their students today, fire one notification per day. Cheap query + dedup
+// guard so we don't spam.
+try {
+    $hour = (int)(new DateTime('now'))->format('H');
+    if ($hour >= 11 && ($user['role'] === 'teacher' || user_has_module($user, 'students') || user_has_module($user, 'montessori'))) {
+        $today = (new DateTime('today'))->format('Y-m-d');
+
+        // Has this user already received an attendance reminder today?
+        $alreadySent = (bool)db()->prepare("
+            SELECT 1 FROM notifications
+            WHERE user_id = :uid AND event_type = 'attendance_reminder'
+              AND DATE(created_at) = :today
+            LIMIT 1
+        ");
+        $alreadySent->execute([':uid' => $user['id'], ':today' => $today]);
+        if (!$alreadySent->fetchColumn()) {
+            // How many of this user's active students still have no attendance row today?
+            $missing = db()->prepare("
+                SELECT COUNT(*) FROM students s
+                LEFT JOIN attendance a
+                  ON a.student_id = s.id AND a.attendance_date = :today
+                WHERE COALESCE(s.is_active, 1) = 1
+                  AND COALESCE(s.enrollment_status, 'enrolled') = 'enrolled'
+                  AND s.teacher_id = :uid
+                  AND a.id IS NULL
+            ");
+            $missing->execute([':today' => $today, ':uid' => $user['id']]);
+            $missingCount = (int)$missing->fetchColumn();
+            if ($missingCount > 0) {
+                notify(
+                    (int)$user['id'], 'attendance', 'attendance_reminder',
+                    "$missingCount student" . ($missingCount === 1 ? '' : 's') . " still need attendance for today",
+                    "It's after 11am and " . $missingCount . " of your students are unmarked for $today. Tap below to mark them now.",
+                    '/students/attendance.php',
+                    false  // don't email this — it's a soft nudge; bell only.
+                );
+            }
+        }
+    }
+} catch (Throwable $e) { /* attendance reminder is best-effort */ }
 
 $hasTasks    = user_has_module($user, 'tasks');
 $hasMontess  = user_has_module($user, 'montessori');
