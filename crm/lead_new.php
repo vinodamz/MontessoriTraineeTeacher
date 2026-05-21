@@ -35,20 +35,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notes = "Child age: $childAge" . ($notes !== '' ? "\n\n$notes" : '');
     }
 
+    // "Walk-in" path skips the lead stage and lands directly on the pipeline
+    // board as a New inquiry. Anything else is captured as a cold lead.
+    $isWalkIn = !empty($_POST['walk_in']);
+    $status   = $isWalkIn ? 'new'  : 'lead';
+    $defaultProb = crm_default_probability($status);
+
     db()->prepare("
         INSERT INTO inquiry_families
             (primary_name, primary_phone, primary_email,
              status, priority, probability, campaign_id, owner_id, notes)
         VALUES
-            (:n, :p, :e, 'lead', :pr, :prob, :c, :o, :notes)
+            (:n, :p, :e, :st, :pr, :prob, :c, :o, :notes)
     ")->execute([
         ':n'  => $name, ':p' => $phone, ':e' => $email,
-        ':pr' => $prio, ':prob' => crm_default_probability('lead'),
+        ':st' => $status, ':pr' => $prio, ':prob' => $defaultProb,
         ':c'  => $camp, ':o' => $owner,
         ':notes' => $notes ?: null,
     ]);
     $id = (int)db()->lastInsertId();
-    flash_set('ok', 'Lead captured. Add touchpoints or qualify them into the funnel from here.');
+    flash_set('ok', $isWalkIn
+        ? 'Walk-in added directly to the pipeline as a New inquiry.'
+        : 'Lead captured. Log a touchpoint, then hit "Add to pipeline" to promote them.');
     redirect('/crm/view.php?id=' . $id);
 }
 
@@ -132,9 +140,18 @@ require __DIR__ . '/../includes/header.php';
     </div>
 
     <div class="actions section-h-spaced">
-        <button class="btn btn-primary" type="submit">Save lead</button>
+        <button class="btn btn-primary" type="submit" name="walk_in" value="">Save as lead</button>
+        <button class="btn" type="submit" name="walk_in" value="1"
+                title="Walk-in: skip the lead stage and add straight to the pipeline">
+            Save as walk-in →
+        </button>
         <a class="btn btn-ghost" href="/crm/leads.php">Cancel</a>
     </div>
+    <p class="muted small">
+        Use <strong>walk-in</strong> for families you've already talked to in person —
+        they land directly on the pipeline board. <strong>Lead</strong> is for cold
+        contacts; log a touchpoint and promote them from the detail page.
+    </p>
 </form>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

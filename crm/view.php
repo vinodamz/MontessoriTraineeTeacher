@@ -28,6 +28,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $op = $_POST['op'] ?? '';
     $pdo = db();
 
+    if ($op === 'qualify') {
+        // Promote a lead into the pipeline — sets status='new' and resets
+        // probability to the pipeline's default. No-op if already promoted.
+        $pdo->prepare("
+            UPDATE inquiry_families
+            SET status = 'new',
+                probability = CASE WHEN status = 'lead' THEN :p ELSE probability END
+            WHERE id = :id AND status = 'lead'
+        ")->execute([':p' => crm_default_probability('new'), ':id' => $id]);
+        flash_set('ok', 'Added to pipeline. They\'re in the "New inquiry" column now.');
+        redirect('/crm/view.php?id=' . $id);
+    }
+
     if ($op === 'status') {
         $st = $_POST['status'] ?? '';
         if (!array_key_exists($st, crm_statuses())) {
@@ -159,6 +172,8 @@ $teachers = db()->query("
 
 $canEnroll = !in_array($family['status'], ['enrolled','lost'], true);
 $unpromotedKids = array_values(array_filter($children, fn($k) => empty($k['promoted_student_id'])));
+$isLead         = $family['status'] === 'lead';
+$touchpointCount = count($touchpoints);
 
 $money = fn(float $v) => '₹' . number_format($v, 0);
 
@@ -182,6 +197,16 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="actionbar">
+        <?php if ($isLead): ?>
+            <form method="post" style="display:inline;"
+                  onsubmit="<?= $touchpointCount === 0 ? "return confirm('No touchpoints logged yet — promote this lead anyway?');" : '' ?>">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op" value="qualify">
+                <button class="btn btn-primary" title="Move into the pipeline as a New inquiry">
+                    Add to pipeline →
+                </button>
+            </form>
+        <?php endif; ?>
         <a class="btn" href="/crm/edit.php?id=<?= $id ?>">Edit</a>
         <form method="post" style="display:inline;"
               onsubmit="return confirm('Delete this inquiry permanently? Touchpoints and unpromoted children will be lost.')">
@@ -191,6 +216,13 @@ require __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+
+<?php if ($isLead): ?>
+    <div class="flash flash-ok" style="background:#fdf0d3; border-color:#f0c98a; color:#78420a;">
+        This is still a <strong>lead</strong> — it isn't on the pipeline board yet.
+        Log at least one touchpoint, then hit <strong>Add to pipeline →</strong> above to promote them to <em>New inquiry</em>.
+    </div>
+<?php endif; ?>
 
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 1 1 320px;">

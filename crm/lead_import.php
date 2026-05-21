@@ -143,12 +143,16 @@ if ($step === 'commit') {
         flash_set('error', 'Preview expired — re-upload and try again.');
         redirect('/crm/lead_import.php');
     }
+    $asWalkIns   = !empty($_POST['as_walk_ins']);
+    $status      = $asWalkIns ? 'new'  : 'lead';
+    $defaultProb = crm_default_probability($status);
+
     $ok = 0; $skipped = 0;
     $ins = db()->prepare("
         INSERT INTO inquiry_families
             (primary_name, primary_phone, primary_email,
              status, priority, probability, campaign_id, owner_id, notes)
-        VALUES (:n, :p, :e, 'lead', :pr, :prob, :c, :o, :notes)
+        VALUES (:n, :p, :e, :st, :pr, :prob, :c, :o, :notes)
     ");
     foreach ($records as $r) {
         $hasFatal = false;
@@ -165,8 +169,9 @@ if ($step === 'commit') {
             ':n'    => $r['rec']['name'],
             ':p'    => $r['rec']['phone'] ?: null,
             ':e'    => $r['rec']['email'] ?: null,
+            ':st'   => $status,
             ':pr'   => $r['priority'],
-            ':prob' => crm_default_probability('lead'),
+            ':prob' => $defaultProb,
             ':c'    => $r['campaign_id'],
             ':o'    => $r['owner_id'],
             ':notes'=> $notes ?: null,
@@ -174,9 +179,10 @@ if ($step === 'commit') {
         $ok++;
     }
     unset($_SESSION['_lead_import']);
-    flash_set('ok', "Imported $ok lead" . ($ok === 1 ? '' : 's')
+    $label = $asWalkIns ? 'walk-in' : 'lead';
+    flash_set('ok', "Imported $ok $label" . ($ok === 1 ? '' : 's')
                    . ($skipped ? " · skipped $skipped invalid row" . ($skipped === 1 ? '' : 's') : ''));
-    redirect('/crm/leads.php');
+    redirect($asWalkIns ? '/crm/index.php' : '/crm/leads.php');
 }
 
 $pageTitle = 'Bulk import leads';
@@ -239,11 +245,17 @@ require __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
-        <form method="post" class="actions section-h-spaced">
+        <form method="post" class="section-h-spaced">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="step" value="commit">
-            <button class="btn btn-primary">Commit valid rows</button>
-            <a class="btn btn-ghost" href="/crm/lead_import.php">Re-upload</a>
+            <label class="checkbox" style="margin-bottom:.5rem;">
+                <input type="checkbox" name="as_walk_ins" value="1">
+                <span>Import as walk-ins (skip lead stage — these rows land directly on the pipeline board)</span>
+            </label>
+            <div class="actions">
+                <button class="btn btn-primary">Commit valid rows</button>
+                <a class="btn btn-ghost" href="/crm/lead_import.php">Re-upload</a>
+            </div>
         </form>
     </div>
 <?php endif; ?>

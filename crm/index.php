@@ -48,15 +48,19 @@ $rows = db()->query("
              WHERE t.family_id = f.id AND t.follow_up_at >= NOW())            AS next_followup
     FROM inquiry_families f
     LEFT JOIN crm_campaigns c ON c.id = f.campaign_id
+    WHERE f.status <> 'lead'
     ORDER BY FIELD(f.priority,'urgent','high','normal','low'), f.updated_at DESC
 ")->fetchAll();
 
-// Group by status for the kanban columns.
+// Group by status for the kanban columns (pipeline only — leads excluded).
 $byStatus = [];
-foreach (array_keys(crm_statuses()) as $code) $byStatus[$code] = [];
+foreach (array_keys(crm_pipeline_statuses()) as $code) $byStatus[$code] = [];
 foreach ($rows as $r) {
     $byStatus[$r['status']][] = $r;
 }
+
+// Count of leads sitting in /crm/leads.php — shown as a quick-link chip.
+$leadCount = (int)db()->query("SELECT COUNT(*) FROM inquiry_families WHERE status = 'lead'")->fetchColumn();
 
 $projection = crm_revenue_projection();
 $money      = fn(float $v) => '₹' . number_format($v, 0);
@@ -85,7 +89,12 @@ require __DIR__ . '/../includes/header.php';
             · <?= $projection['count'] ?> open in funnel</p>
     </div>
     <div class="actionbar">
-        <a class="btn" href="/crm/leads.php">Leads</a>
+        <a class="btn" href="/crm/leads.php">
+            Leads
+            <?php if ($leadCount > 0): ?>
+                <span class="pill pill-status-lead" style="margin-left:.35rem;"><?= $leadCount ?></span>
+            <?php endif; ?>
+        </a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
         <a class="btn btn-primary" href="/crm/edit.php">+ New inquiry</a>
     </div>
@@ -145,7 +154,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
 <?php else: ?>
     <div class="crm-board" data-csrf="<?= e(csrf_token()) ?>">
-        <?php foreach (crm_statuses() as $code => $meta):
+        <?php foreach (crm_pipeline_statuses() as $code => $meta):
             $cards = $byStatus[$code];
             $colCount = count($cards);
         ?>

@@ -81,6 +81,16 @@ function crm_open_statuses(): array
     return array_keys(array_filter(crm_statuses(), fn($s) => $s['open']));
 }
 
+/**
+ * Pipeline statuses for the kanban board. Excludes 'lead' — leads live in
+ * /crm/leads.php and only enter the board once explicitly promoted via the
+ * "Add to pipeline" action on the inquiry detail page.
+ */
+function crm_pipeline_statuses(): array
+{
+    return array_filter(crm_statuses(), fn($_, $code) => $code !== 'lead', ARRAY_FILTER_USE_BOTH);
+}
+
 function crm_touchpoint_kinds(): array
 {
     return [
