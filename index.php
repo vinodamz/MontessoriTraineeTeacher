@@ -58,14 +58,16 @@ $hasTasks    = user_has_module($user, 'tasks');
 $hasMontess  = user_has_module($user, 'montessori');
 $hasStudents = user_has_module($user, 'students');
 $hasCrm      = user_has_module($user, 'crm');
+$hasRecruit  = user_has_module($user, 'recruitment');
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit;
 if ($moduleCount === 1) {
     if ($hasTasks)    redirect('/tasks/index.php');
     if ($hasMontess)  redirect('/assessment/index.php');
     if ($hasStudents) redirect('/students/index.php');
     if ($hasCrm)      redirect('/crm/index.php');
+    if ($hasRecruit)  redirect('/recruitment/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -111,6 +113,21 @@ if ($hasCrm) {
         )->fetchColumn();
         $proj = crm_revenue_projection();
         $crmStats['weighted'] = $proj['weighted'];
+    } catch (Throwable $e) { /* tables may not exist yet */ }
+}
+
+$recruitStats = ['open' => 0, 'interviews_7d' => 0];
+if ($hasRecruit) {
+    try {
+        require_once __DIR__ . '/includes/recruitment.php';
+        $open = "'" . implode("','", recruit_open_statuses()) . "'";
+        $recruitStats['open'] = (int)db()->query(
+            "SELECT COUNT(*) FROM recruit_candidates WHERE status IN ($open)"
+        )->fetchColumn();
+        $recruitStats['interviews_7d'] = (int)db()->query("
+            SELECT COUNT(*) FROM recruit_interviews
+            WHERE occurred_at >= NOW() AND occurred_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
+        ")->fetchColumn();
     } catch (Throwable $e) { /* tables may not exist yet */ }
 }
 
@@ -220,7 +237,21 @@ require __DIR__ . '/includes/header.php';
             </a>
         </li>
     <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm): ?>
+    <?php if ($hasRecruit): ?>
+        <li>
+            <a class="module-tile" href="/recruitment/index.php">
+                <h2>Recruitment</h2>
+                <p class="muted">Candidate pipeline, demo days, scorecards and hires.</p>
+                <div class="module-stats">
+                    <span class="pill"><?= (int)$recruitStats['open'] ?> open candidate<?= (int)$recruitStats['open'] === 1 ? '' : 's' ?></span>
+                    <?php if ($recruitStats['interviews_7d'] > 0): ?>
+                        <span class="pill pill-warn"><?= (int)$recruitStats['interviews_7d'] ?> interview<?= (int)$recruitStats['interviews_7d'] === 1 ? '' : 's' ?> this week</span>
+                    <?php endif; ?>
+                </div>
+            </a>
+        </li>
+    <?php endif; ?>
+    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm && !$hasRecruit): ?>
         <li>
             <div class="empty">
                 <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>

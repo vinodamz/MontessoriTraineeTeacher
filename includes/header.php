@@ -38,6 +38,9 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php if (user_has_module($user, 'crm')): ?>
                 <a href="/crm/index.php">Admissions</a>
             <?php endif; ?>
+            <?php if (user_has_module($user, 'recruitment')): ?>
+                <a href="/recruitment/index.php">Recruitment</a>
+            <?php endif; ?>
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="/admin.php">Admin</a>
             <?php endif; ?>
