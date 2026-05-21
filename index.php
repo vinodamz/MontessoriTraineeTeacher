@@ -57,13 +57,15 @@ try {
 $hasTasks    = user_has_module($user, 'tasks');
 $hasMontess  = user_has_module($user, 'montessori');
 $hasStudents = user_has_module($user, 'students');
+$hasCrm      = user_has_module($user, 'crm');
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm;
 if ($moduleCount === 1) {
     if ($hasTasks)    redirect('/tasks/index.php');
     if ($hasMontess)  redirect('/assessment/index.php');
     if ($hasStudents) redirect('/students/index.php');
+    if ($hasCrm)      redirect('/crm/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -97,6 +99,19 @@ if ($hasStudents) {
         // is_active was added by migrate_002 — if it's missing the COALESCE keeps the count correct.
         $studentsStats['active'] = (int)db()->query("SELECT COUNT(*) FROM students WHERE COALESCE(is_active, 1) = 1")->fetchColumn();
     } catch (Throwable $e) { /* table may be in mid-migration */ }
+}
+
+$crmStats = ['open' => 0, 'weighted' => 0.0];
+if ($hasCrm) {
+    try {
+        require_once __DIR__ . '/includes/crm.php';
+        $open = "'" . implode("','", crm_open_statuses()) . "'";
+        $crmStats['open'] = (int)db()->query(
+            "SELECT COUNT(*) FROM inquiry_families WHERE status IN ($open)"
+        )->fetchColumn();
+        $proj = crm_revenue_projection();
+        $crmStats['weighted'] = $proj['weighted'];
+    } catch (Throwable $e) { /* tables may not exist yet */ }
 }
 
 $mttStats = ['students' => 0, 'pending_this_month' => 0];
@@ -191,7 +206,21 @@ require __DIR__ . '/includes/header.php';
             </a>
         </li>
     <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess && !$hasStudents): ?>
+    <?php if ($hasCrm): ?>
+        <li>
+            <a class="module-tile" href="/crm/index.php">
+                <h2>Admissions</h2>
+                <p class="muted">Prospect pipeline, tours, follow-ups and projected revenue.</p>
+                <div class="module-stats">
+                    <span class="pill"><?= (int)$crmStats['open'] ?> open inquir<?= (int)$crmStats['open'] === 1 ? 'y' : 'ies' ?></span>
+                    <?php if ($crmStats['weighted'] > 0): ?>
+                        <span class="pill">₹<?= number_format($crmStats['weighted'], 0) ?>/mo projected</span>
+                    <?php endif; ?>
+                </div>
+            </a>
+        </li>
+    <?php endif; ?>
+    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm): ?>
         <li>
             <div class="empty">
                 <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>

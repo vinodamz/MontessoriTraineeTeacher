@@ -17,6 +17,10 @@ SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTIT
 -- Drop in reverse-dependency order.
 DROP TABLE IF EXISTS notification_preferences;
 DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS inquiry_touchpoints;
+DROP TABLE IF EXISTS inquiry_children;
+DROP TABLE IF EXISTS inquiry_parents;
+DROP TABLE IF EXISTS inquiry_families;
 DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_recurrences;
@@ -88,7 +92,7 @@ CREATE TABLE users (
     name        VARCHAR(120) NOT NULL,
     pin_hash    VARCHAR(255) NOT NULL,
     role        ENUM('teacher','admin') NOT NULL DEFAULT 'teacher',
-    modules     SET('tasks','montessori','students') NOT NULL DEFAULT '',
+    modules     SET('tasks','montessori','students','crm') NOT NULL DEFAULT '',
     active      TINYINT(1)   NOT NULL DEFAULT 1,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -400,6 +404,79 @@ CREATE TABLE tasks (
     CONSTRAINT fk_tasks_assigned   FOREIGN KEY (assigned_to_user_id) REFERENCES users(id)             ON DELETE SET NULL,
     CONSTRAINT fk_tasks_creator    FOREIGN KEY (created_by_user_id)  REFERENCES users(id)             ON DELETE RESTRICT,
     CONSTRAINT fk_tasks_recurrence FOREIGN KEY (recurrence_id)       REFERENCES task_recurrences(id)  ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- Admissions / CRM module — prospect funnel. On enrollment, children are
+-- copied into `students` and linked back via inquiry_children.promoted_student_id.
+-- ----------------------------------------------------------------------------
+CREATE TABLE inquiry_families (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    primary_name    VARCHAR(160) NOT NULL,
+    primary_phone   VARCHAR(40)  NULL,
+    primary_email   VARCHAR(160) NULL,
+    source          VARCHAR(60)  NULL,
+    status          ENUM('new','tour_scheduled','application_submitted',
+                         'offered','enrolled','waitlisted','lost')
+                    NOT NULL DEFAULT 'new',
+    probability     TINYINT UNSIGNED NOT NULL DEFAULT 20,
+    expected_fee    DECIMAL(10,2) NULL,
+    expected_start  DATE NULL,
+    notes           TEXT NULL,
+    owner_id        INT UNSIGNED NULL,
+    enrolled_at     DATETIME NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_inq_status  (status),
+    KEY idx_inq_created (created_at),
+    CONSTRAINT fk_inq_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE inquiry_parents (
+    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    family_id   INT UNSIGNED NOT NULL,
+    relation    ENUM('father','mother','guardian','other') NOT NULL DEFAULT 'guardian',
+    name        VARCHAR(160) NOT NULL,
+    phone       VARCHAR(40)  NULL,
+    email       VARCHAR(160) NULL,
+    occupation  VARCHAR(120) NULL,
+    is_primary  TINYINT(1)   NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_ip_fam (family_id),
+    CONSTRAINT fk_ip_fam FOREIGN KEY (family_id) REFERENCES inquiry_families(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE inquiry_children (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    family_id           INT UNSIGNED NOT NULL,
+    first_name          VARCHAR(120) NOT NULL,
+    last_name           VARCHAR(120) NULL,
+    dob                 DATE NULL,
+    gender              ENUM('Male','Female','Other') NULL,
+    target_grade        ENUM('Playgroup','Nursery','LKG','UKG') NULL,
+    notes               TEXT NULL,
+    promoted_student_id INT UNSIGNED NULL,
+    PRIMARY KEY (id),
+    KEY idx_ic_fam (family_id),
+    CONSTRAINT fk_ic_fam     FOREIGN KEY (family_id)           REFERENCES inquiry_families(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ic_student FOREIGN KEY (promoted_student_id) REFERENCES students(id)         ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE inquiry_touchpoints (
+    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    family_id     INT UNSIGNED NOT NULL,
+    kind          ENUM('call','email','sms','meeting','tour','note','other') NOT NULL DEFAULT 'note',
+    occurred_at   DATETIME NOT NULL,
+    follow_up_at  DATETIME NULL,
+    body          TEXT NULL,
+    created_by    INT UNSIGNED NULL,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_it_fam_when (family_id, occurred_at),
+    KEY idx_it_followup (follow_up_at),
+    CONSTRAINT fk_it_fam FOREIGN KEY (family_id)  REFERENCES inquiry_families(id) ON DELETE CASCADE,
+    CONSTRAINT fk_it_by  FOREIGN KEY (created_by) REFERENCES users(id)            ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- After running this schema, open /install.php to create the first admin.
