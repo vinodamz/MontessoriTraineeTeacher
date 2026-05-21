@@ -83,7 +83,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/recruitment/edit.php' . ($id ? "?id=$id" : ''));
     }
 
-    flash_set('ok', 'Candidate saved.');
+    // Optional resume upload bundled with the form. If it fails, keep the
+    // candidate (already saved) but surface the error so the user can retry
+    // from the view page.
+    if (!empty($_FILES['resume']['name']) && ($_FILES['resume']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        try {
+            recruit_save_uploaded_attachment($id, $_FILES['resume'], (int)$user['id'], 'resume');
+            flash_set('ok', 'Candidate saved with resume attached.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Candidate saved, but resume upload failed: ' . $e->getMessage());
+            redirect('/recruitment/view.php?id=' . $id . '#attachments');
+        }
+    } else {
+        flash_set('ok', 'Candidate saved.');
+    }
     redirect('/recruitment/view.php?id=' . $id);
 }
 
@@ -113,7 +126,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<form method="post" class="card">
+<form method="post" class="card" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
     <input type="hidden" name="id"    value="<?= (int)$id ?>">
 
@@ -218,6 +231,15 @@ require __DIR__ . '/../includes/header.php';
                 <?php endforeach; ?>
             </select>
         </div>
+    </div>
+
+    <h3 class="section-h-spaced">Resume <span class="muted small">(optional)</span></h3>
+    <div class="field">
+        <label>Attach resume / CV</label>
+        <input type="file" name="resume"
+               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,image/*">
+        <p class="muted small">PDF / DOC / DOCX / JPG / PNG, up to 8 MB.
+            <?= $id ? 'Adds a new attachment — existing files are kept.' : '' ?></p>
     </div>
 
     <h3 class="section-h-spaced">Notes</h3>

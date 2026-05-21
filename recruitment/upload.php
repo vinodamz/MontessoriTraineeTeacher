@@ -42,51 +42,12 @@ try {
         exit;
     }
 
-    $f = $_FILES['file'];
-    if ($f['error'] !== UPLOAD_ERR_OK) {
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'error' => 'upload error ' . $f['error']]);
-        exit;
-    }
-    if ($f['size'] > RECRUIT_DOC_MAX_BYTES) {
-        http_response_code(413);
-        echo json_encode(['ok' => false, 'error' => 'file too large (8 MB max)']);
-        exit;
-    }
-
-    $mime = sniff_mime_type($f['tmp_name']);
-    if ($mime === null || !isset(RECRUIT_DOC_MIME_ALLOW[$mime])) {
-        http_response_code(415);
-        echo json_encode(['ok' => false, 'error' => 'file type not allowed']);
-        exit;
-    }
-    $ext = RECRUIT_DOC_MIME_ALLOW[$mime];
-
-    $dir    = recruit_docs_dir($cid);
-    $stored = bin2hex(random_bytes(12)) . '.' . $ext;
-    if (!move_uploaded_file($f['tmp_name'], "$dir/$stored")) {
-        throw new RuntimeException('failed to move uploaded file');
-    }
-
-    $stmt = db()->prepare("
-        INSERT INTO recruit_attachments
-            (candidate_id, kind, original_name, stored_name, mime_type, size_bytes, uploaded_by)
-        VALUES
-            (:c, :k, :o, :s, :m, :z, :u)
-    ");
-    $stmt->execute([
-        ':c' => $cid,
-        ':k' => $kind,
-        ':o' => substr((string)$f['name'], 0, 255),
-        ':s' => $stored,
-        ':m' => $mime,
-        ':z' => (int)$f['size'],
-        ':u' => (int)$user['id'],
-    ]);
+    $f   = $_FILES['file'];
+    $aid = recruit_save_uploaded_attachment($cid, $f, (int)$user['id'], $kind);
     http_response_code(201);
     echo json_encode([
         'ok'   => true,
-        'id'   => (int)db()->lastInsertId(),
+        'id'   => $aid,
         'name' => $f['name'],
         'kind' => $kind,
         'size' => format_bytes((int)$f['size']),

@@ -147,6 +147,47 @@ const RECRUIT_DOC_MIME_ALLOW = [
 ];
 
 /**
+ * Validate + persist one $_FILES[...] entry as a candidate attachment.
+ * Throws on validation/IO failure so callers can flash + redirect. The kind
+ * defaults to 'resume' since this is the common case (upload-on-create).
+ */
+function recruit_save_uploaded_attachment(int $candidateId, array $file, int $byUserId, string $kind = 'resume'): int
+{
+    if (!array_key_exists($kind, recruit_attachment_kinds())) $kind = 'resume';
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('upload error ' . ($file['error'] ?? '?'));
+    }
+    if ((int)($file['size'] ?? 0) > RECRUIT_DOC_MAX_BYTES) {
+        throw new RuntimeException('file too large (8 MB max)');
+    }
+    $mime = sniff_mime_type($file['tmp_name']);
+    if ($mime === null || !isset(RECRUIT_DOC_MIME_ALLOW[$mime])) {
+        throw new RuntimeException('file type not allowed');
+    }
+    $ext    = RECRUIT_DOC_MIME_ALLOW[$mime];
+    $dir    = recruit_docs_dir($candidateId);
+    $stored = bin2hex(random_bytes(12)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], "$dir/$stored")) {
+        throw new RuntimeException('failed to move uploaded file');
+    }
+    $stmt = db()->prepare("
+        INSERT INTO recruit_attachments
+            (candidate_id, kind, original_name, stored_name, mime_type, size_bytes, uploaded_by)
+        VALUES (:c, :k, :o, :s, :m, :z, :u)
+    ");
+    $stmt->execute([
+        ':c' => $candidateId,
+        ':k' => $kind,
+        ':o' => substr((string)($file['name'] ?? 'file'), 0, 255),
+        ':s' => $stored,
+        ':m' => $mime,
+        ':z' => (int)($file['size'] ?? 0),
+        ':u' => $byUserId,
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+/**
  * Promote a candidate into a users row (role=teacher, active=0). Idempotent —
  * if promoted_user_id is already set, returns that user id. Caller wraps in
  * a transaction.
