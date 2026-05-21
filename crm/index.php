@@ -185,7 +185,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-    <script src="/assets/js/crm-board.js?v=<?= e(asset_version()) ?>"></script>
+    <script src="/assets/js/crm-board.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-board.js')) ?>"></script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
