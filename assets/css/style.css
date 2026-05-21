@@ -666,16 +666,28 @@ a.admin-tile:hover {
 }
 .crm-col-head h3 { font-size: .85rem; margin: 0; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
 .crm-col-empty { margin: .2rem 0 0; }
+.crm-col-list  {
+    list-style: none; padding: 0; margin: 0;
+    min-height: 30px;
+}
+.crm-card-li   { margin-bottom: .5rem; cursor: grab; }
+.crm-card-li:active { cursor: grabbing; }
 .crm-card {
     display: block; text-decoration: none; color: inherit;
     background: var(--bg-card);
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    padding: .6rem .7rem; margin-bottom: .5rem;
+    padding: .6rem .7rem;
     box-shadow: 0 2px 6px rgba(40,30,20,.04);
     transition: transform .08s ease, box-shadow .15s ease;
 }
 .crm-card:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(40,30,20,.08); text-decoration: none; }
+
+/* Sortable.js feedback states. */
+.crm-card-ghost  { opacity: .35; }
+.crm-card-ghost .crm-card { border-style: dashed; }
+.crm-card-chosen .crm-card { box-shadow: 0 4px 12px rgba(236,64,122,.25); border-color: var(--accent); }
+.crm-card-drag   .crm-card { transform: rotate(1.5deg); box-shadow: 0 10px 24px rgba(40,30,20,.18); }
 .crm-card-name { font-weight: 600; margin-bottom: .25rem; }
 .crm-card-meta { display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; margin-top: .15rem; font-size: .85rem; }
 .crm-col-enrolled  { background: #eafce4; border-color: #c6e4b8; }

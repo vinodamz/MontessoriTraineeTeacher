@@ -14,6 +14,32 @@ require_once __DIR__ . '/../includes/crm.php';
 
 $user = require_module('crm');
 
+// ---- AJAX: drag-and-drop status change -----------------------------------
+// Mirrors the tasks/tasks.php op=move pattern: POST + X-Requested-With,
+// JSON back. Status-only — probability stays whatever the user last set.
+$isAjax = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'move' && $isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        csrf_check();
+        $id = (int)($_POST['id'] ?? 0);
+        $st = $_POST['status'] ?? '';
+        if ($id <= 0 || !array_key_exists($st, crm_statuses())) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'bad input']);
+            exit;
+        }
+        db()->prepare("UPDATE inquiry_families SET status = :s WHERE id = :id")
+            ->execute([':s' => $st, ':id' => $id]);
+        echo json_encode(['ok' => true]);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
+
 $rows = db()->query("
     SELECT f.*,
            (SELECT COUNT(*) FROM inquiry_children c WHERE c.family_id = f.id) AS kid_count,
@@ -114,44 +140,52 @@ require __DIR__ . '/../includes/header.php';
         <p>No inquiries yet. <a href="/crm/edit.php">Add your first inquiry</a> to kick off the funnel.</p>
     </div>
 <?php else: ?>
-    <div class="crm-board">
+    <div class="crm-board" data-csrf="<?= e(csrf_token()) ?>">
         <?php foreach (crm_statuses() as $code => $meta):
             $cards = $byStatus[$code];
             $colCount = count($cards);
         ?>
-            <section class="crm-col crm-col-<?= e($code) ?>">
+            <section class="crm-col crm-col-<?= e($code) ?>" data-status="<?= e($code) ?>">
                 <header class="crm-col-head">
                     <h3><?= e($meta['label']) ?></h3>
                     <span class="pill"><?= $colCount ?></span>
                 </header>
+                <ul class="crm-col-list" data-status="<?= e($code) ?>" role="list">
+                    <?php foreach ($cards as $r):
+                        $fee  = $r['expected_fee'] !== null ? $money((float)$r['expected_fee']) : '—';
+                        $prob = (int)$r['probability'];
+                    ?>
+                        <li class="crm-card-li" data-inquiry-id="<?= (int)$r['id'] ?>">
+                            <a class="crm-card" href="/crm/view.php?id=<?= (int)$r['id'] ?>">
+                                <div class="crm-card-name"><?= e($r['primary_name']) ?></div>
+                                <div class="crm-card-meta">
+                                    <span class="pill"><?= (int)$r['kid_count'] ?> kid<?= (int)$r['kid_count'] === 1 ? '' : 's' ?></span>
+                                    <?php if ($r['source']): ?>
+                                        <span class="muted small">· <?= e($r['source']) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="crm-card-meta">
+                                    <span><?= e($fee) ?>/mo</span>
+                                    <span class="muted small">· <?= $prob ?>%</span>
+                                </div>
+                                <?php if ($r['next_followup']): ?>
+                                    <div class="crm-card-meta muted small">
+                                        ↻ <?= e(date('j M', strtotime($r['next_followup']))) ?>
+                                    </div>
+                                <?php endif; ?>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
                 <?php if (!$cards): ?>
-                    <p class="crm-col-empty muted small">No inquiries here.</p>
-                <?php else: foreach ($cards as $r):
-                    $fee  = $r['expected_fee'] !== null ? $money((float)$r['expected_fee']) : '—';
-                    $prob = (int)$r['probability'];
-                ?>
-                    <a class="crm-card" href="/crm/view.php?id=<?= (int)$r['id'] ?>">
-                        <div class="crm-card-name"><?= e($r['primary_name']) ?></div>
-                        <div class="crm-card-meta">
-                            <span class="pill"><?= (int)$r['kid_count'] ?> kid<?= (int)$r['kid_count'] === 1 ? '' : 's' ?></span>
-                            <?php if ($r['source']): ?>
-                                <span class="muted small">· <?= e($r['source']) ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="crm-card-meta">
-                            <span><?= e($fee) ?>/mo</span>
-                            <span class="muted small">· <?= $prob ?>%</span>
-                        </div>
-                        <?php if ($r['next_followup']): ?>
-                            <div class="crm-card-meta muted small">
-                                ↻ <?= e(date('j M', strtotime($r['next_followup']))) ?>
-                            </div>
-                        <?php endif; ?>
-                    </a>
-                <?php endforeach; endif; ?>
+                    <p class="crm-col-empty muted small">Drop cards here.</p>
+                <?php endif; ?>
             </section>
         <?php endforeach; ?>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <script src="/assets/js/crm-board.js?v=<?= e(asset_version()) ?>"></script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
