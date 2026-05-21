@@ -14,6 +14,7 @@
 function crm_statuses(): array
 {
     return [
+        'lead'                  => ['label' => 'Leads',                 'prob' => 10, 'open' => true],
         'new'                   => ['label' => 'New inquiry',           'prob' => 20, 'open' => true],
         'tour_scheduled'        => ['label' => 'Tour scheduled',        'prob' => 45, 'open' => true],
         'application_submitted' => ['label' => 'Application submitted', 'prob' => 70, 'open' => true],
@@ -22,6 +23,46 @@ function crm_statuses(): array
         'waitlisted'            => ['label' => 'Waitlisted',            'prob' => 25, 'open' => true],
         'lost'                  => ['label' => 'Lost',                  'prob' => 0,  'open' => false],
     ];
+}
+
+/** Per-lead urgency, in display order. */
+function crm_priorities(): array
+{
+    return [
+        'urgent' => ['label' => 'Urgent', 'tone' => 'warn'],
+        'high'   => ['label' => 'High',   'tone' => 'warn'],
+        'normal' => ['label' => 'Normal', 'tone' => 'neutral'],
+        'low'    => ['label' => 'Low',    'tone' => 'neutral'],
+    ];
+}
+
+function crm_priority_label(string $code): string
+{
+    return crm_priorities()[$code]['label'] ?? $code;
+}
+
+/** Channels that a campaign can run through. */
+function crm_channels(): array
+{
+    return [
+        'walk_in'   => 'Walk-in',
+        'referral'  => 'Referral',
+        'website'   => 'Website',
+        'instagram' => 'Instagram',
+        'facebook'  => 'Facebook',
+        'google'    => 'Google',
+        'whatsapp'  => 'WhatsApp',
+        'event'     => 'Event',
+        'other'     => 'Other',
+    ];
+}
+
+function crm_active_campaigns(): array
+{
+    return db()->query("
+        SELECT id, name, channel FROM crm_campaigns
+        WHERE active = 1 ORDER BY name
+    ")->fetchAll();
 }
 
 function crm_status_label(string $code): string

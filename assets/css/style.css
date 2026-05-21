@@ -694,6 +694,7 @@ a.admin-tile:hover {
 .crm-col-lost      { background: #fbecec; border-color: #ebcfcf; opacity: .85; }
 .crm-col-offered   { background: #fff4e1; border-color: #f3dba0; }
 
+.pill-status-lead                  { background: #fdf0d3; color: #78420a; }
 .pill-status-new                   { background: #eef1f4; color: #495057; }
 .pill-status-tour_scheduled        { background: #e1ecff; color: #1e3a8a; }
 .pill-status-application_submitted { background: #fff4e1; color: #92400e; }
@@ -701,6 +702,13 @@ a.admin-tile:hover {
 .pill-status-enrolled              { background: #d8f3c8; color: #14532d; }
 .pill-status-waitlisted            { background: #f1e2ff; color: #5b21b6; }
 .pill-status-lost                  { background: #f3d6d6; color: #7f1d1d; }
+
+.pill-prio-urgent { background: #fbd4d4; color: #7f1d1d; font-weight: 700; }
+.pill-prio-high   { background: #fde2c4; color: #9a3412; }
+.pill-prio-normal { background: var(--line-soft); color: var(--ink-soft); }
+.pill-prio-low    { background: #f1f0ed; color: #8a8780; }
+
+.crm-col-lead { background: #fdf0d3; border-color: #f0c98a; }
 
 /* Repeating row groups used by crm/edit.php (children, parents). */
 .crm-rows .crm-row {

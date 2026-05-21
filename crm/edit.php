@@ -36,6 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $probability = max(0, min(100, (int)($_POST['probability'] ?? crm_default_probability($status))));
     $fee         = $_POST['expected_fee'] !== '' ? (float)$_POST['expected_fee'] : null;
     $start       = $_POST['expected_start'] !== '' ? $_POST['expected_start'] : null;
+    $priority    = $_POST['priority'] ?? 'normal';
+    if (!array_key_exists($priority, crm_priorities())) $priority = 'normal';
+    $campaignId  = (int)($_POST['campaign_id'] ?? 0) ?: null;
 
     $pdo = db();
     $pdo->beginTransaction();
@@ -44,7 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("
                 UPDATE inquiry_families
                 SET primary_name=:n, primary_phone=:p, primary_email=:e, source=:s,
-                    status=:st, probability=:pr, expected_fee=:f, expected_start=:start,
+                    status=:st, probability=:pr, priority=:prio, campaign_id=:cid,
+                    expected_fee=:f, expected_start=:start,
                     notes=:notes, owner_id=:o
                 WHERE id=:id
             ")->execute([
@@ -53,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':e' => trim($_POST['primary_email'] ?? '') ?: null,
                 ':s' => trim($_POST['source'] ?? '') ?: null,
                 ':st'=> $status, ':pr' => $probability,
+                ':prio' => $priority, ':cid' => $campaignId,
                 ':f' => $fee, ':start' => $start,
                 ':notes' => trim($_POST['notes'] ?? '') ?: null,
                 ':o' => (int)($_POST['owner_id'] ?? 0) ?: null,
@@ -62,14 +67,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("
                 INSERT INTO inquiry_families
                     (primary_name, primary_phone, primary_email, source,
-                     status, probability, expected_fee, expected_start, notes, owner_id)
-                VALUES (:n, :p, :e, :s, :st, :pr, :f, :start, :notes, :o)
+                     status, probability, priority, campaign_id,
+                     expected_fee, expected_start, notes, owner_id)
+                VALUES (:n, :p, :e, :s, :st, :pr, :prio, :cid, :f, :start, :notes, :o)
             ")->execute([
                 ':n' => $primaryName,
                 ':p' => trim($_POST['primary_phone'] ?? '') ?: null,
                 ':e' => trim($_POST['primary_email'] ?? '') ?: null,
                 ':s' => trim($_POST['source'] ?? '') ?: null,
                 ':st'=> $status, ':pr' => $probability,
+                ':prio' => $priority, ':cid' => $campaignId,
                 ':f' => $fee, ':start' => $start,
                 ':notes' => trim($_POST['notes'] ?? '') ?: null,
                 ':o' => (int)($_POST['owner_id'] ?? 0) ?: $user['id'],
@@ -175,6 +182,7 @@ if ($id > 0) {
 while (count($children) < 1) $children[] = ['first_name' => '', 'last_name' => '', 'dob' => '', 'gender' => '', 'target_grade' => '', 'notes' => ''];
 while (count($parents)  < 1) $parents[]  = ['name' => '', 'relation' => 'guardian', 'phone' => '', 'email' => '', 'occupation' => '', 'is_primary' => 1];
 
+$campaigns = crm_active_campaigns();
 $owners = db()->query("
     SELECT id, name FROM users
     WHERE active = 1 AND (role = 'admin' OR FIND_IN_SET('crm', modules) > 0)
@@ -217,7 +225,19 @@ require __DIR__ . '/../includes/header.php';
                    value="<?= e($family['primary_email'] ?? '') ?>">
         </div>
         <div class="field">
-            <label>Source</label>
+            <label>Campaign</label>
+            <select name="campaign_id">
+                <option value="0">— None —</option>
+                <?php foreach ($campaigns as $c): ?>
+                    <option value="<?= (int)$c['id'] ?>"
+                        <?= (int)($family['campaign_id'] ?? 0) === (int)$c['id'] ? 'selected' : '' ?>>
+                        <?= e($c['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="field">
+            <label>Source <span class="muted small">(free text)</span></label>
             <input name="source" list="crm-sources" maxlength="60"
                    value="<?= e($family['source'] ?? '') ?>">
             <datalist id="crm-sources">
@@ -245,6 +265,16 @@ require __DIR__ . '/../includes/header.php';
             <label>Win probability %</label>
             <input name="probability" type="number" min="0" max="100" step="5"
                    value="<?= (int)($family['probability'] ?? 20) ?>">
+        </div>
+        <div class="field">
+            <label>Priority</label>
+            <select name="priority">
+                <?php foreach (crm_priorities() as $code => $meta): ?>
+                    <option value="<?= e($code) ?>" <?= ($family['priority'] ?? 'normal') === $code ? 'selected' : '' ?>>
+                        <?= e($meta['label']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div class="field">
             <label>Expected monthly fee (₹)</label>

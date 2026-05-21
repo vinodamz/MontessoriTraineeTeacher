@@ -42,11 +42,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'move' && 
 
 $rows = db()->query("
     SELECT f.*,
-           (SELECT COUNT(*) FROM inquiry_children c WHERE c.family_id = f.id) AS kid_count,
+           c.name AS campaign_name,
+           (SELECT COUNT(*) FROM inquiry_children k WHERE k.family_id = f.id) AS kid_count,
            (SELECT MIN(t.follow_up_at) FROM inquiry_touchpoints t
              WHERE t.family_id = f.id AND t.follow_up_at >= NOW())            AS next_followup
     FROM inquiry_families f
-    ORDER BY f.updated_at DESC
+    LEFT JOIN crm_campaigns c ON c.id = f.campaign_id
+    ORDER BY FIELD(f.priority,'urgent','high','normal','low'), f.updated_at DESC
 ")->fetchAll();
 
 // Group by status for the kanban columns.
@@ -83,6 +85,8 @@ require __DIR__ . '/../includes/header.php';
             · <?= $projection['count'] ?> open in funnel</p>
     </div>
     <div class="actionbar">
+        <a class="btn" href="/crm/leads.php">Leads</a>
+        <a class="btn" href="/crm/campaigns.php">Campaigns</a>
         <a class="btn btn-primary" href="/crm/edit.php">+ New inquiry</a>
     </div>
 </div>
@@ -159,8 +163,15 @@ require __DIR__ . '/../includes/header.php';
                             <a class="crm-card" href="/crm/view.php?id=<?= (int)$r['id'] ?>">
                                 <div class="crm-card-name"><?= e($r['primary_name']) ?></div>
                                 <div class="crm-card-meta">
-                                    <span class="pill"><?= (int)$r['kid_count'] ?> kid<?= (int)$r['kid_count'] === 1 ? '' : 's' ?></span>
-                                    <?php if ($r['source']): ?>
+                                    <?php if (($r['priority'] ?? 'normal') !== 'normal'): ?>
+                                        <span class="pill pill-prio-<?= e($r['priority']) ?>"><?= e(crm_priority_label($r['priority'])) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ((int)$r['kid_count'] > 0): ?>
+                                        <span class="pill"><?= (int)$r['kid_count'] ?> kid<?= (int)$r['kid_count'] === 1 ? '' : 's' ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($r['campaign_name']): ?>
+                                        <span class="muted small">· <?= e($r['campaign_name']) ?></span>
+                                    <?php elseif ($r['source']): ?>
                                         <span class="muted small">· <?= e($r['source']) ?></span>
                                     <?php endif; ?>
                                 </div>

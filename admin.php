@@ -226,6 +226,20 @@ require __DIR__ . '/includes/header.php';
         </a>
     </li>
     <li>
+        <a class="admin-tile tile-nav" href="/crm/leads.php">
+            <span class="tile-label">Leads</span>
+            <span class="tile-value">Inbox</span>
+            <span class="tile-sub">By campaign &amp; priority</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="/crm/campaigns.php">
+            <span class="tile-label">Campaigns</span>
+            <span class="tile-value">Sources</span>
+            <span class="tile-sub">Channels &amp; embed URLs</span>
+        </a>
+    </li>
+    <li>
         <a class="admin-tile tile-nav" href="/assessment/admin.php">
             <span class="tile-label">Assessment</span>
             <span class="tile-value">Admin</span>

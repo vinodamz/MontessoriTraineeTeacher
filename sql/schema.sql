@@ -21,6 +21,7 @@ DROP TABLE IF EXISTS inquiry_touchpoints;
 DROP TABLE IF EXISTS inquiry_children;
 DROP TABLE IF EXISTS inquiry_parents;
 DROP TABLE IF EXISTS inquiry_families;
+DROP TABLE IF EXISTS crm_campaigns;
 DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_recurrences;
@@ -409,28 +410,57 @@ CREATE TABLE tasks (
 -- ----------------------------------------------------------------------------
 -- Admissions / CRM module — prospect funnel. On enrollment, children are
 -- copied into `students` and linked back via inquiry_children.promoted_student_id.
+-- Leads live in inquiry_families with status='lead' and graduate to 'new'
+-- once contacted/qualified.
 -- ----------------------------------------------------------------------------
+CREATE TABLE crm_campaigns (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name       VARCHAR(120) NOT NULL,
+    channel    ENUM('walk_in','referral','website','instagram','facebook',
+                    'google','whatsapp','event','other')
+               NOT NULL DEFAULT 'other',
+    cost       DECIMAL(10,2) NULL,
+    active     TINYINT(1)    NOT NULL DEFAULT 1,
+    notes      TEXT          NULL,
+    created_at DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_camp_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO crm_campaigns (name, channel, active) VALUES
+    ('Walk-in',       'walk_in',  1),
+    ('Word of mouth', 'referral', 1),
+    ('Website form',  'website',  1),
+    ('Instagram',     'instagram',1);
+
 CREATE TABLE inquiry_families (
     id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
     primary_name    VARCHAR(160) NOT NULL,
     primary_phone   VARCHAR(40)  NULL,
     primary_email   VARCHAR(160) NULL,
     source          VARCHAR(60)  NULL,
-    status          ENUM('new','tour_scheduled','application_submitted',
+    campaign_id     INT UNSIGNED NULL,
+    status          ENUM('lead','new','tour_scheduled','application_submitted',
                          'offered','enrolled','waitlisted','lost')
                     NOT NULL DEFAULT 'new',
     probability     TINYINT UNSIGNED NOT NULL DEFAULT 20,
+    priority        ENUM('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
     expected_fee    DECIMAL(10,2) NULL,
     expected_start  DATE NULL,
     notes           TEXT NULL,
+    ip_hash         VARCHAR(64) NULL,
     owner_id        INT UNSIGNED NULL,
     enrolled_at     DATETIME NULL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_inq_status  (status),
-    KEY idx_inq_created (created_at),
-    CONSTRAINT fk_inq_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL
+    KEY idx_inq_status   (status),
+    KEY idx_inq_created  (created_at),
+    KEY idx_inq_priority (priority),
+    KEY idx_inq_campaign (campaign_id),
+    KEY idx_inq_ip_recent (ip_hash, created_at),
+    CONSTRAINT fk_inq_owner    FOREIGN KEY (owner_id)    REFERENCES users(id)         ON DELETE SET NULL,
+    CONSTRAINT fk_inq_campaign FOREIGN KEY (campaign_id) REFERENCES crm_campaigns(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE inquiry_parents (

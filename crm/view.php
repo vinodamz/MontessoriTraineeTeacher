@@ -117,9 +117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---- Load data -----------------------------------------------------------
 $family = (function() use ($id) {
     $stmt = db()->prepare("
-        SELECT f.*, u.name AS owner_name
+        SELECT f.*, u.name AS owner_name, c.name AS campaign_name, c.channel AS campaign_channel
         FROM inquiry_families f
-        LEFT JOIN users u ON u.id = f.owner_id
+        LEFT JOIN users u         ON u.id = f.owner_id
+        LEFT JOIN crm_campaigns c ON c.id = f.campaign_id
         WHERE f.id = :id
     ");
     $stmt->execute([':id' => $id]);
@@ -171,7 +172,12 @@ require __DIR__ . '/../includes/header.php';
         <p class="muted">
             <a href="/crm/index.php">← Pipeline</a>
             · <span class="pill pill-status-<?= e($family['status']) ?>"><?= e(crm_status_label($family['status'])) ?></span>
-            <?php if ($family['source']): ?> · <?= e($family['source']) ?><?php endif; ?>
+            <?php if (($family['priority'] ?? 'normal') !== 'normal'): ?>
+                · <span class="pill pill-prio-<?= e($family['priority']) ?>"><?= e(crm_priority_label($family['priority'])) ?></span>
+            <?php endif; ?>
+            <?php if ($family['campaign_name']): ?>
+                · <span class="pill"><?= e($family['campaign_name']) ?></span>
+            <?php elseif ($family['source']): ?> · <?= e($family['source']) ?><?php endif; ?>
             <?php if ($family['owner_name']): ?> · owner: <?= e($family['owner_name']) ?><?php endif; ?>
         </p>
     </div>
