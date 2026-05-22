@@ -1,0 +1,675 @@
+id,lead_id,date,author_id,author_name,email_from,message_type,subtype,subject,body_text,body_html
+2329,157,2025-09-25 07:57:40,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+2585,157,2025-10-04 06:57:02,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        Currently in Kozhikode. Need to call after two weeks","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">Currently in Kozhikode. Need to call after two weeks&nbsp;</div></div>
+</div>"
+3349,157,2026-05-13 08:16:40,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3350,157,2026-05-13 08:39:40,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3359,157,2026-05-13 09:47:02,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+         (originally assigned to ayshaka1997@gmail.com)
+        : Call
+
+        Feedback:
+            interested to visit","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+         (originally assigned to <span>ayshaka1997@gmail.com</span>)
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            interested to visit
+    </div>
+</div>"
+2430,226,2025-09-27 09:20:49,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3331,226,2026-05-13 05:35:26,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3332,226,2026-05-13 05:36:01,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3409,226,2026-05-14 06:53:05,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            call them later","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call them later
+    </div>
+</div>"
+2610,336,2025-10-08 11:41:18,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+2611,336,2025-10-08 11:57:04,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Note,,,
+2630,336,2025-10-22 12:12:15,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the admission time
+
+        Feedback:
+            they will be coming only in November , not sure","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the admission time</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            they will be coming only in November , not sure
+    </div>
+</div>"
+2736,336,2025-11-08 12:31:52,3,Vinod,"""Vinod"" <vinodamz@gmail.com>",notification,Opportunity Restored,,,
+2838,336,2025-11-17 12:20:50,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the admission
+
+        Feedback:
+            parents are waiting for the arrival of grandparents ,child will come only on December","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the admission</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            parents are waiting for the arrival of grandparents ,child will come only on December
+    </div>
+</div>"
+2882,336,2025-11-26 10:45:15,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the updation
+
+        Feedback:
+            they are busy right now, attending a class.","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the updation</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            they are busy right now, attending a class.
+    </div>
+</div>"
+2935,336,2025-12-17 11:25:16,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask about the admission!!
+
+        Feedback:
+            not attending now!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask about the admission!!</div><div><br></div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            not attending now!!
+    </div>
+</div>"
+2969,336,2026-01-03 06:09:12,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask about the admission!!
+
+        Feedback:
+            parent has moved to the current location!! they mentioned they will contact us. Once they are settled and ready to proceed!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask about the admission!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            parent has moved to the current location!! they mentioned they will contact us. Once they are settled and ready to proceed!!
+    </div>
+</div>"
+2970,336,2026-01-03 06:10:20,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",comment,Note,,"No follow up needed, need to send the annual day invitation!!!","<p>No follow up needed, need to send the annual day invitation!!!</p>"
+3273,336,2026-05-11 10:31:43,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+2788,358,2025-11-12 11:28:55,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+2789,358,2025-11-12 11:34:04,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+2790,358,2025-11-12 11:34:08,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+2791,358,2025-11-12 11:35:42,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        Enquiry call
+
+        Feedback:
+            frequently ask about the fee, invited for the school visit.","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">Enquiry call</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            frequently ask about the fee, invited for the school visit.
+    </div>
+</div>"
+2874,358,2025-11-22 10:26:55,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the school visit!!
+
+        Feedback:
+            Disconnected during the call!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the school visit!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            Disconnected during the call!!
+    </div>
+</div>"
+2914,358,2025-12-13 07:16:51,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask about the school visit!!
+
+        Feedback:
+            They are busy now ..need tocall agin!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask about the school visit!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            They are busy now ..need tocall agin!!
+    </div>
+</div>"
+3413,358,2026-05-14 07:04:26,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            call didn't connect, need to call them later","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call didn't connect, need to call them later
+    </div>
+</div>"
+3418,358,2026-05-14 07:10:24,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+2862,366,2025-11-22 07:09:03,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+2863,366,2025-11-22 07:11:35,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+2864,366,2025-11-22 07:11:36,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+2865,366,2025-11-22 07:12:16,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",comment,Note,,details shared and invite for the school visit!!,<p>details shared and invite for the school visit!!</p>
+2870,366,2025-11-22 08:33:44,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+2932,366,2025-12-17 11:21:39,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask about the admission!!
+
+        Feedback:
+            call  not attending right now!! need to call again later!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask about the admission!!&nbsp;</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call  not attending right now!! need to call again later!!
+    </div>
+</div>"
+2962,366,2025-12-31 07:22:30,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the update
+
+        Feedback:
+            not attending!!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the update</div><div><br></div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            not attending!!!
+    </div>
+</div>"
+3428,366,2026-05-14 07:28:32,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3429,366,2026-05-14 07:28:50,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+</div>"
+2941,375,2025-12-20 07:02:21,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+2942,375,2025-12-20 07:06:29,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",comment,Note,,school vsit scheduled for monday!!!,<p>school vsit scheduled for monday!!!</p>
+2956,375,2025-12-29 07:33:01,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the school visit!!!
+
+        Feedback:
+            call not connected now!!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the school visit!!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call not connected now!!!
+    </div>
+</div>"
+3092,375,2026-03-17 09:42:46,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3093,375,2026-03-17 09:42:47,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3094,375,2026-03-17 09:42:49,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3272,375,2026-05-11 10:21:34,3,Vinod,"""Vinod"" <vinodamz@gmail.com>",notification,Opportunity Won,,,
+3320,375,2026-05-13 04:43:56,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+2972,380,2026-01-08 05:40:04,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+2973,380,2026-01-08 05:44:42,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Note,,,
+2975,380,2026-01-08 10:59:17,2,OdooBot,"""OdooBot"" <vinodamz@gmail.com>",notification,Note,,"Lead Enrichment (based on email address)
+
+             No company data found based on the email address or email address is one of an email provider. No credit was consumed.","<p>Lead Enrichment (based on email address)</p>
+        <div style=""padding:15px; padding-left:0px"">
+            <span> No company data found based on the email address or email address is one of an email provider. No credit was consumed. </span>
+        </div>"
+2977,380,2026-01-14 09:56:42,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask about the school visit update!!!
+
+        Feedback:
+            not attending right now!! need to call again!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask about the school visit update!!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            not attending right now!! need to call again!!
+    </div>
+</div>"
+2992,380,2026-01-16 09:18:20,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask for the school visit updates!!
+
+        Feedback:
+            some personal issues they moved to palluruthi!!  they will confirm admission  updates!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask for the school visit updates!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            some personal issues they moved to palluruthi!!  they will confirm admission  updates!!
+    </div>
+</div>"
+3441,380,2026-05-14 10:26:33,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3076,403,2026-03-09 11:04:57,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3077,403,2026-03-09 11:05:02,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3078,403,2026-03-09 11:05:03,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3079,403,2026-03-09 11:16:20,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        ask about the requirement!!
+
+        Feedback:
+            interested for the school visit!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">ask about the requirement!!</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            interested for the school visit!!
+    </div>
+</div>"
+3372,403,2026-05-13 11:21:04,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3116,407,2026-03-28 10:55:40,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3117,407,2026-03-28 10:57:53,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3118,407,2026-03-28 10:57:54,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3119,407,2026-03-28 10:57:56,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3120,407,2026-03-28 10:59:14,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",comment,Note,,june admission !!,<p>june admission !!</p>
+3393,407,2026-05-14 06:43:50,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3431,407,2026-05-14 07:47:55,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            they will take admission on saturday","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            they will take admission on saturday
+    </div>
+</div>"
+3432,407,2026-05-14 07:48:25,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3121,408,2026-03-31 11:59:42,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3122,408,2026-03-31 12:03:59,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3123,408,2026-03-31 12:04:00,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",notification,Stage Changed,,,
+3124,408,2026-03-31 12:04:58,80,ayshaka1997@gmail.com,"""ayshaka1997@gmail.com"" <ayshaka1997@gmail.com>",comment,Note,,invite for the school visit!!,<p>invite for the school visit!!</p>
+3174,408,2026-04-28 05:09:54,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",comment,Note,,Did a follow up - children informed of some Bacterial infection .,<p>Did a follow up - children informed of some Bacterial infection .</p>
+3365,408,2026-05-13 10:59:05,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+         (originally assigned to Remya)
+        : Call
+
+        Feedback:
+            not looking for admission now","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+         (originally assigned to <span>Remya</span>)
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            not looking for admission now
+    </div>
+</div>"
+3366,408,2026-05-13 10:59:13,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+</div>"
+3367,408,2026-05-13 10:59:36,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3368,408,2026-05-13 10:59:58,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3134,411,2026-04-07 07:57:46,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3135,411,2026-04-07 08:06:31,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",comment,Note,,Call for a backup and talk to customer,<p>Call for a backup and talk to customer</p>
+3197,411,2026-05-04 06:11:39,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3198,411,2026-05-04 06:11:51,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Won,,,
+3199,411,2026-05-04 06:11:57,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3377,411,2026-05-14 06:27:59,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3406,411,2026-05-14 06:50:46,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            call later","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call later
+    </div>
+</div>"
+3417,411,2026-05-14 07:10:10,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3137,413,2026-04-13 06:35:02,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3138,413,2026-04-13 06:38:17,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3219,413,2026-05-05 06:06:00,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3220,413,2026-05-05 06:15:48,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3221,413,2026-05-06 05:48:40,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Won,,,
+3298,413,2026-05-12 09:48:08,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Activities,,"Call done
+        : Call","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+</div>"
+3321,413,2026-05-13 04:44:41,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",comment,Note,,Admission taken and admin fee paid for blcoking - 4500,<p>Admission taken and admin fee paid for blcoking - 4500</p>
+3322,413,2026-05-13 04:44:42,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3160,421,2026-04-24 08:04:25,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3161,421,2026-04-24 08:06:47,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",comment,Note,,Called the parent morning and noon for remiding about the visit - Didn turned Up,<p>Called the parent morning and noon for remiding about the visit - Didn turned Up</p>
+3176,421,2026-04-28 05:13:25,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Original note:
+        Tried calling on Friday and Saturday 25th and 24th , No response
+
+        Feedback:
+            They are under medical emergency! Will call back once they are back!!","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    
+        <div class=""o_mail_note_title fw-bold"">Original note:</div>
+        <div><div data-oe-version=""2.0"">Tried calling on Friday and Saturday 25th and 24th , No response</div></div>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            They are under medical emergency! Will call back once they are back!! 
+    </div>
+</div>"
+3201,421,2026-05-04 06:20:45,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3202,421,2026-05-04 06:21:06,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3285,421,2026-05-11 10:56:40,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3186,426,2026-05-04 05:08:58,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3187,426,2026-05-04 05:17:34,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3270,426,2026-05-11 10:17:41,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3216,430,2026-05-04 07:11:35,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3217,430,2026-05-04 07:44:47,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3351,430,2026-05-13 09:25:31,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+         (originally assigned to Remya)
+        : Call
+
+        Feedback:
+            details shared. need to call them later","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+         (originally assigned to <span>Remya</span>)
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            details shared. need to call them later
+    </div>
+</div>"
+3352,430,2026-05-13 09:32:17,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3353,430,2026-05-13 09:36:14,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3448,430,2026-05-16 06:19:43,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",comment,Note,,no response,<p>no response</p>
+3223,431,2026-05-06 08:33:01,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3229,431,2026-05-06 09:34:26,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3231,431,2026-05-06 09:35:16,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3238,431,2026-05-06 10:42:11,2,OdooBot,"""OdooBot"" <vinodamz@gmail.com>",notification,Note,,"Lead Enrichment (based on email address)
+
+             No company data found based on the email address or email address is one of an email provider. No credit was consumed.","<p>Lead Enrichment (based on email address)</p>
+        <div style=""padding:15px; padding-left:0px"">
+            <span> No company data found based on the email address or email address is one of an email provider. No credit was consumed. </span>
+        </div>"
+3271,431,2026-05-11 10:21:05,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3236,432,2026-05-06 10:41:51,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3239,432,2026-05-06 10:49:02,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Note,,,
+3241,432,2026-05-06 11:13:29,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3260,432,2026-05-11 09:59:16,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3284,432,2026-05-11 10:43:12,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3289,432,2026-05-12 04:05:23,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3378,432,2026-05-14 06:35:11,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",comment,Note,,Called them for any assistance -- They will reach back checking the distance,<p>Called them for any assistance -- They will reach back checking the distance</p>
+3247,433,2026-05-07 06:30:17,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""Sales"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""Sales"".</p></div>"
+3249,433,2026-05-07 07:00:52,36,Remya,"""Remya"" <remyaramesh001@gmail.com>",notification,Stage Changed,,,
+3283,433,2026-05-11 10:41:23,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3266,436,2026-05-11 10:10:10,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3267,436,2026-05-11 10:10:21,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3268,436,2026-05-11 10:13:11,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3269,436,2026-05-11 10:13:26,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+</div>"
+3316,436,2026-05-13 04:12:46,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3361,436,2026-05-13 09:51:28,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            they will come tomorrow for sumer camp","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            they will come tomorrow for sumer camp
+    </div>
+</div>"
+3420,436,2026-05-14 07:14:50,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+</div>"
+3421,436,2026-05-14 07:15:09,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            call them on saturday","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call them on saturday
+    </div>
+</div>"
+3278,438,2026-05-11 10:35:14,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3297,438,2026-05-12 09:31:15,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3362,438,2026-05-13 09:53:34,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            looking admission only in future","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            looking admission only in future
+    </div>
+</div>"
+3280,439,2026-05-11 10:38:30,3,Vinod,"""Vinod"" <vinodamz@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3281,439,2026-05-11 10:38:57,3,Vinod,"""Vinod"" <vinodamz@gmail.com>",notification,Note,,,
+3287,440,2026-05-12 04:03:35,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3288,440,2026-05-12 04:04:16,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3295,442,2026-05-12 05:46:12,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3296,442,2026-05-12 05:48:12,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3339,442,2026-05-13 07:53:00,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            they will come on mondy","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            they will come on mondy
+    </div>
+</div>"
+3299,443,2026-05-12 10:02:34,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3312,443,2026-05-12 10:56:37,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3314,443,2026-05-12 10:56:48,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3337,443,2026-05-13 06:24:19,2,OdooBot,"""OdooBot"" <vinodamz@gmail.com>",notification,Note,,"Lead Enrichment (based on email address)
+
+             No company data found based on the email address or email address is one of an email provider. No credit was consumed.","<p>Lead Enrichment (based on email address)</p>
+        <div style=""padding:15px; padding-left:0px"">
+            <span> No company data found based on the email address or email address is one of an email provider. No credit was consumed. </span>
+        </div>"
+3402,443,2026-05-14 06:47:39,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call
+
+        Feedback:
+            call next week","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+    <div>
+        <div class=""fw-bold"">Feedback:</div>
+            call next week
+    </div>
+</div>"
+3301,444,2026-05-12 10:05:27,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3304,444,2026-05-12 10:45:39,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3306,444,2026-05-12 10:49:22,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3311,444,2026-05-12 10:56:19,2,OdooBot,"""OdooBot"" <vinodamz@gmail.com>",notification,Note,,"Lead Enrichment (based on email address)
+
+             No company data found based on the email address or email address is one of an email provider. No credit was consumed.","<p>Lead Enrichment (based on email address)</p>
+        <div style=""padding:15px; padding-left:0px"">
+            <span> No company data found based on the email address or email address is one of an email provider. No credit was consumed. </span>
+        </div>"
+3302,445,2026-05-12 10:06:27,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3305,445,2026-05-12 10:45:44,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3308,445,2026-05-12 10:49:59,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Note,,,
+3310,445,2026-05-12 10:56:19,2,OdooBot,"""OdooBot"" <vinodamz@gmail.com>",notification,Note,,"Lead Enrichment (based on email address)
+
+             No company data found based on the email address or email address is one of an email provider. No credit was consumed.","<p>Lead Enrichment (based on email address)</p>
+        <div style=""padding:15px; padding-left:0px"">
+            <span> No company data found based on the email address or email address is one of an email provider. No credit was consumed. </span>
+        </div>"
+3336,446,2026-05-13 06:24:02,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3338,446,2026-05-13 06:25:29,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
+3419,446,2026-05-14 07:12:52,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Activities,,"Call done
+        : Call","<div>
+    <p>
+        <span class=""fa fa-phone fa-fw""></span><span>Call</span> done
+        <span>: </span><span>Call</span>
+    </p>
+</div>"
+3443,447,2026-05-14 10:54:05,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Opportunity Created,,"A new lead has been created for the team ""2026 Admission"".","<div summary=""o_mail_notification""><p>A new lead has been created for the team ""2026 Admission"".</p></div>"
+3445,447,2026-05-14 11:02:22,170,meghaprabhakar39@gmail.com,"""meghaprabhakar39@gmail.com"" <meghaprabhakar39@gmail.com>",notification,Stage Changed,,,
