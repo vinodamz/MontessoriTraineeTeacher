@@ -199,19 +199,25 @@ $unpromotedKids = array_values(array_filter($children, fn($k) => empty($k['promo
 $isLead         = $family['status'] === 'lead';
 $touchpointCount = count($touchpoints);
 
-// Audit log — admin-only feed of every action against this family.
+// Audit log — admin-only feed of every action against this family. Wrapped
+// in try/catch so a missing inquiry_audit table (e.g. migrate_017 not yet
+// run on a fresh install) doesn't blank out the detail page.
 $auditRows = [];
 if (($user['role'] ?? '') === 'admin') {
-    $s = db()->prepare("
-        SELECT a.*, u.name AS by_name
-        FROM inquiry_audit a
-        LEFT JOIN users u ON u.id = a.user_id
-        WHERE a.family_id = :id
-        ORDER BY a.created_at DESC, a.id DESC
-        LIMIT 100
-    ");
-    $s->execute([':id' => $id]);
-    $auditRows = $s->fetchAll();
+    try {
+        $s = db()->prepare("
+            SELECT a.*, u.name AS by_name
+            FROM inquiry_audit a
+            LEFT JOIN users u ON u.id = a.user_id
+            WHERE a.family_id = :id
+            ORDER BY a.created_at DESC, a.id DESC
+            LIMIT 100
+        ");
+        $s->execute([':id' => $id]);
+        $auditRows = $s->fetchAll();
+    } catch (Throwable $e) {
+        $auditRows = [];
+    }
 }
 
 $money = fn(float $v) => '₹' . number_format($v, 0);

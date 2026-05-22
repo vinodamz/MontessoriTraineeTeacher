@@ -39,9 +39,17 @@ $sql = "
     ORDER BY a.created_at DESC, a.id DESC
     LIMIT 500
 ";
-$stmt = db()->prepare($sql);
-$stmt->execute($params);
-$rows = $stmt->fetchAll();
+// Wrap in try/catch so the page degrades gracefully when migrate_017
+// hasn't applied yet (table simply doesn't exist).
+$rows = [];
+$auditTableMissing = false;
+try {
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+} catch (Throwable $e) {
+    $auditTableMissing = true;
+}
 
 $users = db()->query("SELECT id, name FROM users WHERE active = 1 ORDER BY name")->fetchAll();
 
@@ -99,7 +107,14 @@ require __DIR__ . '/../includes/header.php';
 </section>
 
 <section class="card">
-    <?php if (!$rows): ?>
+    <?php if ($auditTableMissing): ?>
+        <p class="muted">
+            Audit table not present yet. Run
+            <a href="/migrate.php"><code>/migrate.php</code></a> as admin to apply
+            <code>migrate_017_crm_audit.sql</code>, then this page will populate
+            as the team uses the pipeline.
+        </p>
+    <?php elseif (!$rows): ?>
         <p class="muted">No audit entries match.</p>
     <?php else: ?>
         <table class="data-table audit-table">
