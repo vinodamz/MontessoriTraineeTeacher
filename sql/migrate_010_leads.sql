@@ -49,10 +49,17 @@ BEGIN
     END IF;
 
     -- 2. inquiry_families.status — extend ENUM with 'lead' at the front.
+    --    Skip if the column has already been widened to VARCHAR by a
+    --    later migration (migrate_016 makes stages configurable via the
+    --    crm_stages table). Re-running this ALTER against a VARCHAR
+    --    column would narrow it back to an ENUM and truncate any row
+    --    holding a stage code beyond the original ENUM list.
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inquiry_families'
-          AND COLUMN_NAME='status' AND COLUMN_TYPE NOT LIKE '%''lead''%'
+          AND COLUMN_NAME='status'
+          AND DATA_TYPE = 'enum'
+          AND COLUMN_TYPE NOT LIKE '%''lead''%'
     ) THEN
         ALTER TABLE inquiry_families
             MODIFY status
