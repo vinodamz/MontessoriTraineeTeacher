@@ -29,8 +29,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'move' && 
             echo json_encode(['ok' => false, 'error' => 'bad input']);
             exit;
         }
+        // Read previous status for the audit entry.
+        $prev = db()->prepare("SELECT status FROM inquiry_families WHERE id = :id");
+        $prev->execute([':id' => $id]);
+        $prevStatus = (string)$prev->fetchColumn();
+
         db()->prepare("UPDATE inquiry_families SET status = :s WHERE id = :id")
             ->execute([':s' => $st, ':id' => $id]);
+
+        if ($prevStatus !== '' && $prevStatus !== $st) {
+            crm_audit_log('status_changed', $id, [
+                'from' => $prevStatus, 'to' => $st, 'via' => 'kanban_drag',
+            ]);
+        }
         echo json_encode(['ok' => true]);
         exit;
     } catch (Throwable $e) {
@@ -96,6 +107,9 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
+        <?php if ($user['role'] === 'admin'): ?>
+            <a class="btn" href="/crm/audit.php" title="Admin: full activity log">Audit</a>
+        <?php endif; ?>
         <?php if ($user['role'] === 'admin' && is_readable(__DIR__ . '/../sql/odoo_dump/leads.csv')): ?>
             <a class="btn" href="/crm/import_odoo.php" title="One-shot importer for the Odoo 2026 Admission dump">Import Odoo</a>
         <?php endif; ?>
@@ -177,7 +191,7 @@ require __DIR__ . '/../includes/header.php';
                                     <a href="/crm/view.php?id=<?= (int)$r['id'] ?>"><?= e($r['primary_name']) ?></a>
                                 </div>
                                 <?php if (!empty($r['primary_phone'])): ?>
-                                    <div class="crm-card-phone"><?= crm_phone_actions($r['primary_phone']) ?></div>
+                                    <div class="crm-card-phone"><?= crm_phone_actions($r['primary_phone'], (int)$r['id']) ?></div>
                                 <?php endif; ?>
                                 <div class="crm-card-meta">
                                     <?php if (($r['priority'] ?? 'normal') !== 'normal'): ?>
@@ -215,5 +229,7 @@ require __DIR__ . '/../includes/header.php';
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
     <script src="/assets/js/crm-board.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-board.js')) ?>"></script>
 <?php endif; ?>
+
+<script src="/assets/js/crm-phone-log.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-phone-log.js')) ?>"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

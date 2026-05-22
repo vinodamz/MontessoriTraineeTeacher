@@ -13,6 +13,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#FFF8F0">
+    <meta name="csrf-token" content="<?= e(function_exists('csrf_token') ? csrf_token() : '') ?>">
     <title><?= e($pageTitle ?? app_name()) ?></title>
     <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e($v) ?>">
     <link rel="stylesheet" href="/assets/css/style.css?v=<?= e($v) ?>">

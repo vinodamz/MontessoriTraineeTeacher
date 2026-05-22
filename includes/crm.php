@@ -139,10 +139,15 @@ function crm_phone_intl_digits(?string $phone): string
  * dialler link and a wa.me (WhatsApp) link. Returns an empty string if
  * the phone isn't a usable number, so callers can splat it unconditionally.
  *
+ * When $familyId is provided, the wrapper carries data-inquiry-id so the
+ * client-side audit script (assets/js/crm-phone-log.js) can sendBeacon
+ * a 'phone_call_initiated' / 'whatsapp_initiated' event before the
+ * browser navigates to the dialler / WhatsApp.
+ *
  * Output is pre-escaped — the phone display is run through htmlspecialchars
  * before being injected.
  */
-function crm_phone_actions(?string $phone): string
+function crm_phone_actions(?string $phone, ?int $familyId = null): string
 {
     $phone = trim((string)$phone);
     if ($phone === '') return '';
@@ -152,12 +157,88 @@ function crm_phone_actions(?string $phone): string
         return '<span class="phone-text">' . htmlspecialchars($phone, ENT_QUOTES) . '</span>';
     }
     $disp = htmlspecialchars($phone, ENT_QUOTES);
+    $famAttr = $familyId ? ' data-inquiry-id="' . (int)$familyId . '"' : '';
     return
-        '<span class="phone-actions">'
+        '<span class="phone-actions"' . $famAttr . '>'
             . '<a class="phone-text" href="tel:+' . $intl . '" title="Call ' . $disp . '">' . $disp . '</a>'
-            . '<a class="phone-btn phone-btn-call" href="tel:+' . $intl . '" title="Call ' . $disp . '" aria-label="Call ' . $disp . '">Call</a>'
-            . '<a class="phone-btn phone-btn-wa" href="https://wa.me/' . $intl . '" target="_blank" rel="noopener" title="WhatsApp ' . $disp . '" aria-label="WhatsApp ' . $disp . '">WhatsApp</a>'
+            . '<a class="phone-btn phone-btn-call" href="tel:+' . $intl . '" title="Call ' . $disp . '" aria-label="Call ' . $disp . '" data-audit-action="phone_call_initiated">Call</a>'
+            . '<a class="phone-btn phone-btn-wa" href="https://wa.me/' . $intl . '" target="_blank" rel="noopener" title="WhatsApp ' . $disp . '" aria-label="WhatsApp ' . $disp . '" data-audit-action="whatsapp_initiated">WhatsApp</a>'
         . '</span>';
+}
+
+// ============================================================================
+// Audit log — admin-visible activity feed for the admissions module.
+// See migrate_017_crm_audit.sql. Logged actions are surfaced on
+// /crm/view.php (per family) and /crm/audit.php (global).
+// ============================================================================
+
+/**
+ * Whitelist of audit actions and their human-readable labels. Anything
+ * outside this list is rejected by /crm/log_action.php so callers can't
+ * pollute the feed with arbitrary action codes.
+ */
+function crm_audit_actions(): array
+{
+    return [
+        'inquiry_created'       => 'Inquiry created',
+        'inquiry_updated'       => 'Inquiry updated',
+        'inquiry_deleted'       => 'Inquiry deleted',
+        'status_changed'        => 'Status changed',
+        'lead_qualified'        => 'Lead added to pipeline',
+        'enrolled'              => 'Promoted to student',
+        'touchpoint_added'      => 'Touchpoint added',
+        'touchpoint_deleted'    => 'Touchpoint deleted',
+        'phone_call_initiated'  => 'Phone call (Call button)',
+        'whatsapp_initiated'    => 'WhatsApp opened',
+    ];
+}
+
+function crm_audit_action_label(string $code): string
+{
+    return crm_audit_actions()[$code] ?? $code;
+}
+
+/**
+ * Append an entry to the admissions audit log. Never throws — if the
+ * audit insert fails, the surrounding action still completes. The
+ * caller passes the current user via $byUserId (so callers in CLI / cron
+ * contexts can pass a system user id).
+ */
+function crm_audit_log(
+    string $action,
+    ?int $familyId = null,
+    ?array $meta = null,
+    ?string $targetType = null,
+    ?int $targetId = null,
+    ?int $byUserId = null
+): void {
+    try {
+        if ($byUserId === null) {
+            $byUserId = $_SESSION['user']['id'] ?? null;
+        }
+        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
+        if ($ip) {
+            // XFF can be a comma-separated list; take the first hop.
+            $ip = substr(trim(explode(',', (string)$ip)[0]), 0, 45);
+        }
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
+        if ($ua) $ua = substr((string)$ua, 0, 255);
+        $metaJson = $meta ? json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+
+        db()->prepare("
+            INSERT INTO inquiry_audit
+                (family_id, user_id, action, target_type, target_id, meta_json, ip_address, user_agent)
+            VALUES
+                (:fam, :uid, :act, :tt, :tid, :mj, :ip, :ua)
+        ")->execute([
+            ':fam' => $familyId, ':uid' => $byUserId, ':act' => $action,
+            ':tt'  => $targetType, ':tid' => $targetId,
+            ':mj'  => $metaJson,   ':ip'  => $ip, ':ua' => $ua,
+        ]);
+    } catch (Throwable $e) {
+        // Never block the main action because audit failed.
+        error_log('crm_audit_log: ' . $e->getMessage());
+    }
 }
 
 /**
