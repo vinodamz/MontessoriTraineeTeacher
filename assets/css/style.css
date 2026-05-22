@@ -740,6 +740,10 @@ a.admin-tile:hover {
 /* Leads list — keep the phone visually grouped with the email under the name. */
 .phone-cell { margin-bottom: .15rem; font-size: .85rem; }
 
+/* Activity-log table — admin-only audit feed on /crm/view.php and /crm/audit.php. */
+.audit-table td, .audit-table th { vertical-align: top; }
+.audit-table td .pill { font-size: .7rem; padding: .1rem .45rem; }
+
 .pill-prio-urgent { background: #fbd4d4; color: #7f1d1d; font-weight: 700; }
 .pill-prio-high   { background: #fde2c4; color: #9a3412; }
 .pill-prio-normal { background: var(--line-soft); color: var(--ink-soft); }

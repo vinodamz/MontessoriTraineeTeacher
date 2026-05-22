@@ -31,12 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($op === 'qualify') {
         // Promote a lead into the pipeline — sets status='new' and resets
         // probability to the pipeline's default. No-op if already promoted.
-        $pdo->prepare("
+        $stmt = $pdo->prepare("
             UPDATE inquiry_families
             SET status = 'new',
                 probability = CASE WHEN status = 'lead' THEN :p ELSE probability END
             WHERE id = :id AND status = 'lead'
-        ")->execute([':p' => crm_default_probability('new'), ':id' => $id]);
+        ");
+        $stmt->execute([':p' => crm_default_probability('new'), ':id' => $id]);
+        if ($stmt->rowCount() > 0) {
+            crm_audit_log('lead_qualified', $id);
+        }
         flash_set('ok', 'Added to pipeline. They\'re in the "New inquiry" column now.');
         redirect('/crm/view.php?id=' . $id);
     }
@@ -50,8 +54,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prob = isset($_POST['probability'])
             ? max(0, min(100, (int)$_POST['probability']))
             : crm_default_probability($st);
+        $prevStmt = $pdo->prepare("SELECT status FROM inquiry_families WHERE id = :id");
+        $prevStmt->execute([':id' => $id]);
+        $prevStatus = (string)$prevStmt->fetchColumn();
         $pdo->prepare("UPDATE inquiry_families SET status=:s, probability=:p WHERE id=:id")
             ->execute([':s' => $st, ':p' => $prob, ':id' => $id]);
+        if ($prevStatus !== $st) {
+            crm_audit_log('status_changed', $id, [
+                'from' => $prevStatus, 'to' => $st, 'via' => 'detail_form',
+            ]);
+        }
         flash_set('ok', 'Status updated.');
         redirect('/crm/view.php?id=' . $id);
     }
@@ -75,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':o'  => $occurred, ':fu' => $follow,
             ':b'  => $body, ':by' => $user['id'],
         ]);
+        crm_audit_log('touchpoint_added', $id, ['kind' => $kind], 'touchpoint', (int)$pdo->lastInsertId());
         flash_set('ok', 'Touchpoint logged.');
         redirect('/crm/view.php?id=' . $id . '#timeline');
     }
@@ -83,6 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tid = (int)($_POST['tid'] ?? 0);
         $pdo->prepare("DELETE FROM inquiry_touchpoints WHERE id=:t AND family_id=:f")
             ->execute([':t' => $tid, ':f' => $id]);
+        crm_audit_log('touchpoint_deleted', $id, null, 'touchpoint', $tid);
         flash_set('ok', 'Touchpoint removed.');
         redirect('/crm/view.php?id=' . $id . '#timeline');
     }
@@ -115,13 +129,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', 'Enroll failed: ' . $e->getMessage());
             redirect('/crm/view.php?id=' . $id . '#enroll');
         }
+        crm_audit_log('enrolled', $id, [
+            'student_ids' => $newIds,
+            'count'       => count($newIds),
+        ]);
         flash_set('ok', count($newIds) . ' child' . (count($newIds) === 1 ? '' : 'ren')
                        . ' enrolled and added to the students module.');
         redirect('/crm/view.php?id=' . $id);
     }
 
     if ($op === 'delete') {
+        // Snapshot the family name before delete so the audit row can show
+        // who/what was removed even after the FK NULLs out family_id.
+        $nameStmt = $pdo->prepare("SELECT primary_name FROM inquiry_families WHERE id = :id");
+        $nameStmt->execute([':id' => $id]);
+        $deletedName = (string)$nameStmt->fetchColumn();
         $pdo->prepare("DELETE FROM inquiry_families WHERE id=:id")->execute([':id' => $id]);
+        crm_audit_log('inquiry_deleted', null, ['primary_name' => $deletedName, 'original_id' => $id]);
         flash_set('ok', 'Inquiry deleted.');
         redirect('/crm/index.php');
     }
@@ -174,6 +198,21 @@ $canEnroll = !in_array($family['status'], ['enrolled','lost'], true);
 $unpromotedKids = array_values(array_filter($children, fn($k) => empty($k['promoted_student_id'])));
 $isLead         = $family['status'] === 'lead';
 $touchpointCount = count($touchpoints);
+
+// Audit log — admin-only feed of every action against this family.
+$auditRows = [];
+if (($user['role'] ?? '') === 'admin') {
+    $s = db()->prepare("
+        SELECT a.*, u.name AS by_name
+        FROM inquiry_audit a
+        LEFT JOIN users u ON u.id = a.user_id
+        WHERE a.family_id = :id
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT 100
+    ");
+    $s->execute([':id' => $id]);
+    $auditRows = $s->fetchAll();
+}
 
 $money = fn(float $v) => '₹' . number_format($v, 0);
 
@@ -228,7 +267,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="card" style="flex: 1 1 320px;">
         <h3>Contact</h3>
         <dl class="dl-grid">
-            <dt>Phone</dt><dd><?= $family['primary_phone'] ? crm_phone_actions($family['primary_phone']) : '—' ?></dd>
+            <dt>Phone</dt><dd><?= $family['primary_phone'] ? crm_phone_actions($family['primary_phone'], (int)$family['id']) : '—' ?></dd>
             <dt>Email</dt><dd><?= e((string)$family['primary_email']) ?: '—' ?></dd>
             <dt>Expected fee</dt><dd>
                 <?= $family['expected_fee'] !== null ? e($money((float)$family['expected_fee'])) . '/mo' : '—' ?>
@@ -429,5 +468,45 @@ require __DIR__ . '/../includes/header.php';
         </ul>
     <?php endif; ?>
 </div>
+
+<?php if (($user['role'] ?? '') === 'admin'): ?>
+<div class="card" id="audit-log">
+    <h3>Activity log <span class="muted small">(admin only · last 100 events)</span></h3>
+    <?php if (!$auditRows): ?>
+        <p class="muted">No actions logged yet.</p>
+    <?php else: ?>
+        <table class="data-table audit-table">
+            <thead>
+                <tr><th style="width:8.5rem;">When</th><th>Action</th><th>By</th><th>Details</th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($auditRows as $a):
+                $meta = $a['meta_json'] ? json_decode($a['meta_json'], true) : null;
+                $metaText = '';
+                if (is_array($meta)) {
+                    $parts = [];
+                    foreach ($meta as $k => $v) {
+                        if (is_scalar($v)) $parts[] = e($k) . '=' . e((string)$v);
+                    }
+                    $metaText = implode(' · ', $parts);
+                }
+            ?>
+                <tr>
+                    <td>
+                        <strong><?= e(date('j M', strtotime($a['created_at']))) ?></strong>
+                        <span class="muted small"><?= e(date('H:i', strtotime($a['created_at']))) ?></span>
+                    </td>
+                    <td><span class="pill"><?= e(crm_audit_action_label($a['action'])) ?></span></td>
+                    <td><?= e($a['by_name'] ?: '—') ?></td>
+                    <td class="muted small"><?= $metaText ?: '—' ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<script src="/assets/js/crm-phone-log.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-phone-log.js')) ?>"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

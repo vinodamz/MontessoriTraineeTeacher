@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $pdo = db();
     $pdo->beginTransaction();
+    $wasCreate = ($id <= 0);
     try {
         if ($id > 0) {
             $pdo->prepare("
@@ -157,6 +158,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/crm/edit.php' . ($id ? "?id=$id" : ''));
     }
 
+    crm_audit_log(
+        $wasCreate ? 'inquiry_created' : 'inquiry_updated',
+        $id,
+        ['name' => $primaryName, 'status' => $status]
+    );
     flash_set('ok', 'Inquiry saved.');
     redirect('/crm/view.php?id=' . $id);
 }

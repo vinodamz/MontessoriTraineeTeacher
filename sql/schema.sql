@@ -545,6 +545,28 @@ CREATE TABLE inquiry_touchpoints (
     CONSTRAINT fk_it_by  FOREIGN KEY (created_by) REFERENCES users(id)            ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Append-only audit trail for the admissions module — admin-only.
+-- See /crm/audit.php (global) and the "Activity log" card on
+-- /crm/view.php (per family).
+CREATE TABLE inquiry_audit (
+    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    family_id   INT UNSIGNED NULL,
+    user_id     INT UNSIGNED NULL,
+    action      VARCHAR(40)  NOT NULL,
+    target_type VARCHAR(40)  NULL,
+    target_id   INT UNSIGNED NULL,
+    meta_json   TEXT         NULL,
+    ip_address  VARCHAR(45)  NULL,
+    user_agent  VARCHAR(255) NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_audit_family (family_id, created_at),
+    KEY idx_audit_user   (user_id,   created_at),
+    KEY idx_audit_action (action),
+    CONSTRAINT fk_audit_family FOREIGN KEY (family_id) REFERENCES inquiry_families(id) ON DELETE SET NULL,
+    CONSTRAINT fk_audit_user   FOREIGN KEY (user_id)   REFERENCES users(id)            ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================================
 -- Expenses module
 -- ============================================================================
