@@ -1,16 +1,20 @@
 # Little Graduates — unified school app
 
-One PHP app with four modules under a single login:
+One PHP app with six modules under a single login:
 
 - **Assessment** (`/assessment/...`) — trainee teacher curriculum-indicator assessment.
   Monthly D/P/N ratings, per-student baselines, progress charts, print-friendly reports.
 - **Tasks** (`/tasks/...`) — team task board with kanban columns, recurring routines, and a calendar view.
 - **Students** (`/students/...`) — student management: profile + parents/guardians + address/emergency
   contacts, with attendance/fees/document upload arriving in follow-on PRs.
+- **Admissions** (`/crm/...`) — prospect funnel: leads, tours, touchpoints, weighted revenue projection,
+  promote-to-students on enrollment.
+- **Recruitment** (`/recruitment/...`) — candidate pipeline: resumes, scorecards, demo interviews,
+  hire-to-users.
 - **Expenses** (`/expenses/...`) — staff expense reporting with receipt upload and client-side OCR
   (Tesseract.js) to pre-fill amount, date and merchant. Admin reviews + status workflow.
 
-One `users` table, one PIN login, one admin console. Each user has a role (`teacher` / `admin`) plus a per-module access set (`tasks`, `montessori`, `students`, `expenses`, or any combination).
+One `users` table, one PIN login, one admin console. Each user has a role (`teacher` / `admin`) plus a per-module access set (`tasks`, `montessori`, `students`, `crm`, `recruitment`, `expenses`, or any combination).
 
 Live: [mtt.thelittlegraduates.in](https://mtt.thelittlegraduates.in/).
 

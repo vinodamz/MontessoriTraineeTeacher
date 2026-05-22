@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'expenses']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'expenses']);
     return implode(',', $valid);
 }
 
@@ -219,6 +219,27 @@ require __DIR__ . '/includes/header.php';
         </a>
     </li>
     <li>
+        <a class="admin-tile tile-nav" href="/crm/index.php">
+            <span class="tile-label">Admissions</span>
+            <span class="tile-value">Pipeline</span>
+            <span class="tile-sub">Inquiries &amp; revenue</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="/crm/leads.php">
+            <span class="tile-label">Leads</span>
+            <span class="tile-value">Inbox</span>
+            <span class="tile-sub">By campaign &amp; priority</span>
+        </a>
+    </li>
+    <li>
+        <a class="admin-tile tile-nav" href="/crm/campaigns.php">
+            <span class="tile-label">Campaigns</span>
+            <span class="tile-value">Sources</span>
+            <span class="tile-sub">Channels &amp; embed URLs</span>
+        </a>
+    </li>
+    <li>
         <a class="admin-tile tile-nav" href="/assessment/admin.php">
             <span class="tile-label">Assessment</span>
             <span class="tile-value">Admin</span>
@@ -297,6 +318,8 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="montessori" checked><span>Assessment</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="tasks"><span>Tasks</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="students"><span>Students</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="crm"><span>Admissions</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="recruitment"><span>Recruitment</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="expenses"><span>Expenses</span></label>
             </div>
         </div>
@@ -329,6 +352,8 @@ require __DIR__ . '/includes/header.php';
         $hasA    = in_array('montessori', $mods, true);
         $hasT    = in_array('tasks', $mods, true);
         $hasS    = in_array('students', $mods, true);
+        $hasC    = in_array('crm', $mods, true);
+        $hasR    = in_array('recruitment', $mods, true);
         $hasE    = in_array('expenses', $mods, true);
     ?>
         <li class="team-row" style="--card: <?= e(user_color((int)$u['id'])) ?>;">
@@ -363,6 +388,14 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Students module">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="students" <?= $hasS ? 'checked' : '' ?>>
                     <span>Students</span>
+                </label>
+                <label class="checkbox" title="Admissions / CRM module">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="crm" <?= $hasC ? 'checked' : '' ?>>
+                    <span>Admiss.</span>
+                </label>
+                <label class="checkbox" title="Recruitment / staff hiring module">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="recruitment" <?= $hasR ? 'checked' : '' ?>>
+                    <span>Recruit</span>
                 </label>
                 <label class="checkbox" title="Expenses module">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="expenses" <?= $hasE ? 'checked' : '' ?>>
