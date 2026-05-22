@@ -216,6 +216,19 @@ require __DIR__ . '/../includes/header.php';
                                         ↻ <?= e(date('j M', strtotime($r['next_followup']))) ?>
                                     </div>
                                 <?php endif; ?>
+                                <div class="crm-card-move">
+                                    <select class="crm-card-status-select"
+                                            aria-label="Move to another stage"
+                                            data-current="<?= e($code) ?>">
+                                        <option value="">Move to…</option>
+                                        <?php foreach (crm_pipeline_statuses() as $sc => $sm): ?>
+                                            <option value="<?= e($sc) ?>"
+                                                    <?= $sc === $code ? 'hidden' : '' ?>>
+                                                <?= e($sm['label']) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
                             </article>
                         </li>
                     <?php endforeach; ?>
