@@ -1,14 +1,20 @@
 # Little Graduates — unified school app
 
-One PHP app with three modules under a single login:
+One PHP app with six modules under a single login:
 
 - **Assessment** (`/assessment/...`) — trainee teacher curriculum-indicator assessment.
   Monthly D/P/N ratings, per-student baselines, progress charts, print-friendly reports.
 - **Tasks** (`/tasks/...`) — team task board with kanban columns, recurring routines, and a calendar view.
 - **Students** (`/students/...`) — student management: profile + parents/guardians + address/emergency
   contacts, with attendance/fees/document upload arriving in follow-on PRs.
+- **Admissions** (`/crm/...`) — prospect funnel: leads, tours, touchpoints, weighted revenue projection,
+  promote-to-students on enrollment.
+- **Recruitment** (`/recruitment/...`) — candidate pipeline: resumes, scorecards, demo interviews,
+  hire-to-users.
+- **Expenses** (`/expenses/...`) — staff expense reporting with receipt upload and client-side OCR
+  (Tesseract.js) to pre-fill amount, date and merchant. Admin reviews + status workflow.
 
-One `users` table, one PIN login, one admin console. Each user has a role (`teacher` / `admin`) plus a per-module access set (`tasks`, `montessori`, `students`, or any combination).
+One `users` table, one PIN login, one admin console. Each user has a role (`teacher` / `admin`) plus a per-module access set (`tasks`, `montessori`, `students`, `crm`, `recruitment`, `expenses`, or any combination).
 
 Live: [mtt.thelittlegraduates.in](https://mtt.thelittlegraduates.in/).
 
@@ -49,9 +55,14 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
 │   ├── edit.php (add/edit + parents inline)
 │   ├── yearend.php (June-rollover transition tool)
 │   ├── withdrawals.php (drop-out analytics)
+├── expenses/             # Expense reporting + receipt OCR
+│   ├── index.php (list + filters + totals)
+│   ├── edit.php  (form + receipt upload + Tesseract.js OCR)
+│   ├── receipt.php (auth-gated receipt streamer)
+│   ├── admin.php (manage categories)
 ├── assets/
 │   ├── css/{style.css, tasks.css}
-│   ├── js/{login.js, assess.js, kanban.js}
+│   ├── js/{login.js, assess.js, kanban.js, expenses-ocr.js}
 │   └── img/logo.png
 └── sql/
     ├── schema.sql                       # Fresh-DB unified schema
@@ -62,6 +73,8 @@ Historical: this repo originally hosted only the Montessori assessment side (imp
     ├── migrate_005_fees.sql              # Adds fee_invoices + fee_payments
     ├── migrate_006_academic_year.sql     # Academic-year + enrollment_status + withdrawal_reason
     ├── migrate_007_app_settings.sql      # Adds app_settings (DB-driven app rename)
+    ├── migrate_008_notifications.sql     # Adds notifications + notification_preferences
+    ├── migrate_009_expenses.sql          # Adds expenses + expense_categories
     └── seeds.sql                        # rating_config + curriculum indicators
 ```
 

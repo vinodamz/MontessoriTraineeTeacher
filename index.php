@@ -60,9 +60,10 @@ $hasStudents = user_has_module($user, 'students');
 $hasCrm      = user_has_module($user, 'crm');
 $hasRecruit  = user_has_module($user, 'recruitment');
 $hasStaff    = user_has_module($user, 'staff');
+$hasExpenses = user_has_module($user, 'expenses');
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses;
 if ($moduleCount === 1) {
     if ($hasTasks)    redirect('/tasks/index.php');
     if ($hasMontess)  redirect('/assessment/index.php');
@@ -70,6 +71,7 @@ if ($moduleCount === 1) {
     if ($hasCrm)      redirect('/crm/index.php');
     if ($hasRecruit)  redirect('/recruitment/index.php');
     if ($hasStaff)    redirect('/staff/index.php');
+    if ($hasExpenses) redirect('/expenses/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -131,6 +133,39 @@ if ($hasRecruit) {
             WHERE occurred_at >= NOW() AND occurred_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
         ")->fetchColumn();
     } catch (Throwable $e) { /* tables may not exist yet */ }
+}
+
+$expensesStats = ['this_month' => 0, 'pending' => 0, 'total' => 0.0];
+if ($hasExpenses) {
+    try {
+        $monthStart = (new DateTime('first day of this month'))->format('Y-m-d');
+        if ($user['role'] === 'admin') {
+            $stmt = db()->prepare("
+                SELECT
+                  COUNT(*)                                                              AS n_month,
+                  SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END)                 AS n_pending,
+                  COALESCE(SUM(CASE WHEN expense_date >= :ms THEN amount ELSE 0 END), 0) AS total_month
+                FROM expenses
+            ");
+            $stmt->execute([':ms' => $monthStart]);
+        } else {
+            $stmt = db()->prepare("
+                SELECT
+                  COUNT(*)                                                              AS n_month,
+                  SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END)                 AS n_pending,
+                  COALESCE(SUM(CASE WHEN expense_date >= :ms THEN amount ELSE 0 END), 0) AS total_month
+                FROM expenses
+                WHERE user_id = :u
+            ");
+            $stmt->execute([':ms' => $monthStart, ':u' => $user['id']]);
+        }
+        $r = $stmt->fetch();
+        $expensesStats = [
+            'this_month' => (int)($r['n_month']     ?? 0),
+            'pending'    => (int)($r['n_pending']   ?? 0),
+            'total'      => (float)($r['total_month'] ?? 0),
+        ];
+    } catch (Throwable $e) { /* table may not exist yet — leave zeros */ }
 }
 
 $mttStats = ['students' => 0, 'pending_this_month' => 0];
@@ -276,7 +311,21 @@ require __DIR__ . '/includes/header.php';
             </a>
         </li>
     <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm && !$hasRecruit && !$hasStaff): ?>
+    <?php if ($hasExpenses): ?>
+        <li>
+            <a class="module-tile" href="/expenses/index.php">
+                <h2>Expenses</h2>
+                <p class="muted">Reimbursable spend — snap a receipt, let OCR pre-fill the amount.</p>
+                <div class="module-stats">
+                    <span class="pill">₹<?= number_format((float)$expensesStats['total'], 2) ?> this month</span>
+                    <?php if ($expensesStats['pending'] > 0): ?>
+                        <span class="pill pill-warn"><?= (int)$expensesStats['pending'] ?> awaiting review</span>
+                    <?php endif; ?>
+                </div>
+            </a>
+        </li>
+    <?php endif; ?>
+    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm && !$hasRecruit && !$hasStaff && !$hasExpenses): ?>
         <li>
             <div class="empty">
                 <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
