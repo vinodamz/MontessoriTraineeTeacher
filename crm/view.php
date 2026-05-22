@@ -228,7 +228,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="card" style="flex: 1 1 320px;">
         <h3>Contact</h3>
         <dl class="dl-grid">
-            <dt>Phone</dt><dd><?= e((string)$family['primary_phone']) ?: '—' ?></dd>
+            <dt>Phone</dt><dd><?= $family['primary_phone'] ? crm_phone_actions($family['primary_phone']) : '—' ?></dd>
             <dt>Email</dt><dd><?= e((string)$family['primary_email']) ?: '—' ?></dd>
             <dt>Expected fee</dt><dd>
                 <?= $family['expected_fee'] !== null ? e($money((float)$family['expected_fee'])) . '/mo' : '—' ?>

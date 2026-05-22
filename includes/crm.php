@@ -110,6 +110,57 @@ function crm_source_options(): array
 }
 
 /**
+ * Normalise a user-entered phone to digits-only, with the +91 country
+ * code applied when the input looks like a local Indian number (10 or
+ * 11-digit-starting-with-0). Returns '' if the input has fewer than
+ * 10 digits (i.e. not a real phone number).
+ *
+ *   "+91 95670 36027" → "919567036027"
+ *   "9567036027"      → "919567036027"
+ *   "095670 36027"    → "919567036027"
+ *   "44 20 7946 0958" → "442079460958"  (already international)
+ *   "abc"             → ""
+ */
+function crm_phone_intl_digits(?string $phone): string
+{
+    $digits = preg_replace('/\D+/', '', (string)$phone);
+    if ($digits === '' || strlen($digits) < 10) return '';
+    if (strlen($digits) === 10) {
+        return '91' . $digits;
+    }
+    if (strlen($digits) === 11 && $digits[0] === '0') {
+        return '91' . substr($digits, 1);
+    }
+    return $digits;
+}
+
+/**
+ * Render the phone number with two click actions next to it: a tel:
+ * dialler link and a wa.me (WhatsApp) link. Returns an empty string if
+ * the phone isn't a usable number, so callers can splat it unconditionally.
+ *
+ * Output is pre-escaped — the phone display is run through htmlspecialchars
+ * before being injected.
+ */
+function crm_phone_actions(?string $phone): string
+{
+    $phone = trim((string)$phone);
+    if ($phone === '') return '';
+    $intl = crm_phone_intl_digits($phone);
+    if ($intl === '') {
+        // Not a valid phone — just show the text the user entered.
+        return '<span class="phone-text">' . htmlspecialchars($phone, ENT_QUOTES) . '</span>';
+    }
+    $disp = htmlspecialchars($phone, ENT_QUOTES);
+    return
+        '<span class="phone-actions">'
+            . '<a class="phone-text" href="tel:+' . $intl . '" title="Call ' . $disp . '">' . $disp . '</a>'
+            . '<a class="phone-btn phone-btn-call" href="tel:+' . $intl . '" title="Call ' . $disp . '" aria-label="Call ' . $disp . '">Call</a>'
+            . '<a class="phone-btn phone-btn-wa" href="https://wa.me/' . $intl . '" target="_blank" rel="noopener" title="WhatsApp ' . $disp . '" aria-label="WhatsApp ' . $disp . '">WhatsApp</a>'
+        . '</span>';
+}
+
+/**
  * Projected monthly revenue across the open funnel:
  *   weighted = Σ (probability/100 × expected_fee)
  *   pipeline = Σ expected_fee (raw total if everything closed)

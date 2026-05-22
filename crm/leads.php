@@ -173,7 +173,7 @@ require __DIR__ . '/../includes/header.php';
                     <td><a href="/crm/view.php?id=<?= (int)$l['id'] ?>"><?= e($l['primary_name']) ?></a></td>
                     <td>
                         <?php if ($l['primary_phone']): ?>
-                            <span class="muted small"><?= e($l['primary_phone']) ?></span><br>
+                            <div class="phone-cell"><?= crm_phone_actions($l['primary_phone']) ?></div>
                         <?php endif; ?>
                         <?php if ($l['primary_email']): ?>
                             <span class="muted small"><?= e($l['primary_email']) ?></span>
