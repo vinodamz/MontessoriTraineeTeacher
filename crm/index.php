@@ -175,8 +175,13 @@ require __DIR__ . '/../includes/header.php';
                         $prob = (int)$r['probability'];
                     ?>
                         <li class="crm-card-li" data-inquiry-id="<?= (int)$r['id'] ?>">
-                            <a class="crm-card" href="/crm/view.php?id=<?= (int)$r['id'] ?>">
-                                <div class="crm-card-name"><?= e($r['primary_name']) ?></div>
+                            <article class="crm-card">
+                                <div class="crm-card-name">
+                                    <a href="/crm/view.php?id=<?= (int)$r['id'] ?>"><?= e($r['primary_name']) ?></a>
+                                </div>
+                                <?php if (!empty($r['primary_phone'])): ?>
+                                    <div class="crm-card-phone"><?= crm_phone_actions($r['primary_phone']) ?></div>
+                                <?php endif; ?>
                                 <div class="crm-card-meta">
                                     <?php if (($r['priority'] ?? 'normal') !== 'normal'): ?>
                                         <span class="pill pill-prio-<?= e($r['priority']) ?>"><?= e(crm_priority_label($r['priority'])) ?></span>
@@ -199,7 +204,7 @@ require __DIR__ . '/../includes/header.php';
                                         ↻ <?= e(date('j M', strtotime($r['next_followup']))) ?>
                                     </div>
                                 <?php endif; ?>
-                            </a>
+                            </article>
                         </li>
                     <?php endforeach; ?>
                 </ul>

@@ -705,6 +705,41 @@ a.admin-tile:hover {
 .pill-status-waitlisted            { background: #f1e2ff; color: #5b21b6; }
 .pill-status-lost                  { background: #f3d6d6; color: #7f1d1d; }
 
+/* Phone with click-to-call + click-to-WhatsApp buttons. Used on kanban
+   cards, leads list, and the inquiry detail page. */
+.phone-actions {
+    display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap;
+}
+.phone-text {
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    text-decoration: none;
+}
+.phone-text:hover { text-decoration: underline; }
+.phone-btn {
+    display: inline-flex; align-items: center;
+    padding: .1rem .45rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    line-height: 1.4;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+}
+.phone-btn-call { background: #e1ecff; color: #1e3a8a; border-color: #c8dafd; }
+.phone-btn-call:hover { background: #d2e2ff; }
+.phone-btn-wa   { background: #d8f5d2; color: #166534; border-color: #b9e6b1; }
+.phone-btn-wa:hover   { background: #c4ecbb; }
+
+/* Tighter on kanban cards where space is tight. */
+.crm-card-phone { margin: .2rem 0 .35rem; font-size: .85rem; }
+.crm-card-phone .phone-btn { font-size: .68rem; padding: 0 .4rem; }
+.crm-card-name a { color: inherit; text-decoration: none; }
+.crm-card-name a:hover { text-decoration: underline; }
+
+/* Leads list — keep the phone visually grouped with the email under the name. */
+.phone-cell { margin-bottom: .15rem; font-size: .85rem; }
+
 .pill-prio-urgent { background: #fbd4d4; color: #7f1d1d; font-weight: 700; }
 .pill-prio-high   { background: #fde2c4; color: #9a3412; }
 .pill-prio-normal { background: var(--line-soft); color: var(--ink-soft); }
