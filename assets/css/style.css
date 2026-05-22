@@ -730,6 +730,8 @@ a.admin-tile:hover {
 .phone-btn-call:hover { background: #d2e2ff; }
 .phone-btn-wa   { background: #d8f5d2; color: #166534; border-color: #b9e6b1; }
 .phone-btn-wa:hover   { background: #c4ecbb; }
+.phone-btn-save { background: #fff0d6; color: #8a4a07; border-color: #f3dba0; }
+.phone-btn-save:hover { background: #ffe6bb; }
 
 /* Tighter on kanban cards where space is tight. */
 .crm-card-phone { margin: .2rem 0 .35rem; font-size: .85rem; }
