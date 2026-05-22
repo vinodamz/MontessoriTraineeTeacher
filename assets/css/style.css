@@ -736,6 +736,21 @@ a.admin-tile:hover {
 /* Tighter on kanban cards where space is tight. */
 .crm-card-phone { margin: .2rem 0 .35rem; font-size: .85rem; }
 .crm-card-phone .phone-btn { font-size: .68rem; padding: 0 .4rem; }
+/* "Move to" stage picker on every card — primary UX on mobile, optional
+   alternative to drag on desktop. */
+.crm-card-move { margin-top: .45rem; }
+.crm-card-status-select {
+    width: 100%;
+    font-size: .85rem;
+    padding: .4rem .55rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--ink-soft);
+    appearance: menulist;
+}
+.crm-card-status-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.crm-card-status-select:disabled { opacity: .6; }
 .crm-card-name a { color: inherit; text-decoration: none; }
 .crm-card-name a:hover { text-decoration: underline; }
 
