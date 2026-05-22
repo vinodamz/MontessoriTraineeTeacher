@@ -108,6 +108,7 @@ require __DIR__ . '/../includes/header.php';
         </a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
         <?php if ($user['role'] === 'admin'): ?>
+            <a class="btn" href="/crm/stages.php" title="Manage pipeline stages">Stages</a>
             <a class="btn" href="/crm/audit.php" title="Admin: full activity log">Audit</a>
         <?php endif; ?>
         <?php if ($user['role'] === 'admin' && is_readable(__DIR__ . '/../sql/odoo_dump/leads.csv')): ?>
