@@ -696,7 +696,9 @@ a.admin-tile:hover {
 
 .pill-status-lead                  { background: #fdf0d3; color: #78420a; }
 .pill-status-new                   { background: #eef1f4; color: #495057; }
+.pill-status-details_shared        { background: #e6f7f1; color: #115e3a; }
 .pill-status-tour_scheduled        { background: #e1ecff; color: #1e3a8a; }
+.pill-status-school_visited        { background: #d6eaff; color: #163f7a; }
 .pill-status-application_submitted { background: #fff4e1; color: #92400e; }
 .pill-status-offered               { background: #ffe4d6; color: #9a3412; }
 .pill-status-enrolled              { background: #d8f3c8; color: #14532d; }
