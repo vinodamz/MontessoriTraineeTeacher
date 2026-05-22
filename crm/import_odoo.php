@@ -31,8 +31,8 @@ require_admin();
 const ODOO_STAGE_TO_STATUS = [
     'New'             => 'new',
     'Whatsapp / Call' => 'new',
-    'Details Shared'  => 'tour_scheduled',
-    'School Visited'  => 'offered',
+    'Details Shared'  => 'details_shared',
+    'School Visited'  => 'school_visited',
     'Admission Taken' => 'enrolled',
     'Future'          => 'waitlisted',
 ];

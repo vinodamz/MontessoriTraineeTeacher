@@ -9,20 +9,54 @@
 
 /**
  * Ordered pipeline statuses with display labels and default win-probability.
- * The order here drives the column order on the kanban board.
+ * Reads from the crm_stages table (active rows only), keyed by stage code
+ * and ordered by display_order. The kanban board renders one column per
+ * row returned here.
+ *
+ * Cached per-request via a static so kanban renders that loop the helper
+ * don't hit the DB once per column.
  */
 function crm_statuses(): array
 {
-    return [
-        'lead'                  => ['label' => 'Leads',                 'prob' => 10, 'open' => true],
-        'new'                   => ['label' => 'New inquiry',           'prob' => 20, 'open' => true],
-        'tour_scheduled'        => ['label' => 'Tour scheduled',        'prob' => 45, 'open' => true],
-        'application_submitted' => ['label' => 'Application submitted', 'prob' => 70, 'open' => true],
-        'offered'               => ['label' => 'Offered',               'prob' => 85, 'open' => true],
-        'enrolled'              => ['label' => 'Enrolled',              'prob' => 100, 'open' => false],
-        'waitlisted'            => ['label' => 'Waitlisted',            'prob' => 25, 'open' => true],
-        'lost'                  => ['label' => 'Lost',                  'prob' => 0,  'open' => false],
-    ];
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    try {
+        $rows = db()->query("
+            SELECT code, label, probability, is_open
+            FROM crm_stages
+            WHERE is_active = 1
+            ORDER BY display_order, id
+        ")->fetchAll();
+    } catch (Throwable $e) {
+        // Table not yet created (fresh checkout, pre-migration) — fall back
+        // to the historical hardcoded list so the app still loads.
+        $rows = [];
+    }
+
+    if (!$rows) {
+        $cache = [
+            'lead'                  => ['label' => 'Leads',                 'prob' => 10, 'open' => true],
+            'new'                   => ['label' => 'New inquiry',           'prob' => 20, 'open' => true],
+            'tour_scheduled'        => ['label' => 'Tour scheduled',        'prob' => 45, 'open' => true],
+            'application_submitted' => ['label' => 'Application submitted', 'prob' => 70, 'open' => true],
+            'offered'               => ['label' => 'Offered',               'prob' => 85, 'open' => true],
+            'enrolled'              => ['label' => 'Enrolled',              'prob' => 100, 'open' => false],
+            'waitlisted'            => ['label' => 'Waitlisted',            'prob' => 25, 'open' => true],
+            'lost'                  => ['label' => 'Lost',                  'prob' => 0,  'open' => false],
+        ];
+        return $cache;
+    }
+
+    $cache = [];
+    foreach ($rows as $r) {
+        $cache[$r['code']] = [
+            'label' => $r['label'],
+            'prob'  => (int)$r['probability'],
+            'open'  => (bool)$r['is_open'],
+        ];
+    }
+    return $cache;
 }
 
 /** Per-lead urgency, in display order. */

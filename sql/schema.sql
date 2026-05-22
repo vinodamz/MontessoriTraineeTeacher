@@ -435,6 +435,35 @@ INSERT INTO crm_campaigns (name, channel, active) VALUES
     ('Website form',  'website',  1),
     ('Instagram',     'instagram',1);
 
+-- Admin-editable pipeline stages — one row per kanban column on the
+-- admissions board. See /crm/stages.php for the management UI.
+CREATE TABLE crm_stages (
+    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code          VARCHAR(40)  NOT NULL,
+    label         VARCHAR(60)  NOT NULL,
+    display_order INT          NOT NULL DEFAULT 0,
+    probability   TINYINT UNSIGNED NOT NULL DEFAULT 20,
+    is_open       TINYINT(1)   NOT NULL DEFAULT 1,
+    is_active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_stage_code   (code),
+    KEY        idx_stage_order (display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO crm_stages (code, label, display_order, probability, is_open) VALUES
+    ('lead',                  'Leads',                 10,  10, 1),
+    ('new',                   'New inquiry',           20,  20, 1),
+    ('details_shared',        'Details shared',        30,  35, 1),
+    ('tour_scheduled',        'Tour scheduled',        40,  45, 1),
+    ('school_visited',        'School visited',        50,  60, 1),
+    ('application_submitted', 'Application submitted', 60,  70, 1),
+    ('offered',               'Offered',               70,  85, 1),
+    ('enrolled',              'Enrolled',              80, 100, 0),
+    ('waitlisted',            'Waitlisted',            90,  25, 1),
+    ('lost',                  'Lost',                 100,   0, 0);
+
 CREATE TABLE inquiry_families (
     id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
     primary_name    VARCHAR(160) NOT NULL,
@@ -442,9 +471,10 @@ CREATE TABLE inquiry_families (
     primary_email   VARCHAR(160) NULL,
     source          VARCHAR(60)  NULL,
     campaign_id     INT UNSIGNED NULL,
-    status          ENUM('lead','new','tour_scheduled','application_submitted',
-                         'offered','enrolled','waitlisted','lost')
-                    NOT NULL DEFAULT 'new',
+    -- Stage code — references crm_stages.code. Free-form VARCHAR rather
+    -- than an ENUM so admins can add stages from /crm/stages.php without
+    -- a schema change.
+    status          VARCHAR(40)  NOT NULL DEFAULT 'new',
     probability     TINYINT UNSIGNED NOT NULL DEFAULT 20,
     priority        ENUM('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
     expected_fee    DECIMAL(10,2) NULL,

@@ -96,6 +96,9 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
+        <?php if ($user['role'] === 'admin'): ?>
+            <a class="btn" href="/crm/stages.php" title="Manage pipeline stages">Stages</a>
+        <?php endif; ?>
         <?php if ($user['role'] === 'admin' && is_readable(__DIR__ . '/../sql/odoo_dump/leads.csv')): ?>
             <a class="btn" href="/crm/import_odoo.php" title="One-shot importer for the Odoo 2026 Admission dump">Import Odoo</a>
         <?php endif; ?>
