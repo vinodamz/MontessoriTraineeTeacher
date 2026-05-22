@@ -22,7 +22,13 @@
             dragClass:   'crm-card-drag',
             forceFallback: false,
             fallbackOnBody: true,
-            fallbackTolerance: 4,
+            fallbackTolerance: 8,
+            // Touch tuning: a short press-and-hold is required before a drag
+            // begins so finger-scroll on the board doesn't grab a card.
+            // Desktop is unaffected (delayOnTouchOnly).
+            delay: 250,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 8,
             onEnd: async (evt) => {
                 const card        = evt.item;
                 const candidateId = parseInt(card.dataset.candidateId, 10);

@@ -23,7 +23,13 @@
             handle: '.board-card',
             forceFallback: false,         // native HTML5 on desktop, touch fallback elsewhere
             fallbackOnBody: true,
-            fallbackTolerance: 4,
+            fallbackTolerance: 8,
+            // Touch tuning: a short press-and-hold is required before a drag
+            // begins so a normal finger-scroll on the board doesn't grab a
+            // card. Desktop is unaffected (delayOnTouchOnly).
+            delay: 250,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 8,
             onEnd: async (evt) => {
                 const card = evt.item;
                 const taskId = parseInt(card.dataset.taskId, 10);
