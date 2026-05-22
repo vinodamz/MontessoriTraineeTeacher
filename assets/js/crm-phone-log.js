@@ -30,9 +30,17 @@
         var wrapper = t.closest('[data-inquiry-id]');
         var famId   = wrapper ? wrapper.getAttribute('data-inquiry-id') : '';
 
+        // Capture the phone number so the audit "Details" column has
+        // something useful for Call / WhatsApp entries.
+        var href = t.getAttribute('href') || '';
+        var phone = '';
+        if (/^tel:/.test(href))     phone = href.replace(/^tel:\+?/, '');
+        else if (/wa\.me\//.test(href)) phone = href.replace(/^.*wa\.me\//, '').split(/[?#]/)[0];
+
         var fd = new FormData();
         fd.append('action',   action);
         if (famId) fd.append('family_id', famId);
+        if (phone) fd.append('meta', JSON.stringify({ phone: phone }));
         var token = csrfToken();
         if (token) fd.append('_csrf', token);
 
