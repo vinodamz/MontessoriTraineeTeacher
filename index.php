@@ -59,15 +59,17 @@ $hasMontess  = user_has_module($user, 'montessori');
 $hasStudents = user_has_module($user, 'students');
 $hasCrm      = user_has_module($user, 'crm');
 $hasRecruit  = user_has_module($user, 'recruitment');
+$hasStaff    = user_has_module($user, 'staff');
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff;
 if ($moduleCount === 1) {
     if ($hasTasks)    redirect('/tasks/index.php');
     if ($hasMontess)  redirect('/assessment/index.php');
     if ($hasStudents) redirect('/students/index.php');
     if ($hasCrm)      redirect('/crm/index.php');
     if ($hasRecruit)  redirect('/recruitment/index.php');
+    if ($hasStaff)    redirect('/staff/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -251,7 +253,30 @@ require __DIR__ . '/includes/header.php';
             </a>
         </li>
     <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm && !$hasRecruit): ?>
+    <?php if ($hasStaff): ?>
+        <?php
+        $staffStats = ['pending_leave' => 0, 'open_msgs' => 0];
+        try {
+            $staffStats['pending_leave'] = (int)db()->query("SELECT COUNT(*) FROM staff_leave_requests WHERE status='pending'")->fetchColumn();
+            $staffStats['open_msgs']     = (int)db()->query("SELECT COUNT(*) FROM staff_messages WHERE status IN ('open','acknowledged')")->fetchColumn();
+        } catch (Throwable $e) { /* tables may not exist yet */ }
+        ?>
+        <li>
+            <a class="module-tile" href="/staff/index.php">
+                <h2>Staff</h2>
+                <p class="muted">Attendance, leave, 1:1 notes, HR documents and messages to management.</p>
+                <div class="module-stats">
+                    <?php if ($staffStats['pending_leave'] > 0): ?>
+                        <span class="pill pill-warn"><?= (int)$staffStats['pending_leave'] ?> pending leave</span>
+                    <?php endif; ?>
+                    <?php if ($staffStats['open_msgs'] > 0): ?>
+                        <span class="pill"><?= (int)$staffStats['open_msgs'] ?> open message<?= $staffStats['open_msgs'] === 1 ? '' : 's' ?></span>
+                    <?php endif; ?>
+                </div>
+            </a>
+        </li>
+    <?php endif; ?>
+    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm && !$hasRecruit && !$hasStaff): ?>
         <li>
             <div class="empty">
                 <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>

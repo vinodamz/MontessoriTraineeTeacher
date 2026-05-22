@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff']);
     return implode(',', $valid);
 }
 
@@ -320,6 +320,7 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="students"><span>Students</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="crm"><span>Admissions</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="recruitment"><span>Recruitment</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="staff"><span>Staff</span></label>
             </div>
         </div>
         <div class="actions">
@@ -353,6 +354,7 @@ require __DIR__ . '/includes/header.php';
         $hasS    = in_array('students', $mods, true);
         $hasC    = in_array('crm', $mods, true);
         $hasR    = in_array('recruitment', $mods, true);
+        $hasSt   = in_array('staff', $mods, true);
     ?>
         <li class="team-row" style="--card: <?= e(user_color((int)$u['id'])) ?>;">
             <div class="team-dot"><?= e(user_initials($u['name'])) ?></div>
@@ -394,6 +396,10 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Recruitment / staff hiring module">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="recruitment" <?= $hasR ? 'checked' : '' ?>>
                     <span>Recruit</span>
+                </label>
+                <label class="checkbox" title="Staff management (attendance, leave, docs, messages)">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="staff" <?= $hasSt ? 'checked' : '' ?>>
+                    <span>Staff</span>
                 </label>
                 <label class="checkbox" title="Active">
                     <input form="<?= $fid ?>" type="checkbox" name="active" value="1" <?= $u['active'] ? 'checked' : '' ?>>
