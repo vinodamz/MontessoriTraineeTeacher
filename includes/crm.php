@@ -261,7 +261,9 @@ function crm_audit_log(
 ): void {
     try {
         if ($byUserId === null) {
-            $byUserId = $_SESSION['user']['id'] ?? null;
+            // Session keys are flat ($_SESSION['user_id']), not nested under
+            // a 'user' array — see includes/auth.php where login.php sets them.
+            $byUserId = $_SESSION['user_id'] ?? null;
         }
         $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
         if ($ip) {
