@@ -1,5 +1,5 @@
 -- ============================================================================
--- migrate_009_expenses.sql
+-- migrate_013_expenses.sql
 --
 -- Adds the Expenses module: expense_categories + expenses tables, plus the
 -- 'expenses' value in users.modules SET. Idempotent — re-runnable.
@@ -7,6 +7,13 @@
 -- Expenses captures staff-paid receipts (postage, supplies, repairs, travel).
 -- Each row stores the receipt image filename (under /uploads/receipts/) and
 -- the raw OCR'd text so a reviewer can verify the parsed amount/date/merchant.
+--
+-- NOTE: the modules SET below must include every value that already exists
+-- in the column. The original version of this migration was written when
+-- the SET only had ('tasks','montessori','students') — by the time it
+-- landed in main, the SET had grown to include 'crm','recruitment','staff'.
+-- Dropping any of those during an ALTER truncates existing rows that hold
+-- them, which MySQL refuses in STRICT mode. So always list the full set.
 -- ============================================================================
 
 SET NAMES utf8mb4;
@@ -25,7 +32,9 @@ BEGIN
           AND COLUMN_TYPE  NOT LIKE '%expenses%'
     ) THEN
         ALTER TABLE users
-            MODIFY modules SET('tasks','montessori','students','expenses') NOT NULL DEFAULT '';
+            MODIFY modules
+              SET('tasks','montessori','students','crm','recruitment','staff','expenses')
+              NOT NULL DEFAULT '';
     END IF;
 
     -- 2. expense_categories — short list of buckets the admin can manage.
