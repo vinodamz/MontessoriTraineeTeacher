@@ -192,11 +192,23 @@ function crm_phone_actions(?string $phone, ?int $familyId = null): string
     }
     $disp = htmlspecialchars($phone, ENT_QUOTES);
     $famAttr = $familyId ? ' data-inquiry-id="' . (int)$familyId . '"' : '';
+
+    // "Save as contact" link — only render when we have a family_id since
+    // the vCard endpoint can't build a meaningful name without it. The
+    // endpoint itself logs the 'contact_saved' action, so no JS hook here.
+    $saveLink = '';
+    if ($familyId) {
+        $saveLink = '<a class="phone-btn phone-btn-save" href="/crm/contact_vcard.php?id=' . (int)$familyId . '"'
+                  . ' title="Save as contact (LG-parent-child-Enquiry.vcf)" aria-label="Save as contact"'
+                  . ' download>Save</a>';
+    }
+
     return
         '<span class="phone-actions"' . $famAttr . '>'
             . '<a class="phone-text" href="tel:+' . $intl . '" title="Call ' . $disp . '">' . $disp . '</a>'
             . '<a class="phone-btn phone-btn-call" href="tel:+' . $intl . '" title="Call ' . $disp . '" aria-label="Call ' . $disp . '" data-audit-action="phone_call_initiated">Call</a>'
             . '<a class="phone-btn phone-btn-wa" href="https://wa.me/' . $intl . '" target="_blank" rel="noopener" title="WhatsApp ' . $disp . '" aria-label="WhatsApp ' . $disp . '" data-audit-action="whatsapp_initiated">WhatsApp</a>'
+            . $saveLink
         . '</span>';
 }
 
@@ -224,6 +236,7 @@ function crm_audit_actions(): array
         'touchpoint_deleted'    => 'Touchpoint deleted',
         'phone_call_initiated'  => 'Phone call (Call button)',
         'whatsapp_initiated'    => 'WhatsApp opened',
+        'contact_saved'         => 'Saved as contact (vCard)',
     ];
 }
 
