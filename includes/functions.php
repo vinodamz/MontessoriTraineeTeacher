@@ -332,6 +332,25 @@ function current_academic_year(?DateTime $now = null): string
     return $startYear . '-' . substr((string)($startYear + 1), -2);
 }
 
+/**
+ * Academic year that a student who *starts on $date* belongs to. If the
+ * date is null or unparseable, falls back to the latest year in use
+ * (prefers the upcoming year during the admissions cycle, so a child
+ * being admitted in May for a June start lands in the next year by default).
+ */
+function academic_year_for_start_date(?string $date): string
+{
+    if ($date) {
+        try {
+            return current_academic_year(new DateTime($date));
+        } catch (Throwable $e) {
+            // fall through to default
+        }
+    }
+    $years = academic_years_in_use();
+    return $years[0] ?? current_academic_year();
+}
+
 /** Next academic year after the given one. "2025-26" → "2026-27". */
 function next_academic_year(string $year): string
 {

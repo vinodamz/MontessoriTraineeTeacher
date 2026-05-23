@@ -364,7 +364,14 @@ function crm_promote_inquiry(int $familyId, array $assignments, int $byUserId): 
             (:sid, :rel, :n, :ph, :em, :oc, :pri)
     ");
 
-    $academicYear = function_exists('current_academic_year') ? current_academic_year() : null;
+    // Pick the academic year from the family's expected_start when set —
+    // a child being admitted in May 2026 for a June 2026 start belongs
+    // to "2026-27", not the calendar-current "2025-26". When no
+    // expected_start is on file, academic_year_for_start_date() falls
+    // back to the latest year in use, which prefers the upcoming year.
+    $academicYear = function_exists('academic_year_for_start_date')
+        ? academic_year_for_start_date($family['expected_start'] ?? null)
+        : (function_exists('current_academic_year') ? current_academic_year() : null);
     $newIds = [];
 
     foreach ($children as $kid) {

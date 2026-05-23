@@ -27,12 +27,16 @@ $activeIn   = $_GET['active'] ?? 'active';  // 'active' | 'inactive' | 'all'
 $validGrades   = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
 $gradeFilter   = in_array($gradeIn, $validGrades, true) ? $gradeIn : '';
 
-// Academic year + enrollment-status filters. Default to the current academic
-// year so the roster you see by default is who's actively enrolled now.
+// Academic year + enrollment-status filters. Default to the LATEST year
+// in the dropdown — academic_years_in_use() puts the upcoming year first,
+// so during admissions season (April–May) the page lands on the year the
+// team is currently enrolling for. Outside that window it lands on the
+// most-recent year with student data.
 $availableYears = academic_years_in_use();
-$yearIn = $_GET['year'] ?? current_academic_year();
+$defaultYear    = $availableYears[0] ?? current_academic_year();
+$yearIn = $_GET['year'] ?? $defaultYear;
 if ($yearIn !== '' && $yearIn !== 'all' && !in_array($yearIn, $availableYears, true)) {
-    $yearIn = current_academic_year();
+    $yearIn = $defaultYear;
 }
 $statusIn = $_GET['status'] ?? 'enrolled';   // 'enrolled' | 'left' | 'all' | specific code
 $STATUSES_LEFT = ['withdrawn', 'graduated', 'on_break'];
