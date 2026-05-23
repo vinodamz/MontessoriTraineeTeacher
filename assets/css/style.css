@@ -761,6 +761,19 @@ a.admin-tile:hover {
 .audit-table td, .audit-table th { vertical-align: top; }
 .audit-table td .pill { font-size: .7rem; padding: .1rem .45rem; }
 
+/* /crm/today.php — daily action list */
+.today-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .6rem; }
+.today-row {
+    padding: .65rem .8rem;
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.today-row-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .2rem; }
+.today-name { font-weight: 600; color: var(--ink); text-decoration: none; }
+.today-name:hover { text-decoration: underline; }
+.today-body  { margin-bottom: .35rem; }
+.today-phone { font-size: .85rem; }
+.today-phone .phone-btn { font-size: .7rem; padding: .1rem .45rem; }
+
 /* WhatsApp template picker modal — opens when tapping the WhatsApp pill. */
 .wa-modal-backdrop {
     position: fixed; inset: 0; background: rgba(40,30,20,.5);

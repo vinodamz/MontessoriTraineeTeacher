@@ -111,6 +111,8 @@ require __DIR__ . '/../includes/header.php';
                 <span class="pill pill-status-lead" style="margin-left:.35rem;"><?= $leadCount ?></span>
             <?php endif; ?>
         </a>
+        <a class="btn" href="/crm/today.php"  title="Today's calls + stagnant leads">Today</a>
+        <a class="btn" href="/crm/funnel.php" title="Conversion funnel report">Funnel</a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
         <?php if ($user['role'] === 'admin'): ?>
             <a class="btn" href="/crm/stages.php"       title="Manage pipeline stages">Stages</a>
