@@ -567,6 +567,21 @@ CREATE TABLE inquiry_audit (
     CONSTRAINT fk_audit_user   FOREIGN KEY (user_id)   REFERENCES users(id)            ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Admin-managed WhatsApp message templates — shown in the picker that
+-- pops up when the user taps the WhatsApp pill on an inquiry. See
+-- /crm/wa_templates.php for the admin UI.
+CREATE TABLE crm_wa_templates (
+    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name          VARCHAR(80)  NOT NULL,
+    body          TEXT         NOT NULL,
+    display_order INT          NOT NULL DEFAULT 0,
+    is_active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_wat_order (display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================================
 -- Expenses module
 -- ============================================================================

@@ -64,6 +64,10 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $leads = $stmt->fetchAll();
 
+// Batch-load WhatsApp template substitution vars for these leads.
+$waVarsByFam = crm_wa_vars_for_families(array_column($leads, 'id'));
+$waTemplates = crm_wa_templates_active();
+
 $campaigns = db()->query("SELECT id, name, channel FROM crm_campaigns ORDER BY active DESC, name")->fetchAll();
 $owners    = db()->query("
     SELECT id, name FROM users
@@ -173,7 +177,7 @@ require __DIR__ . '/../includes/header.php';
                     <td><a href="/crm/view.php?id=<?= (int)$l['id'] ?>"><?= e($l['primary_name']) ?></a></td>
                     <td>
                         <?php if ($l['primary_phone']): ?>
-                            <div class="phone-cell"><?= crm_phone_actions($l['primary_phone'], (int)$l['id']) ?></div>
+                            <div class="phone-cell"><?= crm_phone_actions($l['primary_phone'], (int)$l['id'], $waVarsByFam[(int)$l['id']] ?? []) ?></div>
                         <?php endif; ?>
                         <?php if ($l['primary_email']): ?>
                             <span class="muted small"><?= e($l['primary_email']) ?></span>
@@ -201,6 +205,10 @@ require __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
+<?php if ($waTemplates): ?>
+<script id="wa-templates" type="application/json"><?= json_encode($waTemplates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+<script src="/assets/js/crm-wa-templates.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-wa-templates.js')) ?>"></script>
+<?php endif; ?>
 <script src="/assets/js/crm-phone-log.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-phone-log.js')) ?>"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

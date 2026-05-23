@@ -63,6 +63,11 @@ $rows = db()->query("
     ORDER BY FIELD(f.priority,'urgent','high','normal','low'), f.updated_at DESC
 ")->fetchAll();
 
+// Batch-load substitution vars for the WhatsApp template picker so the
+// kanban doesn't go N+1 (one parent + child lookup per card).
+$waVarsByFam = crm_wa_vars_for_families(array_column($rows, 'id'));
+$waTemplates = crm_wa_templates_active();
+
 // Group by status for the kanban columns (pipeline only — leads excluded).
 $byStatus = [];
 foreach (array_keys(crm_pipeline_statuses()) as $code) $byStatus[$code] = [];
@@ -108,8 +113,9 @@ require __DIR__ . '/../includes/header.php';
         </a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
         <?php if ($user['role'] === 'admin'): ?>
-            <a class="btn" href="/crm/stages.php" title="Manage pipeline stages">Stages</a>
-            <a class="btn" href="/crm/audit.php" title="Admin: full activity log">Audit</a>
+            <a class="btn" href="/crm/stages.php"       title="Manage pipeline stages">Stages</a>
+            <a class="btn" href="/crm/wa_templates.php" title="Manage WhatsApp message templates">WA templates</a>
+            <a class="btn" href="/crm/audit.php"        title="Admin: full activity log">Audit</a>
         <?php endif; ?>
         <?php if ($user['role'] === 'admin' && is_readable(__DIR__ . '/../sql/odoo_dump/leads.csv')): ?>
             <a class="btn" href="/crm/import_odoo.php" title="One-shot importer for the Odoo 2026 Admission dump">Import Odoo</a>
@@ -192,7 +198,7 @@ require __DIR__ . '/../includes/header.php';
                                     <a href="/crm/view.php?id=<?= (int)$r['id'] ?>"><?= e($r['primary_name']) ?></a>
                                 </div>
                                 <?php if (!empty($r['primary_phone'])): ?>
-                                    <div class="crm-card-phone"><?= crm_phone_actions($r['primary_phone'], (int)$r['id']) ?></div>
+                                    <div class="crm-card-phone"><?= crm_phone_actions($r['primary_phone'], (int)$r['id'], $waVarsByFam[(int)$r['id']] ?? []) ?></div>
                                 <?php endif; ?>
                                 <div class="crm-card-meta">
                                     <?php if (($r['priority'] ?? 'normal') !== 'normal'): ?>
@@ -244,6 +250,10 @@ require __DIR__ . '/../includes/header.php';
     <script src="/assets/js/crm-board.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-board.js')) ?>"></script>
 <?php endif; ?>
 
+<?php if ($waTemplates): ?>
+<script id="wa-templates" type="application/json"><?= json_encode($waTemplates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+<script src="/assets/js/crm-wa-templates.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-wa-templates.js')) ?>"></script>
+<?php endif; ?>
 <script src="/assets/js/crm-phone-log.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-phone-log.js')) ?>"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

@@ -222,6 +222,11 @@ if (($user['role'] ?? '') === 'admin') {
 
 $money = fn(float $v) => '₹' . number_format($v, 0);
 
+// WhatsApp template substitution vars + active templates for the picker.
+$waVarsAll   = crm_wa_vars_for_families([$id]);
+$waVars      = $waVarsAll[$id] ?? [];
+$waTemplates = crm_wa_templates_active();
+
 $pageTitle = $family['primary_name'] . ' — Admissions';
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -273,7 +278,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="card" style="flex: 1 1 320px;">
         <h3>Contact</h3>
         <dl class="dl-grid">
-            <dt>Phone</dt><dd><?= $family['primary_phone'] ? crm_phone_actions($family['primary_phone'], (int)$family['id']) : '—' ?></dd>
+            <dt>Phone</dt><dd><?= $family['primary_phone'] ? crm_phone_actions($family['primary_phone'], (int)$family['id'], $waVars) : '—' ?></dd>
             <dt>Email</dt><dd><?= e((string)$family['primary_email']) ?: '—' ?></dd>
             <dt>Expected fee</dt><dd>
                 <?= $family['expected_fee'] !== null ? e($money((float)$family['expected_fee'])) . '/mo' : '—' ?>
@@ -513,6 +518,10 @@ require __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if ($waTemplates): ?>
+<script id="wa-templates" type="application/json"><?= json_encode($waTemplates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+<script src="/assets/js/crm-wa-templates.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-wa-templates.js')) ?>"></script>
+<?php endif; ?>
 <script src="/assets/js/crm-phone-log.js?v=<?= e((string)@filemtime(__DIR__ . '/../assets/js/crm-phone-log.js')) ?>"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
