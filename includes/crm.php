@@ -143,6 +143,105 @@ function crm_source_options(): array
     return ['Walk-in', 'Referral', 'Website', 'Instagram', 'Facebook', 'Google', 'Other'];
 }
 
+// ============================================================================
+// WhatsApp templates — pre-written messages an admin manages from
+// /crm/wa_templates.php. Click the WhatsApp pill on any inquiry → small
+// picker shows active templates → pick one → wa.me opens with the
+// substituted message pre-filled in the input box (the admin can still
+// edit before tapping send).
+// ============================================================================
+
+/** Active templates ordered for the picker. Empty array if table missing. */
+function crm_wa_templates_active(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    try {
+        $cache = db()->query("
+            SELECT id, name, body
+            FROM crm_wa_templates
+            WHERE is_active = 1
+            ORDER BY display_order, id
+        ")->fetchAll();
+    } catch (Throwable $e) {
+        $cache = [];
+    }
+    return $cache;
+}
+
+/**
+ * Substitute {placeholder} tokens in a template body.
+ * Currently supported keys: parent_name, child_name, school_name, stage.
+ * Unknown tokens are left as-is so the admin sees the gap on screen.
+ */
+function crm_wa_substitute(string $body, array $vars): string
+{
+    foreach ($vars as $k => $v) {
+        $body = str_replace('{' . $k . '}', (string)$v, $body);
+    }
+    return $body;
+}
+
+/**
+ * Pull per-family substitution vars in one batched query so the kanban
+ * doesn't go N+1. Returns [family_id => ['parent_name' => …, 'child_name' => …]].
+ */
+function crm_wa_vars_for_families(array $familyIds): array
+{
+    $familyIds = array_values(array_unique(array_filter(array_map('intval', $familyIds))));
+    if (!$familyIds) return [];
+
+    $pdo = db();
+    $place = implode(',', array_fill(0, count($familyIds), '?'));
+
+    $out = [];
+    foreach ($familyIds as $fid) {
+        $out[$fid] = ['parent_name' => '', 'child_name' => ''];
+    }
+
+    // primary_name from inquiry_families as fallback parent name.
+    $famRows = $pdo->prepare("SELECT id, primary_name FROM inquiry_families WHERE id IN ($place)");
+    $famRows->execute($familyIds);
+    foreach ($famRows as $r) {
+        $out[(int)$r['id']]['parent_name'] = trim(explode(',', (string)$r['primary_name'])[0] ?: '');
+    }
+
+    // First-parent name (prefer is_primary) overrides primary_name.
+    $pRows = $pdo->prepare("
+        SELECT p.family_id, p.name
+        FROM inquiry_parents p
+        INNER JOIN (
+            SELECT family_id, MIN(id) AS min_id
+            FROM inquiry_parents
+            WHERE family_id IN ($place)
+            GROUP BY family_id
+        ) m ON m.family_id = p.family_id AND m.min_id = p.id
+    ");
+    $pRows->execute($familyIds);
+    foreach ($pRows as $r) {
+        $name = trim((string)$r['name']);
+        if ($name !== '') $out[(int)$r['family_id']]['parent_name'] = $name;
+    }
+
+    // First child's first_name.
+    $kRows = $pdo->prepare("
+        SELECT c.family_id, c.first_name
+        FROM inquiry_children c
+        INNER JOIN (
+            SELECT family_id, MIN(id) AS min_id
+            FROM inquiry_children
+            WHERE family_id IN ($place)
+            GROUP BY family_id
+        ) m ON m.family_id = c.family_id AND m.min_id = c.id
+    ");
+    $kRows->execute($familyIds);
+    foreach ($kRows as $r) {
+        $out[(int)$r['family_id']]['child_name'] = trim((string)$r['first_name']);
+    }
+
+    return $out;
+}
+
 /**
  * Normalise a user-entered phone to digits-only, with the +91 country
  * code applied when the input looks like a local Indian number (10 or
@@ -181,7 +280,7 @@ function crm_phone_intl_digits(?string $phone): string
  * Output is pre-escaped — the phone display is run through htmlspecialchars
  * before being injected.
  */
-function crm_phone_actions(?string $phone, ?int $familyId = null): string
+function crm_phone_actions(?string $phone, ?int $familyId = null, array $waVars = []): string
 {
     $phone = trim((string)$phone);
     if ($phone === '') return '';
@@ -192,6 +291,15 @@ function crm_phone_actions(?string $phone, ?int $familyId = null): string
     }
     $disp = htmlspecialchars($phone, ENT_QUOTES);
     $famAttr = $familyId ? ' data-inquiry-id="' . (int)$familyId . '"' : '';
+
+    // WhatsApp template vars — wa-templates.js reads these to substitute
+    // {parent_name} / {child_name} when the picker shows a template.
+    $waAttrs = '';
+    if ($familyId && $waVars) {
+        $p = htmlspecialchars((string)($waVars['parent_name'] ?? ''), ENT_QUOTES);
+        $c = htmlspecialchars((string)($waVars['child_name']  ?? ''), ENT_QUOTES);
+        $waAttrs = ' data-wa-parent="' . $p . '" data-wa-child="' . $c . '"';
+    }
 
     // "Save as contact" link — only render when we have a family_id since
     // the vCard endpoint can't build a meaningful name without it. The
@@ -204,10 +312,10 @@ function crm_phone_actions(?string $phone, ?int $familyId = null): string
     }
 
     return
-        '<span class="phone-actions"' . $famAttr . '>'
+        '<span class="phone-actions"' . $famAttr . $waAttrs . '>'
             . '<a class="phone-text" href="tel:+' . $intl . '" title="Call ' . $disp . '">' . $disp . '</a>'
             . '<a class="phone-btn phone-btn-call" href="tel:+' . $intl . '" title="Call ' . $disp . '" aria-label="Call ' . $disp . '" data-audit-action="phone_call_initiated">Call</a>'
-            . '<a class="phone-btn phone-btn-wa" href="https://wa.me/' . $intl . '" target="_blank" rel="noopener" title="WhatsApp ' . $disp . '" aria-label="WhatsApp ' . $disp . '" data-audit-action="whatsapp_initiated">WhatsApp</a>'
+            . '<a class="phone-btn phone-btn-wa" href="https://wa.me/' . $intl . '" target="_blank" rel="noopener" title="WhatsApp ' . $disp . '" aria-label="WhatsApp ' . $disp . '" data-audit-action="whatsapp_initiated" data-wa-phone="' . $intl . '">WhatsApp</a>'
             . $saveLink
         . '</span>';
 }
