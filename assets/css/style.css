@@ -774,6 +774,44 @@ a.admin-tile:hover {
 .today-phone { font-size: .85rem; }
 .today-phone .phone-btn { font-size: .7rem; padding: .1rem .45rem; }
 
+/* WhatsApp template picker modal — opens when tapping the WhatsApp pill. */
+.wa-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(40,30,20,.5);
+    display: flex; align-items: flex-end; justify-content: center;
+    z-index: 100; padding: 0;
+}
+@media (min-width: 600px) {
+    .wa-modal-backdrop { align-items: center; padding: 1rem; }
+}
+.wa-modal-backdrop[hidden] { display: none; }
+.wa-modal {
+    background: var(--bg-card); width: 100%; max-width: 520px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 1rem 1rem 1.25rem;
+    max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 -10px 30px rgba(40,30,20,.18);
+}
+@media (min-width: 600px) {
+    .wa-modal { border-radius: var(--radius); box-shadow: 0 10px 30px rgba(40,30,20,.2); }
+}
+.wa-modal-head { display: flex; align-items: center; justify-content: space-between; }
+.wa-modal-head h3 { margin: 0; font-size: 1.05rem; }
+.wa-modal-close {
+    background: none; border: 0; font-size: 1.4rem; line-height: 1; cursor: pointer;
+    color: var(--ink-soft); padding: .25rem .5rem;
+}
+.wa-modal-sub { margin: .2rem 0 .75rem; }
+.wa-template-list { list-style: none; padding: 0; margin: 0 0 .75rem; display: flex; flex-direction: column; gap: .4rem; }
+.wa-template-row {
+    width: 100%; text-align: left; padding: .7rem .85rem;
+    background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.wa-template-row:hover { background: #fdf4e3; }
+.wa-template-name { display: block; font-weight: 600; margin-bottom: .15rem; }
+.wa-template-preview { display: block; font-size: .85rem; color: var(--ink-soft); white-space: pre-wrap; }
+.wa-blank { display: block; width: 100%; }
+
 .pill-prio-urgent { background: #fbd4d4; color: #7f1d1d; font-weight: 700; }
 .pill-prio-high   { background: #fde2c4; color: #9a3412; }
 .pill-prio-normal { background: var(--line-soft); color: var(--ink-soft); }
