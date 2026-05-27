@@ -90,6 +90,13 @@ require __DIR__ . '/../includes/header.php';
     </div>
 
     <div class="card">
+        <h3>CoFee Enrollment Wizard</h3>
+        <p class="muted small">Input child details → get exact CoFee instructions: which groups, what amounts, what dates.</p>
+        <p>Step-by-step guide to enrol a child in CoFee with the right groups and fee settings.</p>
+        <a class="btn btn-primary" href="/fees/cofee_enroll.php" style="margin-top:.6rem;">Open wizard</a>
+    </div>
+
+    <div class="card">
         <h3>CoFee Admin Guide</h3>
         <p class="muted small">Step-by-step guide for setting up groups, members, and fees on web.cofee.life.</p>
         <p>Which groups to create, what amounts to set, how to enrol children, care add-ons, switching plans.</p>
