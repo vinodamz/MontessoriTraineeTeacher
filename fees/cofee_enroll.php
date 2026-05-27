@@ -13,8 +13,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/fees.php';
+require_once __DIR__ . '/../includes/cofee_api.php';
 
 $user = require_module('fees');
+$cofeeReady = cofee_is_configured();
 
 $fs = fee_structure();
 $monthlyTotal = $fs['schoolFeeMonthly'] + $fs['monthlyBilling'];
@@ -358,9 +360,36 @@ require __DIR__ . '/../includes/header.php';
     </form>
 </div>
 
+<?php
+// Resolve CoFee group IDs for the "Open in CoFee" links.
+$cofeeGroups = [
+    'Joining Fees'       => (string)app_setting('cofee_group_joining', ''),
+    'School Fee — Monthly'   => (string)app_setting('cofee_group_monthly', ''),
+    'School Fee — Weekly'    => (string)app_setting('cofee_group_weekly', ''),
+    'School Fee — Quarterly' => (string)app_setting('cofee_group_quarterly', ''),
+    'UKG Readiness'      => (string)app_setting('cofee_group_ukg', ''),
+];
+?>
+
 <?php if ($showSteps): ?>
+
+<?php if (!$cofeeReady): ?>
+    <div class="card" style="background:#fff4e1; border-color:#f3dba0; margin-top:1rem;">
+        <strong>CoFee API not configured.</strong> Go to <a href="/fees/config.php#cofee">Fee Config → CoFee API</a> to enter your token and group IDs. Once configured, you'll see "Execute in CoFee" buttons below.
+    </div>
+<?php endif; ?>
+
 <div style="margin-top:1rem;">
-    <?php foreach ($steps as $step): ?>
+    <?php foreach ($steps as $step):
+        // Find the matching CoFee group for this step.
+        $groupId = '';
+        foreach ($cofeeGroups as $gName => $gId) {
+            if ($gId && stripos($step['title'], $gName) !== false) {
+                $groupId = $gId;
+                break;
+            }
+        }
+    ?>
         <div class="wizard-step <?= ($step['icon'] === '✓') ? 'step-verify' : '' ?>">
             <span class="step-badge"><?= e($step['icon']) ?></span>
             <div class="step-title"><?= e($step['title']) ?></div>
@@ -374,9 +403,74 @@ require __DIR__ . '/../includes/header.php';
                 </dl>
             <?php endif; ?>
             <div class="step-note"><?= e($step['note']) ?></div>
+
+            <?php if ($step['icon'] === '1' && $cofeeReady): ?>
+                <div class="step-actions" style="margin-top:.6rem;">
+                    <button class="btn btn-primary" id="btn-create-member" onclick="cofeeCreateMember(this)">
+                        Create member in CoFee
+                    </button>
+                    <span id="member-result" style="margin-left:.5rem;"></span>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($groupId): ?>
+                <div class="step-actions" style="margin-top:.6rem;">
+                    <a class="btn" href="<?= e(cofee_group_url($groupId)) ?>" target="_blank">
+                        Open "<?= e($step['title']) ?>" in CoFee →
+                    </a>
+                    <span class="muted small" style="margin-left:.3rem;">Add the member manually with the values above</span>
+                </div>
+            <?php endif; ?>
         </div>
     <?php endforeach; ?>
 </div>
+<?php endif; ?>
+
+<?php if ($showSteps && $cofeeReady): ?>
+<script>
+function cofeeCreateMember(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    var result = document.getElementById('member-result');
+    var csrf = document.querySelector('meta[name="csrf-token"]');
+
+    var fd = new FormData();
+    fd.append('op', 'create_member');
+    fd.append('member_name', <?= json_encode($memberName ?? '') ?>);
+    fd.append('phone', <?= json_encode($parentPhone) ?>);
+    fd.append('email', <?= json_encode($parentEmail) ?>);
+    fd.append('guardian_name', <?= json_encode($parentName) ?>);
+    fd.append('admission_date', <?= json_encode($joinDate) ?>);
+    if (csrf) fd.append('_csrf', csrf.content);
+
+    fetch('/fees/cofee_exec.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = true;
+            if (data.ok) {
+                if (data.already_exists) {
+                    btn.textContent = 'Already exists';
+                    btn.style.background = '#ca8a04';
+                } else {
+                    btn.textContent = 'Created!';
+                    btn.style.background = '#16a34a';
+                }
+                result.innerHTML = '<strong>' + (data.message || 'Done') + '</strong>';
+            } else {
+                btn.textContent = 'Failed';
+                btn.style.background = '#dc2626';
+                result.innerHTML = '<span style="color:#dc2626;">' + (data.error || 'Unknown error') + '</span>';
+                btn.disabled = false;
+                setTimeout(function() { btn.textContent = 'Retry'; btn.style.background = ''; }, 3000);
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Retry';
+            result.innerHTML = '<span style="color:#dc2626;">Network error</span>';
+        });
+}
+</script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
