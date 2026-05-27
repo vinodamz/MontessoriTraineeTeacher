@@ -8,11 +8,15 @@
 (function () {
     'use strict';
 
-    const board = document.querySelector('.crm-board');
+    var board = document.querySelector('.crm-board');
     if (!board) return;
 
-    const csrf       = board.dataset.csrf || '';
-    const isCoarse   = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var csrf     = board.dataset.csrf || '';
+    var isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+
+    // Guard against double-posting the same move (e.g. SortableJS firing
+    // onEnd twice due to a browser quirk, or a fast drag + select combo).
+    var inflight = {};
 
     function moveCard(card, newStatus, oldStatus, onSnapBack) {
         if (!newStatus || newStatus === oldStatus) return Promise.resolve(false);
@@ -21,9 +25,17 @@
             alert('To enroll children, open the card and use the "Enroll children" form — it needs a grade and class teacher per child.');
             return Promise.resolve(false);
         }
-        const inquiryId = parseInt(card.dataset.inquiryId, 10);
+        var inquiryId = parseInt(card.dataset.inquiryId, 10);
         if (!inquiryId) return Promise.resolve(false);
-        const fd = new FormData();
+
+        // Prevent duplicate in-flight requests for the same card.
+        if (inflight[inquiryId]) {
+            if (onSnapBack) onSnapBack();
+            return Promise.resolve(false);
+        }
+        inflight[inquiryId] = true;
+
+        var fd = new FormData();
         fd.append('_csrf', csrf);
         fd.append('op', 'move');
         fd.append('id', String(inquiryId));
@@ -33,16 +45,19 @@
             body: fd,
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',
-        }).then(r => r.json()).then(data => {
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            delete inflight[inquiryId];
             if (!data || !data.ok) {
                 console.error('move failed:', data && data.error);
                 if (onSnapBack) onSnapBack();
                 window.location.reload();
                 return false;
             }
+            dedup(inquiryId);
             updateColumnCounts();
             return true;
-        }).catch(err => {
+        }).catch(function (err) {
+            delete inflight[inquiryId];
             console.error('network error:', err);
             if (onSnapBack) onSnapBack();
             window.location.reload();
@@ -51,41 +66,60 @@
     }
 
     function updateColumnCounts() {
-        board.querySelectorAll('.crm-col').forEach(col => {
-            const pill = col.querySelector('.crm-col-head .pill');
-            const n    = col.querySelectorAll('.crm-card-li').length;
+        board.querySelectorAll('.crm-col').forEach(function (col) {
+            var pill = col.querySelector('.crm-col-head .pill');
+            var n    = col.querySelectorAll('.crm-card-li').length;
             if (pill) pill.textContent = String(n);
         });
     }
 
+    // Remove duplicate cards with the same inquiry-id. SortableJS's HTML5
+    // drag backend can leave a ghost clone behind in some browser/OS combos.
+    function dedup(inquiryId) {
+        var cards = board.querySelectorAll('.crm-card-li[data-inquiry-id="' + inquiryId + '"]');
+        if (cards.length <= 1) return;
+        // Keep the last one (the one SortableJS dropped into the target column);
+        // remove all earlier occurrences.
+        for (var i = 0; i < cards.length - 1; i++) {
+            cards[i].parentNode.removeChild(cards[i]);
+        }
+    }
+
+    function syncSelect(card, newStatus) {
+        var sel = card.querySelector('.crm-card-status-select');
+        if (!sel) return;
+        sel.querySelectorAll('option').forEach(function (o) {
+            if (o.value === '') return;
+            o.hidden = (o.value === newStatus);
+        });
+        sel.value = '';
+        sel.dataset.current = newStatus;
+    }
+
     // ----- Move-to picker (works on every device) -----
-    board.addEventListener('change', async (ev) => {
-        const sel = ev.target;
+    board.addEventListener('change', function (ev) {
+        var sel = ev.target;
         if (!sel.matches('.crm-card-status-select')) return;
-        const newStatus = sel.value;
+        var newStatus = sel.value;
         if (!newStatus) return;
 
-        const li        = sel.closest('.crm-card-li');
-        const fromList  = sel.closest('.crm-col-list');
-        const targetList = board.querySelector('.crm-col-list[data-status="' + newStatus + '"]');
-        const oldStatus = fromList ? fromList.dataset.status : '';
+        var li         = sel.closest('.crm-card-li');
+        var fromList   = sel.closest('.crm-col-list');
+        var targetList = board.querySelector('.crm-col-list[data-status="' + newStatus + '"]');
+        var oldStatus  = fromList ? fromList.dataset.status : '';
         if (!li || !targetList) { sel.value = ''; return; }
 
         sel.disabled = true;
-        const ok = await moveCard(li, newStatus, oldStatus, () => { sel.disabled = false; sel.value = ''; });
-        if (ok) {
-            targetList.appendChild(li);
-            // The select now lives in the new column — hide the option for
-            // the current column and reveal the option for the previous one
-            // so the dropdown reflects "Move to anywhere except here".
-            sel.querySelectorAll('option').forEach(o => {
-                if (o.value === '')          return; // keep the placeholder
-                o.hidden = (o.value === newStatus);
-            });
-            sel.value = '';
-            sel.dataset.current = newStatus;
+        moveCard(li, newStatus, oldStatus, function () {
             sel.disabled = false;
-        }
+            sel.value = '';
+        }).then(function (ok) {
+            if (ok) {
+                targetList.appendChild(li);
+                syncSelect(li, newStatus);
+                sel.disabled = false;
+            }
+        });
     });
 
     // ----- Drag-and-drop (desktop only) -----
@@ -95,38 +129,41 @@
         return;
     }
 
-    const lists = board.querySelectorAll('.crm-col-list');
-    lists.forEach(list => {
+    var lists = board.querySelectorAll('.crm-col-list');
+    lists.forEach(function (list) {
         new Sortable(list, {
             group: 'crm-cards',
             animation: 160,
             ghostClass:  'crm-card-ghost',
             chosenClass: 'crm-card-chosen',
             dragClass:   'crm-card-drag',
-            forceFallback: false,
+            // Force SortableJS's own pointer-based drag instead of the HTML5
+            // Drag API. The native API can leave ghost clones in the DOM on
+            // some browser/OS combos, causing the "duplicate card" bug.
+            forceFallback: true,
             fallbackOnBody: true,
             fallbackTolerance: 8,
-            onEnd: async (evt) => {
-                const card      = evt.item;
-                const newStatus = evt.to.dataset.status;
-                const oldStatus = evt.from.dataset.status;
+            // IMPORTANT: onEnd must NOT be async. SortableJS doesn't understand
+            // Promises and an async handler can confuse its internal state,
+            // causing the dragged element to be duplicated. Fire the fetch and
+            // handle the result in .then() instead.
+            onEnd: function (evt) {
+                var card      = evt.item;
+                var newStatus = evt.to.dataset.status;
+                var oldStatus = evt.from.dataset.status;
                 if (newStatus === oldStatus) return; // intra-column reorder
-                const ok = await moveCard(card, newStatus, oldStatus, () => {
-                    const anchor = evt.from.children[evt.oldIndex] || null;
+
+                // SortableJS has already moved the card in the DOM. The fetch
+                // confirms the server side; on failure the snap-back puts it
+                // back. On success we sync the select + dedup.
+                moveCard(card, newStatus, oldStatus, function () {
+                    var anchor = evt.from.children[evt.oldIndex] || null;
                     evt.from.insertBefore(card, anchor);
-                });
-                if (ok) {
-                    // Re-sync the card's stage picker to reflect the new column.
-                    const sel = card.querySelector('.crm-card-status-select');
-                    if (sel) {
-                        sel.querySelectorAll('option').forEach(o => {
-                            if (o.value === '') return;
-                            o.hidden = (o.value === newStatus);
-                        });
-                        sel.value = '';
-                        sel.dataset.current = newStatus;
+                }).then(function (ok) {
+                    if (ok) {
+                        syncSelect(card, newStatus);
                     }
-                }
+                });
             },
         });
     });
