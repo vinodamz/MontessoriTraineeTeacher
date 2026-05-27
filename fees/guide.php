@@ -108,11 +108,14 @@ if ($showGuide) {
         $firstPayment += $monthlyTotal;
     }
 
+    // Full payment schedule — month-by-month with exact due dates.
+    $schedule = fee_payment_schedule($fs, $joinDate, $frequency, $care, $gradeInfo['ukg']);
+
     $result = compact(
         'gradeInfo', 'carePlan', 'admTotal', 'monthlyTotal',
         'prorate', 'recurringAmt', 'recurringLabel', 'recurringPeriod',
         'annualRecurring', 'careMonthly', 'ukgMonthly', 'annualTotal',
-        'firstPayment'
+        'firstPayment', 'schedule'
     );
 }
 
@@ -167,6 +170,10 @@ $inr = 'fee_inr';
         .annual-box .big { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
         .terms { font-size: .8rem; color: var(--ink-soft); line-height: 1.6; }
         .terms li { margin-bottom: .2rem; }
+        .schedule-table { font-size: .85rem; }
+        .schedule-table th { background: #f8f5ef; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; }
+        .schedule-table td { vertical-align: top; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .actions-bar { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .8rem; }
         @media print {
             .no-print { display: none !important; }
@@ -274,67 +281,57 @@ $inr = 'fee_inr';
         </table>
     </div>
 
-    <?php if ($result['prorate']['is_partial']): ?>
     <div class="card">
-        <h2>2. First Month (Pro-rated)</h2>
-        <div class="prorate-box">
-            <strong>Joining on <?= e(date('j F', strtotime($joinDate))) ?></strong> — <?= (int)$result['prorate']['days_remaining'] ?> days
-            remaining in the month (of <?= (int)$result['prorate']['days_in_month'] ?> days).
-            <br>
-            Pro-rated school fee: <?= e($inr($result['monthlyTotal'])) ?> × <?= (int)$result['prorate']['days_remaining'] ?>/<?= (int)$result['prorate']['days_in_month'] ?>
-            = <strong><?= e($inr($result['prorate']['prorated'])) ?></strong>
+        <h2>2. Complete Payment Schedule</h2>
+        <p class="note" style="margin-top:0;">
+            All recurring payments are due <strong>before the <?= (int)$fs['paymentDueDay'] ?><?= match((int)$fs['paymentDueDay'] % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th' } ?></strong> of each <?= $frequency === 'weekly' ? 'week' : ($frequency === 'quarterly' ? 'quarter' : 'month') ?>.
+            <?php if ($result['prorate']['is_partial']): ?>
+                First month is pro-rated (<?= (int)$result['prorate']['days_remaining'] ?> of <?= (int)$result['prorate']['days_in_month'] ?> days).
+            <?php endif; ?>
+        </p>
+        <div class="table-scroll">
+        <table class="schedule-table">
+            <thead>
+                <tr>
+                    <th style="width:2rem;">#</th>
+                    <th>Due Date</th>
+                    <th>Description</th>
+                    <th style="text-align:right;">Amount</th>
+                    <th style="text-align:right;">Running Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($result['schedule'] as $i => $row): ?>
+                    <tr class="<?= $row['is_first'] ? 'highlight' : '' ?>">
+                        <td><?= $i + 1 ?></td>
+                        <td style="white-space:nowrap;"><strong><?= e($row['due_label']) ?></strong></td>
+                        <td style="white-space:pre-line;"><?= e($row['description']) ?></td>
+                        <td style="text-align:right; white-space:nowrap;"><strong><?= e($inr($row['amount'])) ?></strong></td>
+                        <td style="text-align:right; white-space:nowrap;" class="muted"><?= e($inr($row['running'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php $lastRow = end($result['schedule']); ?>
+                <tr class="total">
+                    <td colspan="3">Total for the academic year (<?= count($result['schedule']) ?> payments)</td>
+                    <td style="text-align:right;"><?= e($inr($lastRow['running'])) ?></td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
         </div>
-        <table>
-            <tr><td>Admission fees</td><td><?= e($inr($result['admTotal'])) ?></td></tr>
-            <tr><td>First month (pro-rated)</td><td><?= e($inr($result['prorate']['prorated'])) ?></td></tr>
-            <tr class="total"><td>Amount due at joining</td><td><?= e($inr($result['firstPayment'])) ?></td></tr>
-        </table>
-        <p class="note">Regular billing starts from the 1st of the following month.</p>
-    </div>
-    <?php else: ?>
-    <div class="card">
-        <h2>2. Amount Due at Joining</h2>
-        <table>
-            <tr><td>Admission fees</td><td><?= e($inr($result['admTotal'])) ?></td></tr>
-            <tr><td>First month school fee</td><td><?= e($inr($result['monthlyTotal'])) ?></td></tr>
-            <tr class="total"><td>Total due at joining</td><td><?= e($inr($result['firstPayment'])) ?></td></tr>
-        </table>
-    </div>
-    <?php endif; ?>
-
-    <div class="card highlight">
-        <h2>3. Recurring Fees</h2>
-        <table>
-            <tr>
-                <td><?= e($result['recurringLabel']) ?></td>
-                <td><?= e($inr($result['recurringAmt'])) ?> <?= e($result['recurringPeriod']) ?></td>
-            </tr>
-            <?php if ($result['careMonthly'] > 0): ?>
-                <tr>
-                    <td><?= e($result['carePlan']['label']) ?> (+billing)</td>
-                    <td><?= e($inr($result['careMonthly'])) ?> /month</td>
-                </tr>
-            <?php endif; ?>
-            <?php if ($result['ukgMonthly'] > 0): ?>
-                <tr>
-                    <td>UKG Readiness Programme</td>
-                    <td><?= e($inr($result['ukgMonthly'])) ?> /month</td>
-                </tr>
-            <?php endif; ?>
-        </table>
     </div>
 
     <div class="card">
-        <h2>4. Annual Estimate</h2>
+        <h2>3. Summary</h2>
         <div class="annual-box">
-            <div class="big"><?= e($inr($result['annualTotal'])) ?></div>
-            <div class="muted">Estimated total for the academic year</div>
+            <div class="big"><?= e($inr($lastRow['running'])) ?></div>
+            <div class="muted">Total payable for the academic year</div>
         </div>
         <table style="margin-top:.5rem;">
-            <tr><td>Admission (one-time)</td><td><?= e($inr($result['admTotal'])) ?></td></tr>
-            <tr><td>School fee (12 months)</td><td>~<?= e($inr($result['annualRecurring'])) ?></td></tr>
+            <tr><td>Admission (one-time, at joining)</td><td><?= e($inr($result['admTotal'])) ?></td></tr>
+            <tr><td>School fee (<?= e($frequency) ?>)</td><td>~<?= e($inr($result['annualRecurring'])) ?></td></tr>
             <?php if ($result['careMonthly'] > 0): ?>
-                <tr><td>Care plan (12 months)</td><td>~<?= e($inr($result['careMonthly'] * 12)) ?></td></tr>
+                <tr><td><?= e($result['carePlan']['label']) ?> (12 months)</td><td>~<?= e($inr($result['careMonthly'] * 12)) ?></td></tr>
             <?php endif; ?>
             <?php if ($result['ukgMonthly'] > 0): ?>
                 <tr><td>UKG Readiness (12 months)</td><td>~<?= e($inr($result['ukgMonthly'] * 12)) ?></td></tr>
@@ -343,11 +340,12 @@ $inr = 'fee_inr';
     </div>
 
     <div class="card">
-        <h2>5. Terms & Payment Info</h2>
+        <h2>4. Terms & Payment Info</h2>
         <ul class="terms">
             <li>Fees are collected via the <strong>CoFee app</strong>. Payment links are sent to your registered phone number.</li>
+            <li>All payments are due <strong>before the <?= (int)$fs['paymentDueDay'] ?><?= match((int)$fs['paymentDueDay'] % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th' } ?> of each month</strong>.</li>
             <li>Grace period: <strong><?= (int)$fs['graceDays'] ?> days</strong> from the due date.</li>
-            <li>Late payment fee: <strong><?= e($inr($fs['lateFee'])) ?></strong> after the grace period.</li>
+            <li>Late payment fee: <strong><?= e($inr($fs['lateFee'])) ?></strong> applies after the grace period.</li>
             <li>You may switch between monthly and weekly plans from the next billing cycle. Inform the office in advance.</li>
             <li>Fees are non-refundable once the billing cycle has begun.</li>
             <li>Amounts are for the 2026-27 academic year and subject to revision for subsequent years.</li>

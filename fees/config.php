@@ -27,6 +27,7 @@ $fields = [
     ['key' => 'ukg_readiness',     'label' => 'UKG Readiness Programme (monthly)','default' => 1500],
     ['key' => 'late_fee',          'label' => 'Late Payment Fee',                'default' => 500],
     ['key' => 'grace_days',        'label' => 'Grace Period (days)',             'default' => 7],
+    ['key' => 'payment_due_day',   'label' => 'Monthly Payment Due Day (e.g. 5 = before 5th)', 'default' => 5],
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
