@@ -273,6 +273,7 @@ require __DIR__ . '/../includes/header.php';
             </form>
         <?php endif; ?>
         <a class="btn" href="/crm/edit.php?id=<?= $id ?>">Edit</a>
+        <a class="btn" href="/fees/guide.php?inquiry_id=<?= $id ?>" title="Generate personalised fee guide for this family">Fee Guide</a>
         <form method="post" style="display:inline;"
               onsubmit="return confirm('Delete this inquiry permanently? Touchpoints and unpromoted children will be lost.')">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
