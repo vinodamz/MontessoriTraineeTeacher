@@ -46,6 +46,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/fees/config.php');
 }
 
+// Handle CoFee API settings separately (string values, not integers).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_section'] ?? '') === 'cofee') {
+    csrf_check();
+    $pdo = db();
+    $cofeeFields = ['cofee_org_id', 'cofee_branch_id', 'cofee_token'];
+    foreach ($cofeeFields as $k) {
+        $val = trim((string)($_POST[$k] ?? ''));
+        $pdo->prepare("
+            INSERT INTO app_settings (setting_key, setting_value)
+            VALUES (:k, :v)
+            ON DUPLICATE KEY UPDATE setting_value = :v2
+        ")->execute([':k' => $k, ':v' => $val, ':v2' => $val]);
+    }
+    // Also save group IDs so the wizard can link directly.
+    $groupFields = ['cofee_group_joining', 'cofee_group_monthly', 'cofee_group_weekly', 'cofee_group_quarterly', 'cofee_group_ukg'];
+    foreach ($groupFields as $k) {
+        $val = trim((string)($_POST[$k] ?? ''));
+        $pdo->prepare("
+            INSERT INTO app_settings (setting_key, setting_value)
+            VALUES (:k, :v)
+            ON DUPLICATE KEY UPDATE setting_value = :v2
+        ")->execute([':k' => $k, ':v' => $val, ':v2' => $val]);
+    }
+    app_setting_clear_cache();
+    flash_set('ok', 'CoFee API settings saved.');
+    redirect('/fees/config.php#cofee');
+}
+
 $pageTitle = 'Fee Configuration';
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -83,5 +111,45 @@ require __DIR__ . '/../includes/header.php';
         <button class="btn btn-primary" type="submit">Save all</button>
     </div>
 </form>
+
+<section class="card" id="cofee">
+    <h2>CoFee API Integration</h2>
+    <p class="muted small">Connect to <a href="https://web.cofee.life" target="_blank">web.cofee.life</a> so the enrollment wizard can create members directly. Get the token from DevTools → Application → Local Storage → token.</p>
+    <form method="post">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="_section" value="cofee">
+        <table class="data-table">
+            <tbody>
+                <tr>
+                    <td><label for="cofee_org_id">Organisation ID</label></td>
+                    <td><input id="cofee_org_id" name="cofee_org_id" value="<?= e((string)app_setting('cofee_org_id', 'org_DmdMcjbAFx2232')) ?>" placeholder="org_..."></td>
+                </tr>
+                <tr>
+                    <td><label for="cofee_branch_id">Branch ID</label></td>
+                    <td><input id="cofee_branch_id" name="cofee_branch_id" value="<?= e((string)app_setting('cofee_branch_id', 'brch_ZG3hZaurVN2682')) ?>" placeholder="brch_..."></td>
+                </tr>
+                <tr>
+                    <td><label for="cofee_token">JWT Token</label></td>
+                    <td><input id="cofee_token" name="cofee_token" type="password" value="<?= e((string)app_setting('cofee_token', '')) ?>" placeholder="eyJ... (from localStorage)"></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 style="margin-top:1rem;">CoFee Group IDs</h3>
+        <p class="muted small">Paste the group IDs from CoFee so the wizard can link and enrol directly. Find them in Groups → click a group → the URL contains the ID (grp_...).</p>
+        <table class="data-table">
+            <tbody>
+                <tr><td><label>Joining Fees group</label></td><td><input name="cofee_group_joining" value="<?= e((string)app_setting('cofee_group_joining', '')) ?>" placeholder="grp_..."></td></tr>
+                <tr><td><label>School Fee — Monthly group</label></td><td><input name="cofee_group_monthly" value="<?= e((string)app_setting('cofee_group_monthly', '')) ?>" placeholder="grp_..."></td></tr>
+                <tr><td><label>School Fee — Weekly group</label></td><td><input name="cofee_group_weekly" value="<?= e((string)app_setting('cofee_group_weekly', '')) ?>" placeholder="grp_..."></td></tr>
+                <tr><td><label>School Fee — Quarterly group</label></td><td><input name="cofee_group_quarterly" value="<?= e((string)app_setting('cofee_group_quarterly', '')) ?>" placeholder="grp_..."></td></tr>
+                <tr><td><label>UKG Readiness group</label></td><td><input name="cofee_group_ukg" value="<?= e((string)app_setting('cofee_group_ukg', '')) ?>" placeholder="grp_..."></td></tr>
+            </tbody>
+        </table>
+        <div class="actions" style="margin-top:.8rem;">
+            <button class="btn btn-primary" type="submit">Save CoFee settings</button>
+        </div>
+    </form>
+</section>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
