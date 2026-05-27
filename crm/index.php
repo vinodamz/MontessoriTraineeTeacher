@@ -67,6 +67,7 @@ $rows = db()->query("
 // kanban doesn't go N+1 (one parent + child lookup per card).
 $waVarsByFam = crm_wa_vars_for_families(array_column($rows, 'id'));
 $waTemplates = crm_wa_templates_active();
+$tagsByFam   = crm_tags_for_families(array_column($rows, 'id'));
 
 // Group by status for the kanban columns (pipeline only — leads excluded).
 $byStatus = [];
@@ -117,6 +118,8 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
         <?php if ($user['role'] === 'admin'): ?>
             <a class="btn" href="/crm/stages.php"       title="Manage pipeline stages">Stages</a>
+            <a class="btn" href="/crm/tags.php"         title="Manage inquiry tags">Tags</a>
+            <a class="btn" href="/crm/probability_rules.php" title="Auto-set probability based on tags">Rules</a>
             <a class="btn" href="/crm/wa_templates.php" title="Manage WhatsApp message templates">WA templates</a>
             <a class="btn" href="/crm/audit.php"        title="Admin: full activity log">Audit</a>
         <?php endif; ?>
@@ -199,6 +202,7 @@ require __DIR__ . '/../includes/header.php';
                             <article class="crm-card">
                                 <div class="crm-card-name">
                                     <a href="/crm/view.php?id=<?= (int)$r['id'] ?>"><?= e($r['primary_name']) ?></a>
+                                    <?= crm_tag_pills($tagsByFam[(int)$r['id']] ?? []) ?>
                                 </div>
                                 <?php if (!empty($r['primary_phone'])): ?>
                                     <div class="crm-card-phone"><?= crm_phone_actions($r['primary_phone'], (int)$r['id'], $waVarsByFam[(int)$r['id']] ?? []) ?></div>
