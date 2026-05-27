@@ -812,6 +812,42 @@ a.admin-tile:hover {
 .wa-template-preview { display: block; font-size: .85rem; color: var(--ink-soft); white-space: pre-wrap; }
 .wa-blank { display: block; width: 100%; }
 
+/* /crm/calendar.php — monthly calendar grid + day detail */
+.cal-grid { padding: .6rem; }
+.cal-head {
+    display: grid; grid-template-columns: repeat(7, 1fr); text-align: center;
+    font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: .25rem;
+}
+.cal-head-cell { padding: .3rem 0; }
+.cal-body {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.cal-cell {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: .4rem .25rem; min-height: 3.6rem;
+    background: var(--bg); border-radius: 4px;
+    text-decoration: none; color: var(--ink);
+    transition: background .1s ease;
+}
+.cal-cell:hover { background: #fdf4e3; text-decoration: none; }
+.cal-blank { visibility: hidden; }
+.cal-empty { color: var(--muted); }
+.cal-today { background: #fff4e1; font-weight: 700; border: 2px solid var(--warn); }
+.cal-selected { background: #e1ecff; border: 2px solid #1e3a8a; }
+.cal-day { font-size: .95rem; line-height: 1.3; }
+.cal-badges { display: flex; gap: 3px; margin-top: .2rem; flex-wrap: wrap; justify-content: center; }
+.cal-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; border-radius: 999px;
+    font-size: .65rem; font-weight: 700; line-height: 1; padding: 0 4px;
+}
+.cal-badge-fu  { background: #e1ecff; color: #1e3a8a; }
+.cal-badge-tp  { background: #d8f3c8; color: #14532d; }
+.cal-badge-new { background: #fdf0d3; color: #78420a; }
+.cal-detail { margin-top: 1rem; }
+.cal-detail h2 { font-size: 1.15rem; margin-bottom: .6rem; }
+
 .pill-prio-urgent { background: #fbd4d4; color: #7f1d1d; font-weight: 700; }
 .pill-prio-high   { background: #fde2c4; color: #9a3412; }
 .pill-prio-normal { background: var(--line-soft); color: var(--ink-soft); }
