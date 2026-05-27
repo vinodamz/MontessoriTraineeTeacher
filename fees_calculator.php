@@ -12,32 +12,27 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/fees.php';
 
 // ============================================================================
-// Fee structure — 2026-27. Edit this section when fees change.
+// Fee structure — reads from app_settings (admin-editable at /fees/config.php).
+// Falls back to 2026-27 defaults when settings aren't present.
 // ============================================================================
 
-$admissionFees = [
-    ['name' => 'Registration / Admission Fee', 'amount' => 7500],
-    ['name' => 'Yearly Starter Kit',           'amount' => 6500],
-    ['name' => 'Annual Resource Renewal',      'amount' => 5000],
-];
+$fs = fee_structure();
+
+$admissionFees  = $fs['admission'];
 $admissionTotal = array_sum(array_column($admissionFees, 'amount'));
 
-$schoolFeeMonthly  = 7900;
-$monthlyBilling    = 300;
+$schoolFeeMonthly  = $fs['schoolFeeMonthly'];
+$monthlyBilling    = $fs['monthlyBilling'];
 $monthlyTotal      = $schoolFeeMonthly + $monthlyBilling;
-$weeklyRate        = 1975;
-$quarterlyRate     = 22800;
+$weeklyRate        = $fs['weeklyRate'];
+$quarterlyRate     = $fs['quarterlyRate'];
 
-$carePlans = [
-    'none'       => ['label' => 'No extra care (half day)',  'monthly' => 0],
-    'rest'       => ['label' => 'Rest Care (stay for nap)',  'monthly' => 1500],
-    'enrichment' => ['label' => 'Enrichment (till 3:30 PM)', 'monthly' => 3800],
-    'fullday'    => ['label' => 'Full Day (till 5:00 PM)',   'monthly' => 5500],
-];
+$carePlans = $fs['carePlans'];
 
-$ukgReadiness = 1500; // Level-3 / UKG only
+$ukgReadiness = $fs['ukgReadiness'];
 
 $grades = [
     'playgroup' => ['label' => 'Playgroup (1.5–2.5 yrs)',   'level' => 0, 'ukg' => false],
