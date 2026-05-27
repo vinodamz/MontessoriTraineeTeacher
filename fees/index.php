@@ -89,6 +89,13 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn btn-primary" href="/fees/guide.php" style="margin-top:.6rem;">Generate guide</a>
     </div>
 
+    <div class="card">
+        <h3>CoFee Admin Guide</h3>
+        <p class="muted small">Step-by-step guide for setting up groups, members, and fees on web.cofee.life.</p>
+        <p>Which groups to create, what amounts to set, how to enrol children, care add-ons, switching plans.</p>
+        <a class="btn" href="/fees/cofee_admin_guide.php" style="margin-top:.6rem;">Open guide</a>
+    </div>
+
     <?php if ($user['role'] === 'admin'): ?>
     <div class="card">
         <h3>Fee Configuration</h3>
