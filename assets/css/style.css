@@ -853,6 +853,18 @@ a.admin-tile:hover {
 .pill-prio-normal { background: var(--line-soft); color: var(--ink-soft); }
 .pill-prio-low    { background: #f1f0ed; color: #8a8780; }
 
+/* CRM Tags — colored pills on kanban cards + detail page */
+.crm-tag-group { display: inline-flex; gap: 3px; flex-wrap: wrap; margin-left: .3rem; }
+.crm-tag-pill {
+    display: inline-block; padding: .1rem .4rem; border-radius: 999px;
+    color: #fff; font-size: .6rem; font-weight: 700; letter-spacing: .02em;
+    text-transform: uppercase; line-height: 1.4;
+}
+.crm-card .crm-tag-group { margin-left: 0; margin-top: .15rem; display: flex; }
+.tag-checkboxes { display: flex; flex-wrap: wrap; gap: .4rem; }
+.tag-check-label { display: inline-flex; align-items: center; gap: .25rem; cursor: pointer; }
+.tag-check-label input[type="checkbox"] { margin: 0; }
+
 .crm-col-lead { background: #fdf0d3; border-color: #f0c98a; }
 
 /* Repeating row groups used by crm/edit.php (children, parents). */

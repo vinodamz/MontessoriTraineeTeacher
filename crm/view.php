@@ -101,6 +101,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/crm/view.php?id=' . $id . '#timeline');
     }
 
+    if ($op === 'tags') {
+        $selectedIds = array_map('intval', $_POST['tag_ids'] ?? []);
+        $pdo->prepare("DELETE FROM inquiry_family_tags WHERE family_id = :f")->execute([':f' => $id]);
+        if ($selectedIds) {
+            $ins = $pdo->prepare("INSERT IGNORE INTO inquiry_family_tags (family_id, tag_id) VALUES (:f, :t)");
+            foreach ($selectedIds as $tid) {
+                if ($tid > 0) $ins->execute([':f' => $id, ':t' => $tid]);
+            }
+        }
+        crm_recalculate_probability($id);
+        crm_audit_log('tags_updated', $id, ['tag_ids' => $selectedIds]);
+        flash_set('ok', 'Tags updated.');
+        redirect('/crm/view.php?id=' . $id);
+    }
+
     if ($op === 'promote') {
         $assignments = [];
         $kids = $_POST['kid_id'] ?? [];
@@ -289,6 +304,31 @@ require __DIR__ . '/../includes/header.php';
         <?php if ($family['notes']): ?>
             <p class="muted small" style="margin-top:.6rem; white-space:pre-wrap;"><?= e($family['notes']) ?></p>
         <?php endif; ?>
+    </div>
+
+    <div class="card" style="flex: 1 1 320px;">
+        <h3>Tags</h3>
+        <?php
+        $allTags = crm_tags_active();
+        $currentTagIds = array_map('intval', crm_family_tag_ids($id));
+        ?>
+        <form method="post">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="tags">
+            <div class="tag-checkboxes">
+                <?php foreach ($allTags as $t): ?>
+                    <label class="tag-check-label" style="--tag-color: <?= e($t['color']) ?>;">
+                        <input type="checkbox" name="tag_ids[]" value="<?= (int)$t['id'] ?>"
+                               <?= in_array((int)$t['id'], $currentTagIds, true) ? 'checked' : '' ?>>
+                        <span class="crm-tag-pill" style="background: <?= e($t['color']) ?>;"><?= e($t['name']) ?></span>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <?php if (!$allTags): ?>
+                <p class="muted small">No tags defined yet. <a href="/crm/tags.php">Add tags</a>.</p>
+            <?php endif; ?>
+            <button class="btn btn-small" type="submit" style="margin-top:.5rem;">Save tags</button>
+        </form>
     </div>
 
     <div class="card" style="flex: 1 1 320px;">

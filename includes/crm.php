@@ -144,6 +144,124 @@ function crm_source_options(): array
 }
 
 // ============================================================================
+// Tags — short labels that the team attaches to inquiries. Filterable,
+// visible on kanban cards, and feed the probability-rule engine.
+// ============================================================================
+
+/** All active tags, ordered. Cached per request. */
+function crm_tags_active(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    try {
+        $cache = db()->query("
+            SELECT id, name, color FROM crm_tags
+            WHERE is_active = 1 ORDER BY display_order, id
+        ")->fetchAll();
+    } catch (Throwable $e) {
+        $cache = [];
+    }
+    return $cache;
+}
+
+/** Tag IDs currently on a family. Returns int[] */
+function crm_family_tag_ids(int $familyId): array
+{
+    try {
+        $stmt = db()->prepare("SELECT tag_id FROM inquiry_family_tags WHERE family_id = :f");
+        $stmt->execute([':f' => $familyId]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Batch-load tags for a set of family IDs. Returns [family_id => [{id,name,color},...]] */
+function crm_tags_for_families(array $familyIds): array
+{
+    $familyIds = array_values(array_unique(array_filter(array_map('intval', $familyIds))));
+    if (!$familyIds) return [];
+    $out = array_fill_keys($familyIds, []);
+    try {
+        $place = implode(',', array_fill(0, count($familyIds), '?'));
+        $rows = db()->prepare("
+            SELECT ft.family_id, t.id, t.name, t.color
+            FROM inquiry_family_tags ft
+            JOIN crm_tags t ON t.id = ft.tag_id
+            WHERE ft.family_id IN ($place) AND t.is_active = 1
+            ORDER BY t.display_order, t.id
+        ");
+        $rows->execute($familyIds);
+        foreach ($rows as $r) {
+            $out[(int)$r['family_id']][] = ['id' => (int)$r['id'], 'name' => $r['name'], 'color' => $r['color']];
+        }
+    } catch (Throwable $e) {}
+    return $out;
+}
+
+/** Render tag pills HTML for a family (used on kanban cards + detail page). */
+function crm_tag_pills(array $tags): string
+{
+    if (!$tags) return '';
+    $html = '';
+    foreach ($tags as $t) {
+        $bg   = htmlspecialchars($t['color'], ENT_QUOTES);
+        $name = htmlspecialchars($t['name'], ENT_QUOTES);
+        $html .= '<span class="crm-tag-pill" style="background:' . $bg . ';">' . $name . '</span>';
+    }
+    return '<span class="crm-tag-group">' . $html . '</span>';
+}
+
+/**
+ * Evaluate probability rules against an inquiry's current tags.
+ * Returns the target_probability of the first matching rule (by
+ * display_order), or null if no rule matches (leave probability manual).
+ */
+function crm_evaluate_probability_rules(array $familyTagIds): ?int
+{
+    try {
+        $rules = db()->query("
+            SELECT required_tag_ids, target_probability
+            FROM crm_probability_rules
+            WHERE is_active = 1
+            ORDER BY display_order, id
+        ")->fetchAll();
+    } catch (Throwable $e) {
+        return null;
+    }
+    if (!$rules) return null;
+
+    $famSet = array_flip(array_map('intval', $familyTagIds));
+    foreach ($rules as $rule) {
+        $required = array_filter(array_map('intval', explode(',', (string)$rule['required_tag_ids'])));
+        if (!$required) continue;
+        $allPresent = true;
+        foreach ($required as $tid) {
+            if (!isset($famSet[$tid])) { $allPresent = false; break; }
+        }
+        if ($allPresent) {
+            return max(0, min(100, (int)$rule['target_probability']));
+        }
+    }
+    return null;
+}
+
+/**
+ * After tags are added/removed on a family, recalculate its probability
+ * based on the rule engine. If a rule matches, update the DB. If no rule
+ * matches, leave the current probability untouched.
+ */
+function crm_recalculate_probability(int $familyId): void
+{
+    $tagIds = crm_family_tag_ids($familyId);
+    $prob = crm_evaluate_probability_rules($tagIds);
+    if ($prob !== null) {
+        db()->prepare("UPDATE inquiry_families SET probability = :p WHERE id = :id")
+            ->execute([':p' => $prob, ':id' => $familyId]);
+    }
+}
+
+// ============================================================================
 // WhatsApp templates — pre-written messages an admin manages from
 // /crm/wa_templates.php. Click the WhatsApp pill on any inquiry → small
 // picker shows active templates → pick one → wa.me opens with the
@@ -342,6 +460,7 @@ function crm_audit_actions(): array
         'enrolled'              => 'Promoted to student',
         'touchpoint_added'      => 'Touchpoint added',
         'touchpoint_deleted'    => 'Touchpoint deleted',
+        'tags_updated'          => 'Tags updated',
         'phone_call_initiated'  => 'Phone call (Call button)',
         'whatsapp_initiated'    => 'WhatsApp opened',
         'contact_saved'         => 'Saved as contact (vCard)',
