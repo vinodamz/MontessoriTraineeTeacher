@@ -88,25 +88,61 @@ if ($showSteps) {
         'note' => 'If the member already exists in the roster, skip this step.',
     ];
 
-    // Step 2: Add to Joining Fees group
+    // Pro-rate calculation for the joining month.
+    $prorate = fee_prorate($monthlyTotal, $joinDate);
+    $proratedFee = $prorate['prorated'];
+    $proratedCare = 0;
+    $proratedUkg  = 0;
+    $carePlanMonthly = $fs['carePlans'][$care]['monthly'] ?? 0;
+    if ($carePlanMonthly > 0) {
+        $careTotal = $carePlanMonthly + $fs['monthlyBilling'];
+        $proratedCare = $isPartial
+            ? (int)round($careTotal * $daysRemaining / $daysInMonth)
+            : $careTotal;
+    }
+    if ($gradeInfo['ukg']) {
+        $proratedUkg = $isPartial
+            ? (int)round($fs['ukgReadiness'] * $daysRemaining / $daysInMonth)
+            : $fs['ukgReadiness'];
+    }
+    $firstMonthTotal = $proratedFee + $proratedCare + $proratedUkg;
+
+    // Step 2: Add to Joining Fees group (admission + pro-rated first month)
+    $joiningTotal = $admTotal + $firstMonthTotal;
     $admissionBreakdown = [];
     foreach ($fs['admission'] as $f) {
         $admissionBreakdown[] = $f['name'] . ': ' . fee_inr($f['amount']);
     }
+    $joiningNote = 'This triggers the one-time charge of ' . fee_inr($joiningTotal) . ":\n";
+    $joiningNote .= '  Admission: ' . fee_inr($admTotal) . ' (' . implode(' + ', $admissionBreakdown) . ")\n";
+    if ($isPartial) {
+        $joiningNote .= '  First month (pro-rated ' . $daysRemaining . '/' . $daysInMonth . ' days): '
+                      . fee_inr($monthlyTotal) . ' × ' . $daysRemaining . '/' . $daysInMonth
+                      . ' = ' . fee_inr($proratedFee);
+    } else {
+        $joiningNote .= '  First month school fee: ' . fee_inr($monthlyTotal);
+    }
+    if ($proratedCare > 0) {
+        $joiningNote .= "\n  Care plan (" . ($isPartial ? 'pro-rated' : $carePlan['label']) . '): ' . fee_inr($proratedCare);
+    }
+    if ($proratedUkg > 0) {
+        $joiningNote .= "\n  UKG Readiness (" . ($isPartial ? 'pro-rated' : 'full month') . '): ' . fee_inr($proratedUkg);
+    }
+    $joiningNote .= "\n\nA payment link for " . fee_inr($joiningTotal) . ' is sent to the parent immediately.'
+                  . "\nThe recurring group (step 3) starts from " . $nextMonth->format('j M Y') . ' — no double billing.';
+
     $steps[] = [
         'title'  => 'Add to "Joining Fees 2026-27" group',
         'icon'   => '2',
         'where'  => 'Groups → Joining Fees 2026-27 → Add Member',
         'fields' => [
             'Member'           => $memberName,
-            'fee_amount'       => fee_inr($admTotal),
+            'fee_amount'       => fee_inr($joiningTotal),
             'start_date'       => $joinDt->format('Y-m-d'),
             'interval'         => 'once',
             'execution_type'   => 'immediate',
         ],
-        'note' => 'This triggers the one-time admission charge of ' . fee_inr($admTotal)
-                . ' (' . implode(' + ', $admissionBreakdown) . ').'
-                . ' A payment link is sent to the parent immediately.',
+        'note' => $joiningNote,
     ];
 
     // Step 3: Add to the recurring school fee group
@@ -223,7 +259,8 @@ if ($showSteps) {
 
     // Summary step
     $totalGroups = [];
-    $totalGroups[] = 'Joining Fees: ' . fee_inr($admTotal) . ' (once)';
+    $totalGroups[] = 'Joining Fees: ' . fee_inr($joiningTotal) . ' (once — admission '
+                   . fee_inr($admTotal) . ' + first month ' . fee_inr($firstMonthTotal) . ')';
     $totalGroups[] = $recurringGroupName . ': ' . fee_inr($recurringAmt) . ' ' . $frequency;
     if ($careExtra > 0 && $frequency !== 'monthly') {
         $totalGroups[] = 'Care — ' . $carePlan['label'] . ': ' . fee_inr($careExtra) . '/month';
