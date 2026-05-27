@@ -48,16 +48,174 @@ function fee_structure(): array
         'ukg'       => ['label' => 'UKG (4.5-5.5 yrs)',       'ukg' => true],
     ];
 
+    $paymentDueDay = fee_int('payment_due_day', 5);
+    $academicStart = fee_setting('academic_start_month', '6'); // June
+    $academicMonths = fee_int('academic_months', 12);
+
     return compact(
         'admission', 'schoolFeeMonthly', 'monthlyBilling', 'weeklyRate',
         'quarterlyRate', 'ukgReadiness', 'lateFee', 'graceDays',
-        'carePlans', 'grades'
+        'carePlans', 'grades', 'paymentDueDay', 'academicStart', 'academicMonths'
     );
 }
 
 function fee_inr(int $v): string
 {
     return "\u{20B9}" . number_format($v);
+}
+
+/**
+ * Build a full payment schedule from joining date to end of academic year.
+ * Returns an array of rows, each: [due_date, description, amount, is_first].
+ */
+function fee_payment_schedule(array $fs, string $joinDate, string $frequency, string $care, bool $isUkg): array
+{
+    $monthlyTotal = $fs['schoolFeeMonthly'] + $fs['monthlyBilling'];
+    $admTotal     = array_sum(array_column($fs['admission'], 'amount'));
+    $careMonthly  = $fs['carePlans'][$care]['monthly'] ?? 0;
+    if ($careMonthly > 0) $careMonthly += $fs['monthlyBilling'];
+    $ukgMonthly   = $isUkg ? $fs['ukgReadiness'] : 0;
+    $dueDay       = $fs['paymentDueDay'];
+
+    try {
+        $joinDt = new DateTime($joinDate);
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    $joinYear  = (int)$joinDt->format('Y');
+    $joinMonth = (int)$joinDt->format('n');
+    $joinDay   = (int)$joinDt->format('j');
+
+    // Academic year: from join month to 12 months later.
+    $endDt = (clone $joinDt)->modify('+12 months');
+    $endDt->modify('last day of previous month');
+
+    $schedule = [];
+    $runningTotal = 0;
+
+    // ---- Row 1: At joining — admission + first month (possibly pro-rated) ----
+    $prorate = fee_prorate($monthlyTotal, $joinDate);
+    $firstSchoolFee = $prorate['is_partial'] ? $prorate['prorated'] : $monthlyTotal;
+    $firstCare = 0;
+    $firstUkg  = 0;
+    if ($careMonthly > 0) {
+        $firstCare = $prorate['is_partial']
+            ? (int)round($careMonthly * $prorate['days_remaining'] / $prorate['days_in_month'])
+            : $careMonthly;
+    }
+    if ($ukgMonthly > 0) {
+        $firstUkg = $prorate['is_partial']
+            ? (int)round($ukgMonthly * $prorate['days_remaining'] / $prorate['days_in_month'])
+            : $ukgMonthly;
+    }
+
+    $firstTotal = $admTotal + $firstSchoolFee + $firstCare + $firstUkg;
+    $runningTotal += $firstTotal;
+
+    $firstDesc = "Admission fees (" . fee_inr($admTotal) . ")";
+    if ($prorate['is_partial']) {
+        $firstDesc .= "\n+ School fee pro-rated " . $prorate['days_remaining'] . "/" . $prorate['days_in_month'] . " days (" . fee_inr($firstSchoolFee) . ")";
+    } else {
+        $firstDesc .= "\n+ School fee — " . $joinDt->format('F') . " (" . fee_inr($firstSchoolFee) . ")";
+    }
+    if ($firstCare > 0) {
+        $firstDesc .= "\n+ Care plan" . ($prorate['is_partial'] ? ' (pro-rated)' : '') . " (" . fee_inr($firstCare) . ")";
+    }
+    if ($firstUkg > 0) {
+        $firstDesc .= "\n+ UKG Readiness" . ($prorate['is_partial'] ? ' (pro-rated)' : '') . " (" . fee_inr($firstUkg) . ")";
+    }
+
+    $schedule[] = [
+        'due_date'    => $joinDt->format('Y-m-d'),
+        'due_label'   => 'At joining (' . $joinDt->format('j M Y') . ')',
+        'description' => $firstDesc,
+        'amount'      => $firstTotal,
+        'running'     => $runningTotal,
+        'is_first'    => true,
+    ];
+
+    // ---- Subsequent months: from the month AFTER joining ----
+    if ($frequency === 'monthly' || $frequency === 'quarterly') {
+        $intervalMonths = ($frequency === 'quarterly') ? 3 : 1;
+        $cur = (clone $joinDt)->modify('first day of next month');
+
+        while ($cur <= $endDt) {
+            $dueDateStr = $cur->format('Y') . '-' . $cur->format('m') . '-' . str_pad((string)$dueDay, 2, '0', STR_PAD_LEFT);
+            $monthLabel = $cur->format('F Y');
+
+            if ($frequency === 'quarterly') {
+                $qEnd = (clone $cur)->modify('+2 months');
+                $monthLabel = $cur->format('M') . ' – ' . $qEnd->format('M Y');
+                $amt = $fs['quarterlyRate'];
+                $desc = "School fee — $monthLabel";
+                if ($careMonthly > 0) {
+                    $careQ = $careMonthly * 3;
+                    $amt += $careQ;
+                    $desc .= "\n+ Care plan 3 months (" . fee_inr($careQ) . ")";
+                }
+                if ($ukgMonthly > 0) {
+                    $ukgQ = $ukgMonthly * 3;
+                    $amt += $ukgQ;
+                    $desc .= "\n+ UKG Readiness 3 months (" . fee_inr($ukgQ) . ")";
+                }
+            } else {
+                $amt = $monthlyTotal;
+                $desc = "School fee — $monthLabel";
+                if ($careMonthly > 0) {
+                    $amt += $careMonthly;
+                    $desc .= "\n+ Care plan (" . fee_inr($careMonthly) . ")";
+                }
+                if ($ukgMonthly > 0) {
+                    $amt += $ukgMonthly;
+                    $desc .= "\n+ UKG Readiness (" . fee_inr($ukgMonthly) . ")";
+                }
+            }
+
+            $runningTotal += $amt;
+            $schedule[] = [
+                'due_date'    => $dueDateStr,
+                'due_label'   => 'Before ' . date('j M Y', strtotime($dueDateStr)),
+                'description' => $desc,
+                'amount'      => $amt,
+                'running'     => $runningTotal,
+                'is_first'    => false,
+            ];
+
+            $cur->modify("+{$intervalMonths} months");
+        }
+    } elseif ($frequency === 'weekly') {
+        $cur = (clone $joinDt)->modify('next monday');
+        $weekNum = 1;
+        while ($cur <= $endDt && $weekNum <= 52) {
+            $amt = $fs['weeklyRate'];
+            $desc = "School fee — Week $weekNum (" . $cur->format('j M') . ")";
+            // Care + UKG are monthly; show them on the first week of each month.
+            $isFirstWeekOfMonth = ((int)$cur->format('j') <= 7);
+            if ($isFirstWeekOfMonth && $careMonthly > 0) {
+                $amt += $careMonthly;
+                $desc .= "\n+ Care plan — " . $cur->format('F') . " (" . fee_inr($careMonthly) . ")";
+            }
+            if ($isFirstWeekOfMonth && $ukgMonthly > 0) {
+                $amt += $ukgMonthly;
+                $desc .= "\n+ UKG Readiness — " . $cur->format('F') . " (" . fee_inr($ukgMonthly) . ")";
+            }
+
+            $runningTotal += $amt;
+            $schedule[] = [
+                'due_date'    => $cur->format('Y-m-d'),
+                'due_label'   => $cur->format('l, j M Y'),
+                'description' => $desc,
+                'amount'      => $amt,
+                'running'     => $runningTotal,
+                'is_first'    => false,
+            ];
+            $cur->modify('+1 week');
+            $weekNum++;
+        }
+    }
+
+    return $schedule;
 }
 
 /**
