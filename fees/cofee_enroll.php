@@ -191,16 +191,30 @@ if ($showSteps) {
             break;
     }
 
-    // Care add-on: adjust the member's fee_amount in the recurring group
+    // 3-group model: care add-on + UKG Readiness are folded into the
+    // member's fee_amount on the recurring group (Monthly or Term).
+    // No separate care group, no separate UKG group.
     $careExtra = 0;
     $careLine  = '';
     if ($carePlan['monthly'] > 0) {
         $careExtra = $carePlan['monthly'] + $fs['monthlyBilling'];
-        $careLine = $carePlan['label'] . ' (+' . fee_inr($carePlan['monthly']) . ' + ' . fee_inr($fs['monthlyBilling']) . ' billing)';
-        if ($frequency === 'monthly') {
-            $recurringAmt += $careExtra;
-        }
+        $careLine  = $carePlan['label'] . ' (+' . fee_inr($carePlan['monthly']) . ' + ' . fee_inr($fs['monthlyBilling']) . ' billing)';
     }
+    $ukgExtra = $gradeInfo['ukg'] ? $fs['ukgReadiness'] : 0;
+
+    // For weekly/quarterly: care and UKG are monthly costs, so we multiply
+    // them into the cadence to keep one charge per cycle.
+    $cadenceMultiplier = ($frequency === 'quarterly') ? 3 : (($frequency === 'weekly') ? 0.25 : 1);
+    if ($frequency === 'weekly') {
+        // Weekly: care/UKG don't fold neatly into weekly billing — keep them
+        // as the monthly amount divided by ~4. We add them but note the simplification.
+        $careInCadence = (int)round($careExtra * 0.25);
+        $ukgInCadence  = (int)round($ukgExtra * 0.25);
+    } else {
+        $careInCadence = (int)round($careExtra * $cadenceMultiplier);
+        $ukgInCadence  = (int)round($ukgExtra * $cadenceMultiplier);
+    }
+    $recurringAmt += $careInCadence + $ukgInCadence;
 
     $step3Fields = [
         'Member'           => $memberName,
@@ -211,9 +225,13 @@ if ($showSteps) {
         'execution_type'   => 'due_date',
     ];
 
-    $step3Note = $recurringStartNote;
-    if ($careExtra > 0 && $frequency === 'monthly') {
-        $step3Note .= "\n\nfee_amount includes care add-on: " . fee_inr($monthlyTotal) . ' (school) + ' . fee_inr($careExtra) . ' (' . $careLine . ') = ' . fee_inr($recurringAmt) . '.';
+    $breakdown = ['Base school fee: ' . fee_inr($recurringAmt - $careInCadence - $ukgInCadence)];
+    if ($careInCadence > 0) $breakdown[] = $carePlan['label'] . ': +' . fee_inr($careInCadence);
+    if ($ukgInCadence > 0)  $breakdown[] = 'UKG Readiness: +' . fee_inr($ukgInCadence);
+    $breakdown[] = 'Total fee_amount: ' . fee_inr($recurringAmt);
+    $step3Note = $recurringStartNote . "\n\n" . implode("\n", $breakdown);
+    if ($frequency === 'weekly' && ($careExtra + $ukgExtra) > 0) {
+        $step3Note .= "\n\nNote: care/UKG are monthly costs divided across 4 weekly charges. For a 5-Monday month the parent pays a bit more.";
     }
 
     $steps[] = [
@@ -224,52 +242,12 @@ if ($showSteps) {
         'note'   => $step3Note,
     ];
 
-    // Step 3b: If care is a separate group (alternative approach)
-    if ($careExtra > 0 && $frequency !== 'monthly') {
-        $steps[] = [
-            'title'  => 'Add care plan (separate group OR per-member override)',
-            'icon'   => '3b',
-            'where'  => 'Groups → Care — ' . $carePlan['label'] . ' → Add Member',
-            'fields' => [
-                'Member'         => $memberName,
-                'fee_amount'     => fee_inr($careExtra),
-                'start_date'     => $recurringStartDate,
-                'interval'       => 'monthly',
-                'execution_type' => 'due_date',
-            ],
-            'note' => 'Care plans are always monthly. Since the school fee is ' . $frequency . ', the care is a separate monthly charge.'
-                     . "\nAlternatively: add the care cost to the member's fee_amount in the school fee group as a per-member override.",
-        ];
-    }
-
-    // Step 4: UKG Readiness (if applicable)
-    if ($gradeInfo['ukg']) {
-        $steps[] = [
-            'title'  => 'Add to "UKG Readiness" group',
-            'icon'   => '4',
-            'where'  => 'Groups → UKG Readiness → Add Member',
-            'fields' => [
-                'Member'         => $memberName,
-                'fee_amount'     => fee_inr($fs['ukgReadiness']),
-                'start_date'     => $recurringStartDate,
-                'interval'       => 'monthly',
-                'execution_type' => 'due_date',
-            ],
-            'note' => 'UKG Readiness Programme — ' . fee_inr($fs['ukgReadiness']) . '/month, Level-3 children only.',
-        ];
-    }
-
     // Summary step
     $totalGroups = [];
     $totalGroups[] = 'Joining Fees: ' . fee_inr($joiningTotal) . ' (once — admission '
                    . fee_inr($admTotal) . ' + first month ' . fee_inr($firstMonthTotal) . ')';
-    $totalGroups[] = $recurringGroupName . ': ' . fee_inr($recurringAmt) . ' ' . $frequency;
-    if ($careExtra > 0 && $frequency !== 'monthly') {
-        $totalGroups[] = 'Care — ' . $carePlan['label'] . ': ' . fee_inr($careExtra) . '/month';
-    }
-    if ($gradeInfo['ukg']) {
-        $totalGroups[] = 'UKG Readiness: ' . fee_inr($fs['ukgReadiness']) . '/month';
-    }
+    $totalGroups[] = $recurringGroupName . ': ' . fee_inr($recurringAmt) . ' ' . $frequency
+                   . ($careInCadence + $ukgInCadence > 0 ? ' (includes care + UKG overrides)' : '');
 
     $steps[] = [
         'title'  => 'Verify — child should now be in these groups',
