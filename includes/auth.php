@@ -163,12 +163,42 @@ function current_user(): ?array
     if (empty($_SESSION['user_id'])) {
         return null;
     }
-    return [
-        'id'      => (int)$_SESSION['user_id'],
-        'name'    => $_SESSION['user_name']    ?? '',
-        'role'    => $_SESSION['user_role']    ?? 'teacher',
-        'modules' => $_SESSION['user_modules'] ?? [],
-    ];
+    $uid = (int)$_SESSION['user_id'];
+
+    // Re-read modules + role + active from the DB on every request so that
+    // when an admin grants a teacher new module access (or revokes one), the
+    // change takes effect immediately — no need for the teacher to log out
+    // and back in. Cached per request via a static so we hit the DB once
+    // per page load, not once per current_user() call.
+    static $cache = [];
+    if (!isset($cache[$uid])) {
+        try {
+            $stmt = db()->prepare("SELECT name, role, modules, active FROM users WHERE id = :id");
+            $stmt->execute([':id' => $uid]);
+            $row = $stmt->fetch();
+        } catch (Throwable $e) {
+            $row = null;
+        }
+        if (!$row || !(int)($row['active'] ?? 0)) {
+            // User was deleted or deactivated — invalidate the session.
+            session_unset();
+            session_destroy();
+            $cache[$uid] = null;
+            return null;
+        }
+        $cache[$uid] = [
+            'id'      => $uid,
+            'name'    => $row['name'] ?? ($_SESSION['user_name'] ?? ''),
+            'role'    => $row['role'] ?? 'teacher',
+            'modules' => user_modules_from_row($row),
+        ];
+        // Keep session in sync so other code reading $_SESSION directly
+        // (header nav, etc.) sees the fresh values too.
+        $_SESSION['user_name']    = $cache[$uid]['name'];
+        $_SESSION['user_role']    = $cache[$uid]['role'];
+        $_SESSION['user_modules'] = $cache[$uid]['modules'];
+    }
+    return $cache[$uid];
 }
 
 function require_login(): array
