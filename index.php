@@ -226,133 +226,102 @@ require __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<ul class="module-grid" role="list">
-    <?php if ($hasStudents): ?>
+<?php
+$staffStats = ['pending_leave' => 0, 'open_msgs' => 0];
+if ($hasStaff) {
+    try {
+        $staffStats['pending_leave'] = (int)db()->query("SELECT COUNT(*) FROM staff_leave_requests WHERE status='pending'")->fetchColumn();
+        $staffStats['open_msgs']     = (int)db()->query("SELECT COUNT(*) FROM staff_messages WHERE status IN ('open','acknowledged')")->fetchColumn();
+    } catch (Throwable $e) {}
+}
+
+// App catalog — each entry: icon SVG, gradient class, subtitle, stats builder.
+$apps = [];
+if ($hasStudents) {
+    $stats = [['label' => $studentsStats['active'] . ' active', 'tone' => '']];
+    if ($studentsStats['total'] !== $studentsStats['active']) $stats[] = ['label' => $studentsStats['total'] . ' total', 'tone' => ''];
+    $apps[] = ['key' => 'students', 'name' => 'Students', 'subtitle' => 'Roster · Parents · Attendance', 'href' => '/students/index.php', 'stats' => $stats];
+}
+if ($hasMontess) {
+    $stats = [['label' => $mttStats['students'] . ' student' . ($mttStats['students'] === 1 ? '' : 's'), 'tone' => '']];
+    if ($mttStats['pending_this_month'] > 0) $stats[] = ['label' => $mttStats['pending_this_month'] . ' pending', 'tone' => 'warn'];
+    $apps[] = ['key' => 'assessment', 'name' => 'Assessment', 'subtitle' => 'Trainee teacher progress', 'href' => '/assessment/index.php', 'stats' => $stats];
+}
+if ($hasTasks) {
+    $stats = [['label' => $tasksStats['todo'] . ' open', 'tone' => '']];
+    if ($tasksStats['today']   > 0) $stats[] = ['label' => $tasksStats['today'] . ' today',   'tone' => ''];
+    if ($tasksStats['overdue'] > 0) $stats[] = ['label' => $tasksStats['overdue'] . ' overdue', 'tone' => 'warn'];
+    $apps[] = ['key' => 'tasks', 'name' => 'Tasks', 'subtitle' => 'Team board · Routines', 'href' => '/tasks/index.php', 'stats' => $stats];
+}
+if ($hasCrm) {
+    $stats = [['label' => $crmStats['open'] . ' inquiries', 'tone' => '']];
+    if ($crmStats['weighted'] > 0) $stats[] = ['label' => '₹' . number_format($crmStats['weighted'], 0) . '/mo', 'tone' => ''];
+    $apps[] = ['key' => 'admissions', 'name' => 'Admissions', 'subtitle' => 'Pipeline · Tours · Follow-ups', 'href' => '/crm/index.php', 'stats' => $stats];
+}
+if ($hasRecruit) {
+    $stats = [['label' => $recruitStats['open'] . ' candidates', 'tone' => '']];
+    if ($recruitStats['interviews_7d'] > 0) $stats[] = ['label' => $recruitStats['interviews_7d'] . ' interviews 7d', 'tone' => 'warn'];
+    $apps[] = ['key' => 'recruitment', 'name' => 'Recruitment', 'subtitle' => 'Candidates · Demo days', 'href' => '/recruitment/index.php', 'stats' => $stats];
+}
+if ($hasStaff) {
+    $stats = [];
+    if ($staffStats['pending_leave'] > 0) $stats[] = ['label' => $staffStats['pending_leave'] . ' leave', 'tone' => 'warn'];
+    if ($staffStats['open_msgs']     > 0) $stats[] = ['label' => $staffStats['open_msgs'] . ' messages', 'tone' => ''];
+    $apps[] = ['key' => 'staff', 'name' => 'Staff', 'subtitle' => 'Attendance · Leave · HR', 'href' => '/staff/index.php', 'stats' => $stats];
+}
+if ($hasExpenses) {
+    $stats = [['label' => '₹' . number_format((float)$expensesStats['total'], 0), 'tone' => '']];
+    if ($expensesStats['pending'] > 0) $stats[] = ['label' => $expensesStats['pending'] . ' to review', 'tone' => 'warn'];
+    $apps[] = ['key' => 'expenses', 'name' => 'Expenses', 'subtitle' => 'Receipts · OCR · Reimburse', 'href' => '/expenses/index.php', 'stats' => $stats];
+}
+if ($hasFees) {
+    $apps[] = ['key' => 'fees', 'name' => 'Fees', 'subtitle' => 'Calculator · CoFee · Guide', 'href' => '/fees/index.php',
+               'stats' => [
+                   ['label' => 'Admission ' . fee_inr($admTotal ?? 19000), 'tone' => ''],
+                   ['label' => 'Monthly ' . fee_inr($monthlyTotal ?? 8200), 'tone' => ''],
+               ]];
+}
+
+// SVG glyphs — simple line icons (24x24, 1.8 stroke). Each module key maps here.
+$icons = [
+    'students'    => '<path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    'assessment'  => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    'tasks'       => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 10l2 2 4-4M8 16l2 2 4-4"/>',
+    'admissions'  => '<path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z"/>',
+    'recruitment' => '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M15 20a4 4 0 0 1 6 0"/>',
+    'staff'       => '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><rect x="6" y="14" width="12" height="7" rx="2"/><path d="M10 17h4"/>',
+    'expenses'    => '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5M8 17h4"/><path d="M16 17l2 2 3-3"/>',
+    'fees'        => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h4"/><circle cx="16" cy="16" r="2"/>',
+];
+?>
+
+<ul class="app-grid" role="list">
+    <?php foreach ($apps as $app): ?>
         <li>
-            <a class="module-tile" href="/students/index.php">
-                <h2>Students</h2>
-                <p class="muted">Profiles, parents, contacts, attendance and fees.</p>
-                <div class="module-stats">
-                    <span class="pill"><?= (int)$studentsStats['active'] ?> active</span>
-                    <?php if ($studentsStats['total'] !== $studentsStats['active']): ?>
-                        <span class="pill"><?= (int)$studentsStats['total'] ?> total</span>
+            <a class="app-card" href="<?= e($app['href']) ?>">
+                <div class="app-icon app-icon-<?= e($app['key']) ?>">
+                    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <?= $icons[$app['key']] ?? '' ?>
+                    </svg>
+                </div>
+                <div class="app-text">
+                    <div class="app-name"><?= e($app['name']) ?></div>
+                    <div class="app-subtitle"><?= e($app['subtitle']) ?></div>
+                    <?php if (!empty($app['stats'])): ?>
+                        <div class="app-stats">
+                            <?php foreach ($app['stats'] as $s): ?>
+                                <span class="pill <?= $s['tone'] === 'warn' ? 'pill-warn' : '' ?>"><?= e($s['label']) ?></span>
+                            <?php endforeach; ?>
+                        </div>
                     <?php endif; ?>
                 </div>
             </a>
         </li>
-    <?php endif; ?>
-    <?php if ($hasMontess): ?>
-        <li>
-            <a class="module-tile" href="/assessment/index.php">
-                <h2>Assessment</h2>
-                <p class="muted">Trainee teacher assessment — student progress, baselines, monthly cards.</p>
-                <div class="module-stats">
-                    <span class="pill"><?= (int)$mttStats['students'] ?> student<?= $mttStats['students'] === 1 ? '' : 's' ?></span>
-                    <?php if ($mttStats['pending_this_month'] > 0): ?>
-                        <span class="pill pill-warn"><?= (int)$mttStats['pending_this_month'] ?> pending this month</span>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if ($hasTasks): ?>
-        <li>
-            <a class="module-tile" href="/tasks/index.php">
-                <h2>Tasks</h2>
-                <p class="muted">Team task board — kanban, recurring routines, calendar view.</p>
-                <div class="module-stats">
-                    <span class="pill"><?= (int)$tasksStats['todo'] ?> open</span>
-                    <?php if ($tasksStats['today'] > 0): ?>
-                        <span class="pill"><?= (int)$tasksStats['today'] ?> due today</span>
-                    <?php endif; ?>
-                    <?php if ($tasksStats['overdue'] > 0): ?>
-                        <span class="pill pill-warn"><?= (int)$tasksStats['overdue'] ?> overdue</span>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if ($hasCrm): ?>
-        <li>
-            <a class="module-tile" href="/crm/index.php">
-                <h2>Admissions</h2>
-                <p class="muted">Prospect pipeline, tours, follow-ups and projected revenue.</p>
-                <div class="module-stats">
-                    <span class="pill"><?= (int)$crmStats['open'] ?> open inquir<?= (int)$crmStats['open'] === 1 ? 'y' : 'ies' ?></span>
-                    <?php if ($crmStats['weighted'] > 0): ?>
-                        <span class="pill">₹<?= number_format($crmStats['weighted'], 0) ?>/mo projected</span>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if ($hasRecruit): ?>
-        <li>
-            <a class="module-tile" href="/recruitment/index.php">
-                <h2>Recruitment</h2>
-                <p class="muted">Candidate pipeline, demo days, scorecards and hires.</p>
-                <div class="module-stats">
-                    <span class="pill"><?= (int)$recruitStats['open'] ?> open candidate<?= (int)$recruitStats['open'] === 1 ? '' : 's' ?></span>
-                    <?php if ($recruitStats['interviews_7d'] > 0): ?>
-                        <span class="pill pill-warn"><?= (int)$recruitStats['interviews_7d'] ?> interview<?= (int)$recruitStats['interviews_7d'] === 1 ? '' : 's' ?> this week</span>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if ($hasStaff): ?>
-        <?php
-        $staffStats = ['pending_leave' => 0, 'open_msgs' => 0];
-        try {
-            $staffStats['pending_leave'] = (int)db()->query("SELECT COUNT(*) FROM staff_leave_requests WHERE status='pending'")->fetchColumn();
-            $staffStats['open_msgs']     = (int)db()->query("SELECT COUNT(*) FROM staff_messages WHERE status IN ('open','acknowledged')")->fetchColumn();
-        } catch (Throwable $e) { /* tables may not exist yet */ }
-        ?>
-        <li>
-            <a class="module-tile" href="/staff/index.php">
-                <h2>Staff</h2>
-                <p class="muted">Attendance, leave, 1:1 notes, HR documents and messages to management.</p>
-                <div class="module-stats">
-                    <?php if ($staffStats['pending_leave'] > 0): ?>
-                        <span class="pill pill-warn"><?= (int)$staffStats['pending_leave'] ?> pending leave</span>
-                    <?php endif; ?>
-                    <?php if ($staffStats['open_msgs'] > 0): ?>
-                        <span class="pill"><?= (int)$staffStats['open_msgs'] ?> open message<?= $staffStats['open_msgs'] === 1 ? '' : 's' ?></span>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if ($hasExpenses): ?>
-        <li>
-            <a class="module-tile" href="/expenses/index.php">
-                <h2>Expenses</h2>
-                <p class="muted">Reimbursable spend — snap a receipt, let OCR pre-fill the amount.</p>
-                <div class="module-stats">
-                    <span class="pill">₹<?= number_format((float)$expensesStats['total'], 2) ?> this month</span>
-                    <?php if ($expensesStats['pending'] > 0): ?>
-                        <span class="pill pill-warn"><?= (int)$expensesStats['pending'] ?> awaiting review</span>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if ($hasFees): ?>
-        <li>
-            <a class="module-tile" href="/fees/index.php">
-                <h2>Fees</h2>
-                <p class="muted">Fee calculator, personalised parent fee guides, and fee configuration.</p>
-                <div class="module-stats">
-                    <span class="pill">Admission <?= e(fee_inr($admTotal ?? 19000)) ?></span>
-                    <span class="pill">Monthly <?= e(fee_inr($monthlyTotal ?? 8200)) ?></span>
-                </div>
-            </a>
-        </li>
-    <?php endif; ?>
-    <?php if (!$hasTasks && !$hasMontess && !$hasStudents && !$hasCrm && !$hasRecruit && !$hasStaff && !$hasExpenses && !$hasFees): ?>
-        <li>
+    <?php endforeach; ?>
+    <?php if (!$apps): ?>
+        <li class="app-empty">
             <div class="empty">
-                <p>No modules assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
+                <p>No apps assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
             </div>
         </li>
     <?php endif; ?>
