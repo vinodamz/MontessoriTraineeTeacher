@@ -23,8 +23,20 @@ $monthlyTotal = $fs['schoolFeeMonthly'] + $fs['monthlyBilling'];
 $admTotal     = array_sum(array_column($fs['admission'], 'amount'));
 
 // Auto-populate from inquiry if linked.
+$studentId = (int)($_GET['student_id'] ?? 0);
 $inquiryId = (int)($_GET['inquiry_id'] ?? 0);
 $prefill = ['child_name' => '', 'parent_name' => '', 'parent_phone' => '', 'parent_email' => '', 'grade' => '', 'join_date' => '', 'frequency' => 'monthly', 'care' => 'none'];
+if ($studentId > 0) {
+    $stu = fee_student_lookup($studentId);
+    if ($stu) {
+        $prefill['child_name']   = trim($stu['first_name'] . ' ' . ($stu['last_name'] ?? ''));
+        $prefill['parent_name']  = (string)($stu['parent_name']  ?? '');
+        $prefill['parent_phone'] = (string)($stu['parent_phone'] ?? '');
+        $prefill['parent_email'] = (string)($stu['parent_email'] ?? '');
+        $prefill['grade']        = fee_grade_from_student((string)($stu['grade'] ?? ''));
+        $prefill['join_date']    = (string)($stu['joining_date'] ?? '');
+    }
+}
 if ($inquiryId > 0) {
     try {
         require_once __DIR__ . '/../includes/crm.php';
@@ -295,8 +307,24 @@ require __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="card no-print">
+    <?php $studentOptions = fee_student_options(); ?>
+    <?php if ($studentOptions): ?>
+        <form method="get" style="margin-bottom: 1rem;">
+            <label for="student_id"><strong>Pick an enrolled student</strong> <span class="muted small">(optional shortcut)</span></label>
+            <select id="student_id" name="student_id" onchange="this.form.submit()">
+                <option value="">— or fill in manually below —</option>
+                <?php foreach ($studentOptions as $s):
+                    $label = trim($s['first_name'] . ' ' . ($s['last_name'] ?? '')) . ' · ' . ($s['grade'] ?? '');
+                ?>
+                    <option value="<?= (int)$s['id'] ?>" <?= $studentId === (int)$s['id'] ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </form>
+    <?php endif; ?>
+
     <form method="get">
         <?php if ($inquiryId): ?><input type="hidden" name="inquiry_id" value="<?= $inquiryId ?>"><?php endif; ?>
+        <?php if ($studentId): ?><input type="hidden" name="student_id" value="<?= $studentId ?>"><?php endif; ?>
         <div class="row">
             <div><label>Child's Name</label><input name="child_name" value="<?= e($childName) ?>" required placeholder="e.g. Aanya"></div>
             <div><label>Parent Name</label><input name="parent_name" value="<?= e($parentName) ?>" required placeholder="e.g. Vinod Krishnan"></div>
