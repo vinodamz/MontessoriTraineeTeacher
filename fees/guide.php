@@ -28,9 +28,20 @@ $user = require_login();
 
 $fs = fee_structure();
 
-// Auto-populate from an inquiry if ?inquiry_id is passed.
+// Auto-populate from an existing student (?student_id=X) or from a CRM
+// inquiry (?inquiry_id=X). Student wins if both are present.
 $prefill = ['child_name' => '', 'parent_name' => '', 'grade' => '', 'join_date' => '', 'frequency' => 'monthly', 'care' => 'none'];
+$studentId = (int)($_GET['student_id'] ?? 0);
 $inquiryId = (int)($_GET['inquiry_id'] ?? 0);
+if ($studentId > 0) {
+    $stu = fee_student_lookup($studentId);
+    if ($stu) {
+        $prefill['child_name']  = trim($stu['first_name'] . ' ' . ($stu['last_name'] ?? ''));
+        $prefill['parent_name'] = (string)($stu['parent_name'] ?? '');
+        $prefill['grade']       = fee_grade_from_student((string)($stu['grade'] ?? ''));
+        $prefill['join_date']   = (string)($stu['joining_date'] ?? '');
+    }
+}
 if ($inquiryId > 0) {
     try {
         require_once __DIR__ . '/../includes/crm.php';
@@ -192,9 +203,27 @@ $inr = 'fee_inr';
 <div class="card no-print">
     <h1>Generate Parent Fee Guide</h1>
     <p class="muted">Fill in the student details. The fee guide will appear below — use "Download PDF" to save or share it.</p>
+    <?php $studentOptions = fee_student_options(); ?>
+    <?php if ($studentOptions): ?>
+        <form method="get" style="margin-bottom: 1rem;">
+            <label for="student_id"><strong>Pick an enrolled student</strong> <span class="muted small">(optional shortcut)</span></label>
+            <select id="student_id" name="student_id" onchange="this.form.submit()">
+                <option value="">— or fill in manually below —</option>
+                <?php foreach ($studentOptions as $s):
+                    $label = trim($s['first_name'] . ' ' . ($s['last_name'] ?? '')) . ' · ' . ($s['grade'] ?? '');
+                ?>
+                    <option value="<?= (int)$s['id'] ?>" <?= $studentId === (int)$s['id'] ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </form>
+    <?php endif; ?>
+
     <form method="get">
         <?php if ($inquiryId): ?>
             <input type="hidden" name="inquiry_id" value="<?= $inquiryId ?>">
+        <?php endif; ?>
+        <?php if ($studentId): ?>
+            <input type="hidden" name="student_id" value="<?= $studentId ?>">
         <?php endif; ?>
         <div class="row">
             <div>

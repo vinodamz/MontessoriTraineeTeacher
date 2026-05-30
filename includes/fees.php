@@ -59,6 +59,63 @@ function fee_structure(): array
     );
 }
 
+/**
+ * Active students for the picker dropdown in /fees/guide.php and
+ * /fees/cofee_enroll.php. Returns rows with the data needed to
+ * auto-fill the form when one is selected (name, grade, joining date,
+ * primary parent name + phone + email).
+ */
+function fee_student_options(): array
+{
+    try {
+        return db()->query("
+            SELECT s.id, s.first_name, s.last_name, s.grade, s.joining_date,
+                   s.academic_year,
+                   (SELECT p.name  FROM student_parents p WHERE p.student_id = s.id ORDER BY p.is_primary DESC, p.id LIMIT 1) AS parent_name,
+                   (SELECT p.phone FROM student_parents p WHERE p.student_id = s.id ORDER BY p.is_primary DESC, p.id LIMIT 1) AS parent_phone,
+                   (SELECT p.email FROM student_parents p WHERE p.student_id = s.id ORDER BY p.is_primary DESC, p.id LIMIT 1) AS parent_email
+            FROM students s
+            WHERE COALESCE(s.is_active, 1) = 1
+              AND COALESCE(s.enrollment_status, 'enrolled') = 'enrolled'
+            ORDER BY s.first_name, s.last_name
+        ")->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Load a single student with their primary parent, used to auto-fill
+ * the fee guide / CoFee wizard when ?student_id=X is passed.
+ */
+function fee_student_lookup(int $studentId): ?array
+{
+    if ($studentId <= 0) return null;
+    try {
+        $stmt = db()->prepare("
+            SELECT s.id, s.first_name, s.last_name, s.grade, s.joining_date,
+                   (SELECT p.name  FROM student_parents p WHERE p.student_id = s.id ORDER BY p.is_primary DESC, p.id LIMIT 1) AS parent_name,
+                   (SELECT p.phone FROM student_parents p WHERE p.student_id = s.id ORDER BY p.is_primary DESC, p.id LIMIT 1) AS parent_phone,
+                   (SELECT p.email FROM student_parents p WHERE p.student_id = s.id ORDER BY p.is_primary DESC, p.id LIMIT 1) AS parent_email
+            FROM students s
+            WHERE s.id = :id
+        ");
+        $stmt->execute([':id' => $studentId]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/** Map student grade (Playgroup / Nursery / LKG / UKG) to fees grade code. */
+function fee_grade_from_student(string $grade): string
+{
+    $g = strtolower(trim($grade));
+    if (in_array($g, ['playgroup', 'nursery', 'lkg', 'ukg'], true)) return $g;
+    return '';
+}
+
 function fee_inr(int $v): string
 {
     return "\u{20B9}" . number_format($v);
