@@ -56,7 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash_set('error', 'Check in first before checking out.');
             }
         }
-        redirect('/staff/attendance.php');
+        // Bounce back to where the user clicked from (dashboard, checkin
+        // page, or the attendance page itself). Only allow same-origin
+        // paths to prevent open-redirect.
+        $back = (string)($_POST['return_to'] ?? '/staff/attendance.php');
+        if ($back === '' || $back[0] !== '/' || str_starts_with($back, '//')) {
+            $back = '/staff/attendance.php';
+        }
+        redirect($back);
     }
 
     if ($op === 'mark' && $isAdmin) {

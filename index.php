@@ -64,6 +64,19 @@ $hasExpenses = user_has_module($user, 'expenses');
 $hasFees     = user_has_module($user, 'fees');
 $hasLogbook  = user_has_module($user, 'logbook');
 
+// Quick-checkin: show for anyone in the staff roster (teachers, admins,
+// or anyone with the staff module). Pulls today's attendance row so the
+// card knows whether they've checked in / out.
+$inStaffRoster = ($user['role'] === 'admin') || ($user['role'] === 'teacher') || user_has_module($user, 'staff');
+$todayAttendance = null;
+if ($inStaffRoster) {
+    try {
+        $stmt = db()->prepare("SELECT * FROM staff_attendance WHERE user_id = :u AND att_date = :d");
+        $stmt->execute([':u' => (int)$user['id'], ':d' => date('Y-m-d')]);
+        $todayAttendance = $stmt->fetch() ?: null;
+    } catch (Throwable $e) {}
+}
+
 // Single-module users go straight in.
 $moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook;
 if ($moduleCount === 1) {
@@ -227,6 +240,43 @@ require __DIR__ . '/includes/header.php';
         </p>
     </div>
 </div>
+
+<?php if ($inStaffRoster):
+    $in  = $todayAttendance['check_in']  ?? null;
+    $out = $todayAttendance['check_out'] ?? null;
+?>
+<div class="card checkin-card">
+    <div class="checkin-body">
+        <div>
+            <div class="checkin-label">My attendance</div>
+            <?php if (!$in): ?>
+                <div class="checkin-status muted">Not checked in yet — <?= e(date('H:i')) ?> now</div>
+            <?php elseif (!$out): ?>
+                <div class="checkin-status">Checked in at <strong><?= e(substr($in, 0, 5)) ?></strong></div>
+            <?php else: ?>
+                <div class="checkin-status">
+                    In <strong><?= e(substr($in, 0, 5)) ?></strong>
+                    · Out <strong><?= e(substr($out, 0, 5)) ?></strong>
+                    <span class="pill pill-ok">Done for today</span>
+                </div>
+            <?php endif; ?>
+        </div>
+        <form method="post" action="/staff/attendance.php" class="checkin-action">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="return_to" value="/index.php">
+            <?php if (!$in): ?>
+                <input type="hidden" name="op" value="self_in">
+                <button class="btn btn-primary btn-big">Check in now</button>
+            <?php elseif (!$out): ?>
+                <input type="hidden" name="op" value="self_out">
+                <button class="btn btn-big">Check out</button>
+            <?php else: ?>
+                <a class="btn btn-ghost" href="/staff/attendance.php">View attendance</a>
+            <?php endif; ?>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php
 $staffStats = ['pending_leave' => 0, 'open_msgs' => 0];

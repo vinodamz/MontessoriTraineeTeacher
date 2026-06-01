@@ -1070,3 +1070,25 @@ a.admin-tile:hover {
 .log-item-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .15rem; }
 .log-item-meta { margin-top: .2rem; }
 .pill-ok { background: #d8f3c8; color: #14532d; }
+
+/* ============================================================================
+   Quick check-in card on the home dashboard
+   ============================================================================ */
+.checkin-card {
+    background: linear-gradient(135deg, #fdf4e3 0%, #fff8f0 100%);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent-2);
+    margin-bottom: 1.2rem;
+}
+.checkin-body {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; flex-wrap: wrap;
+}
+.checkin-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.checkin-status { font-size: 1.05rem; margin-top: .15rem; }
+.checkin-action { margin: 0; }
+.btn-big {
+    padding: .75rem 1.5rem;
+    font-size: 1rem;
+    min-height: 48px;
+}
