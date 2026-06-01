@@ -1037,3 +1037,36 @@ a.admin-tile:hover {
 .app-stats .pill.pill-warn { background: #fff4e1; color: #92400e; }
 
 .app-empty { grid-column: 1 / -1; }
+
+/* Logbook app icon gradient */
+.app-icon-logbook { background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); }
+
+/* ============================================================================
+   Logbook module — type chips + entry list
+   ============================================================================ */
+.log-type-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.log-chip {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .5rem .8rem; border-radius: 999px;
+    background: var(--bg-card); border: 1px solid var(--line);
+    color: var(--ink); text-decoration: none; font-size: .85rem; font-weight: 600;
+    transition: border-color .15s ease, transform .1s ease;
+}
+.log-chip:hover { border-color: var(--accent); transform: translateY(-1px); text-decoration: none; }
+.log-chip-icon { font-size: 1.1rem; }
+.log-chip .pill { font-size: .65rem; }
+
+.log-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .5rem; }
+.log-item-link {
+    display: flex; gap: .8rem; align-items: flex-start;
+    padding: .7rem .85rem; background: var(--bg-card);
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    color: inherit; text-decoration: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.log-item-link:hover { border-color: var(--line-soft); box-shadow: 0 2px 8px rgba(40,30,20,.06); text-decoration: none; }
+.log-item-icon { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+.log-item-body { flex: 1 1 auto; min-width: 0; }
+.log-item-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .15rem; }
+.log-item-meta { margin-top: .2rem; }
+.pill-ok { background: #d8f3c8; color: #14532d; }
