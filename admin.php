@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook']);
     return implode(',', $valid);
 }
 
@@ -323,6 +323,7 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="staff"><span>Staff</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="expenses"><span>Expenses</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="fees"><span>Fees</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="logbook"><span>Logbook</span></label>
             </div>
         </div>
         <div class="actions">
@@ -359,6 +360,7 @@ require __DIR__ . '/includes/header.php';
         $hasSt   = in_array('staff', $mods, true);
         $hasE    = in_array('expenses', $mods, true);
         $hasF    = in_array('fees', $mods, true);
+        $hasL    = in_array('logbook', $mods, true);
     ?>
         <li class="team-row" style="--card: <?= e(user_color((int)$u['id'])) ?>;">
             <div class="team-dot"><?= e(user_initials($u['name'])) ?></div>
@@ -412,6 +414,10 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Fees module (calculator + parent fee guide + CoFee enrollment)">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="fees" <?= $hasF ? 'checked' : '' ?>>
                     <span>Fees</span>
+                </label>
+                <label class="checkbox" title="Logbook module (visitor, incident, observation, pickup logs)">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="logbook" <?= $hasL ? 'checked' : '' ?>>
+                    <span>Logbook</span>
                 </label>
                 <label class="checkbox" title="Active">
                     <input form="<?= $fid ?>" type="checkbox" name="active" value="1" <?= $u['active'] ? 'checked' : '' ?>>

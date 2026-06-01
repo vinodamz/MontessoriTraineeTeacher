@@ -95,7 +95,7 @@ CREATE TABLE users (
     name        VARCHAR(120) NOT NULL,
     pin_hash    VARCHAR(255) NOT NULL,
     role        ENUM('teacher','admin') NOT NULL DEFAULT 'teacher',
-    modules     SET('tasks','montessori','students','crm','recruitment','staff','expenses','fees') NOT NULL DEFAULT '',
+    modules     SET('tasks','montessori','students','crm','recruitment','staff','expenses','fees','logbook') NOT NULL DEFAULT '',
     active      TINYINT(1)   NOT NULL DEFAULT 1,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -580,6 +580,31 @@ CREATE TABLE crm_wa_templates (
     updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_wat_order (display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Logbook module — typed operational logs (visitor, incident, observation,
+-- pickup, health, medication, cleaning, drill, maintenance). See
+-- includes/logbook.php for the type definitions.
+CREATE TABLE logbook_entries (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    log_type        VARCHAR(30)  NOT NULL,
+    occurred_at     DATETIME     NOT NULL,
+    student_id      INT UNSIGNED NULL,
+    title           VARCHAR(160) NULL,
+    details         TEXT         NULL,
+    meta_json       TEXT         NULL,
+    parent_notified TINYINT(1)   NOT NULL DEFAULT 0,
+    notified_at     DATETIME     NULL,
+    photo_path      VARCHAR(255) NULL,
+    logged_by       INT UNSIGNED NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_log_type_when (log_type, occurred_at),
+    KEY idx_log_student   (student_id, occurred_at),
+    KEY idx_log_when      (occurred_at),
+    CONSTRAINT fk_log_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
+    CONSTRAINT fk_log_by      FOREIGN KEY (logged_by)  REFERENCES users(id)    ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================================
