@@ -264,3 +264,161 @@ function staff_is_admin(array $user): bool
 {
     return ($user['role'] ?? '') === 'admin';
 }
+
+// ---- Payroll ------------------------------------------------------------
+
+/** Earnings component keys → labels (order = payslip display order). */
+function staff_pay_earnings(): array
+{
+    return [
+        'basic'             => 'Basic',
+        'hra'               => 'HRA',
+        'conveyance'        => 'Conveyance',
+        'special_allowance' => 'Special allowance',
+        'other_earning'     => 'Other earning',
+    ];
+}
+
+/** Deduction component keys → labels. */
+function staff_pay_deductions(): array
+{
+    return [
+        'pf'               => 'Provident Fund (PF)',
+        'esi'              => 'ESI',
+        'professional_tax' => 'Professional tax',
+        'tds'              => 'TDS',
+        'other_deduction'  => 'Other deduction',
+    ];
+}
+
+/**
+ * The pay structure in effect for $userId on $onDate (Y-m-d). Returns the
+ * row with the latest effective_from on/before that date, or null if none.
+ */
+function staff_current_pay(int $userId, string $onDate): ?array
+{
+    $stmt = db()->prepare("
+        SELECT * FROM staff_pay
+        WHERE user_id = :u AND effective_from <= :d
+        ORDER BY effective_from DESC, id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':u' => $userId, ':d' => $onDate]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/** Full pay history for a staff member, newest first. */
+function staff_pay_history(int $userId): array
+{
+    $stmt = db()->prepare("SELECT * FROM staff_pay WHERE user_id = :u ORDER BY effective_from DESC, id DESC");
+    $stmt->execute([':u' => $userId]);
+    return $stmt->fetchAll();
+}
+
+/** Gross of a pay row (sum of earnings). */
+function staff_pay_gross(array $pay): float
+{
+    $g = 0.0;
+    foreach (staff_pay_earnings() as $k => $_) $g += (float)($pay[$k] ?? 0);
+    return $g;
+}
+
+/** Total fixed deductions of a pay row. */
+function staff_pay_total_deductions(array $pay): float
+{
+    $d = 0.0;
+    foreach (staff_pay_deductions() as $k => $_) $d += (float)($pay[$k] ?? 0);
+    return $d;
+}
+
+/**
+ * Hours worked in a month, summed from check_in/check_out on staff_attendance.
+ * Rows missing either clock time contribute 0. Returns ['hours'=>float,'days'=>int].
+ */
+function staff_hours_summary(int $userId, int $year, int $month): array
+{
+    $start = sprintf('%04d-%02d-01', $year, $month);
+    $end   = date('Y-m-t', strtotime($start));
+    $stmt  = db()->prepare("
+        SELECT
+            COALESCE(SUM(TIME_TO_SEC(TIMEDIFF(check_out, check_in))), 0) AS secs,
+            SUM(check_in IS NOT NULL AND check_out IS NOT NULL)          AS days
+        FROM staff_attendance
+        WHERE user_id = :u AND att_date BETWEEN :s AND :e
+          AND check_in IS NOT NULL AND check_out IS NOT NULL
+          AND check_out >= check_in
+    ");
+    $stmt->execute([':u' => $userId, ':s' => $start, ':e' => $end]);
+    $r = $stmt->fetch();
+    return [
+        'hours' => round(((int)($r['secs'] ?? 0)) / 3600, 2),
+        'days'  => (int)($r['days'] ?? 0),
+    ];
+}
+
+/**
+ * Compute a draft payslip for (user, year, month) from the pay structure +
+ * attendance. Returns the full computed structure WITHOUT saving. Admin can
+ * tweak working_days / lop_days before issuing.
+ */
+function staff_payslip_draft(int $userId, int $year, int $month): array
+{
+    $periodEnd = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $year, $month)));
+    $pay       = staff_current_pay($userId, $periodEnd);
+    $att       = staff_attendance_summary($userId, $year, $month);
+    $hours     = staff_hours_summary($userId, $year, $month);
+
+    $daysInMonth = (int)date('t', strtotime($periodEnd));
+    $basis       = $pay ? (int)$pay['payable_days_basis'] : 30;
+    if ($basis <= 0) $basis = $daysInMonth;
+
+    // Paid = present + late + wfh + paid leave + holidays. LOP = absent.
+    $paidLeave = (int)($att['leave'] ?? 0);
+    $present   = (int)($att['present'] ?? 0) + (int)($att['late'] ?? 0) + (int)($att['wfh'] ?? 0);
+    $lopDays   = (int)($att['absent'] ?? 0);
+
+    $earnings = [];
+    foreach (staff_pay_earnings() as $k => $_) $earnings[$k] = $pay ? (float)$pay[$k] : 0.0;
+    $deductions = [];
+    foreach (staff_pay_deductions() as $k => $_) $deductions[$k] = $pay ? (float)$pay[$k] : 0.0;
+
+    $gross   = array_sum($earnings);
+    $perDay  = $basis > 0 ? $gross / $basis : 0.0;
+    $lopAmt  = round($perDay * $lopDays, 2);
+    $totDed  = array_sum($deductions);
+    $net     = round($gross - $lopAmt - $totDed, 2);
+
+    return [
+        'has_pay'          => $pay !== null,
+        'pay'              => $pay,
+        'working_days'     => $basis,
+        'present_days'     => $present,
+        'paid_leave_days'  => $paidLeave,
+        'lop_days'         => $lopDays,
+        'hours_worked'     => $hours['hours'],
+        'earnings'         => $earnings,
+        'deductions'       => $deductions,
+        'gross_earnings'   => round($gross, 2),
+        'lop_amount'       => $lopAmt,
+        'total_deductions' => round($totDed, 2),
+        'net_pay'          => $net,
+    ];
+}
+
+/** An already-issued payslip for (user, year, month), or null. */
+function staff_payslip(int $userId, int $year, int $month): ?array
+{
+    $stmt = db()->prepare("
+        SELECT * FROM staff_payslips
+        WHERE user_id = :u AND period_year = :y AND period_month = :m
+    ");
+    $stmt->execute([':u' => $userId, ':y' => $year, ':m' => $month]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function staff_money(float $v): string
+{
+    return "\u{20B9}" . number_format($v, 2);
+}

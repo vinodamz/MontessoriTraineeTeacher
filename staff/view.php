@@ -29,6 +29,8 @@ $month   = (int)date('n');
 
 $attendance = staff_attendance_summary($id, $year, $month);
 $balance    = staff_leave_balance($id, $year);
+$hours      = staff_hours_summary($id, $year, $month);
+$currentPay = staff_current_pay($id, date('Y-m-d'));
 
 $recentIssues = (function() use ($id, $isAdmin) {
     $sql = "
@@ -92,9 +94,11 @@ require __DIR__ . '/../includes/header.php';
             <a class="btn" href="/staff/leave.php?user_id=<?= $id ?>#apply">Apply leave</a>
             <a class="btn" href="/staff/messages.php#new">Message management</a>
         <?php endif; ?>
+        <a class="btn" href="/staff/payslip.php?id=<?= $id ?>">Payslips</a>
         <?php if ($isAdmin): ?>
             <a class="btn" href="/staff/attendance.php?user_id=<?= $id ?>">Attendance</a>
             <a class="btn" href="/staff/leave.php?user_id=<?= $id ?>">Leave</a>
+            <a class="btn" href="/staff/pay.php?id=<?= $id ?>">Pay structure</a>
             <a class="btn" href="/staff/issues.php?user_id=<?= $id ?>">Log issue</a>
         <?php endif; ?>
     </div>
@@ -109,14 +113,18 @@ require __DIR__ . '/../includes/header.php';
                 <dd><?= (int)($attendance[$code] ?? 0) ?> d</dd>
             <?php endforeach; ?>
         </dl>
+        <p class="muted small section-h-spaced">
+            Hours worked this month: <strong><?= e(number_format($hours['hours'], 1)) ?> h</strong>
+            <?php if ($hours['days'] > 0): ?> over <?= (int)$hours['days'] ?> clocked day<?= $hours['days'] === 1 ? '' : 's' ?><?php endif; ?>
+        </p>
         <?php if ($todayRow): ?>
-            <p class="muted small section-h-spaced">
+            <p class="muted small">
                 Today: <strong><?= e(staff_attendance_statuses()[$todayRow['status']] ?? $todayRow['status']) ?></strong>
                 <?php if ($todayRow['check_in']): ?> · in <?= e(substr($todayRow['check_in'], 0, 5)) ?><?php endif; ?>
                 <?php if ($todayRow['check_out']): ?> · out <?= e(substr($todayRow['check_out'], 0, 5)) ?><?php endif; ?>
             </p>
         <?php else: ?>
-            <p class="muted small section-h-spaced">No attendance marked yet today.</p>
+            <p class="muted small">No attendance marked yet today.</p>
         <?php endif; ?>
     </div>
 
@@ -141,6 +149,26 @@ require __DIR__ . '/../includes/header.php';
             </div>
         <?php endif; ?>
     </div>
+
+    <?php if ($isAdmin || $isSelf): ?>
+    <div class="card" style="flex: 1 1 280px;">
+        <h3>Pay</h3>
+        <?php if ($currentPay): ?>
+            <dl class="dl-grid">
+                <dt>Gross</dt><dd><strong><?= e(staff_money(staff_pay_gross($currentPay))) ?></strong>/mo</dd>
+                <dt>Deductions</dt><dd><?= e(staff_money(staff_pay_total_deductions($currentPay))) ?></dd>
+                <dt>Net (pre-LOP)</dt><dd><strong><?= e(staff_money(staff_pay_gross($currentPay) - staff_pay_total_deductions($currentPay))) ?></strong></dd>
+                <dt>Effective</dt><dd><?= e(date('j M Y', strtotime($currentPay['effective_from']))) ?></dd>
+            </dl>
+        <?php else: ?>
+            <p class="muted small">No pay structure on file yet.</p>
+        <?php endif; ?>
+        <div class="actions section-h-spaced">
+            <a class="btn btn-ghost" href="/staff/payslip.php?id=<?= $id ?>">Payslips</a>
+            <?php if ($isAdmin): ?><a class="btn btn-ghost" href="/staff/pay.php?id=<?= $id ?>"><?= $currentPay ? 'Revise pay' : 'Set pay' ?></a><?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="card" id="issues">
