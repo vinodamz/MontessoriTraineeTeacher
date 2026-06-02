@@ -1100,3 +1100,27 @@ a.admin-tile:hover {
 .grid-table thead .grid-sticky-col { z-index: 4; background: #f8f5ef; }
 .grid-table tbody tr:hover .grid-sticky-col { background: #fffaf3; }
 .btn-small { padding: .2rem .5rem; font-size: .8rem; }
+
+/* ============================================================================
+   Staff payslip
+   ============================================================================ */
+.payslip { max-width: 760px; }
+.payslip-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; border-bottom: 2px solid var(--accent); padding-bottom: .7rem; margin-bottom: .8rem; }
+.payslip-school { font-size: 1.2rem; font-weight: 700; }
+.payslip-net { text-align: right; }
+.payslip-net strong { display: block; font-size: 1.3rem; color: var(--accent-2); }
+.payslip-meta { display: grid; grid-template-columns: auto 1fr; gap: .2rem 1rem; font-size: .9rem; margin: 0 0 1rem; }
+.payslip-meta dt { color: var(--muted); font-weight: 600; }
+.payslip-meta dd { margin: 0; }
+.payslip-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 560px) { .payslip-cols { grid-template-columns: 1fr; } }
+.payslip-table { width: 100%; border-collapse: collapse; }
+.payslip-table th, .payslip-table td { text-align: left; padding: .35rem .4rem; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.payslip-table th:last-child, .payslip-table td:last-child { text-align: right; }
+.payslip-table .total td { font-weight: 700; border-top: 2px solid var(--ink); border-bottom: none; }
+.payslip-netline { margin-top: 1rem; padding-top: .7rem; border-top: 2px solid var(--accent); text-align: right; font-size: 1.05rem; }
+@media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .payslip { border: none; box-shadow: none; max-width: 100%; }
+}
