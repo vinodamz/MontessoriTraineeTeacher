@@ -143,6 +143,16 @@
             forceFallback: true,
             fallbackOnBody: true,
             fallbackTolerance: 8,
+            // Auto-scroll while dragging. forceFallback disables the browser's
+            // native drag auto-scroll, so we turn on SortableJS's own JS-based
+            // AutoScroll and force it to run even under the fallback drag.
+            // This scrolls the horizontal board AND bubbles to the window so
+            // long columns scroll vertically too.
+            scroll: true,
+            forceAutoScrollFallback: true,
+            bubbleScroll: true,
+            scrollSensitivity: 80,
+            scrollSpeed: 12,
             // IMPORTANT: onEnd must NOT be async. SortableJS doesn't understand
             // Promises and an async handler can confuse its internal state,
             // causing the dragged element to be duplicated. Fire the fetch and
