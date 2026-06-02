@@ -63,6 +63,7 @@ $hasStaff    = user_has_module($user, 'staff');
 $hasExpenses = user_has_module($user, 'expenses');
 $hasFees     = user_has_module($user, 'fees');
 $hasLogbook  = user_has_module($user, 'logbook');
+$hasInventory = user_has_module($user, 'inventory');
 
 // Quick-checkin: show for anyone in the staff roster (teachers, admins,
 // or anyone with the staff module). Pulls today's attendance row so the
@@ -78,7 +79,7 @@ if ($inStaffRoster) {
 }
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory;
 if ($moduleCount === 1) {
     if ($hasTasks)    redirect('/tasks/index.php');
     if ($hasMontess)  redirect('/assessment/index.php');
@@ -89,6 +90,7 @@ if ($moduleCount === 1) {
     if ($hasExpenses) redirect('/expenses/index.php');
     if ($hasFees)     redirect('/fees/index.php');
     if ($hasLogbook)  redirect('/logbook/index.php');
+    if ($hasInventory) redirect('/inventory/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -340,6 +342,13 @@ if ($hasLogbook) {
     if ($logToday > 0) $stats[] = ['label' => $logToday . ' today', 'tone' => ''];
     $apps[] = ['key' => 'logbook', 'name' => 'Logbook', 'subtitle' => 'Visitors · Incidents · Observations', 'href' => '/logbook/index.php', 'stats' => $stats];
 }
+if ($hasInventory) {
+    require_once __DIR__ . '/includes/inventory.php';
+    $invStats = inventory_stats();
+    $stats = [['label' => $invStats['items'] . ' items', 'tone' => '']];
+    if ($invStats['low'] > 0) $stats[] = ['label' => $invStats['low'] . ' low', 'tone' => 'warn'];
+    $apps[] = ['key' => 'inventory', 'name' => 'Inventory', 'subtitle' => 'Stock · Supplies · Reorder', 'href' => '/inventory/index.php', 'stats' => $stats];
+}
 
 // SVG glyphs — simple line icons (24x24, 1.8 stroke). Each module key maps here.
 $icons = [
@@ -352,6 +361,7 @@ $icons = [
     'expenses'    => '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5M8 17h4"/><path d="M16 17l2 2 3-3"/>',
     'fees'        => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h4"/><circle cx="16" cy="16" r="2"/>',
     'logbook'     => '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z"/><path d="M9 3v18M13 8h4M13 12h4"/>',
+    'inventory'   => '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
 ];
 ?>
 

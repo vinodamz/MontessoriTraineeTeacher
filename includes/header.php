@@ -54,6 +54,9 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php if (user_has_module($user, 'logbook')): ?>
                 <a href="/logbook/index.php">Logbook</a>
             <?php endif; ?>
+            <?php if (user_has_module($user, 'inventory')): ?>
+                <a href="/inventory/index.php">Inventory</a>
+            <?php endif; ?>
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="/admin.php">Admin</a>
             <?php endif; ?>
