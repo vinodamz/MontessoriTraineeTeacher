@@ -81,12 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$it = null;
+$it = [];
 if ($isEdit) {
     $stmt = $pdo->prepare("SELECT * FROM inventory_items WHERE id = :id");
     $stmt->execute([':id' => $id]);
-    $it = $stmt->fetch();
-    if (!$it) { flash_set('error', 'Item not found.'); redirect('/inventory/index.php'); }
+    $row = $stmt->fetch();
+    if (!$row) { flash_set('error', 'Item not found.'); redirect('/inventory/index.php'); }
+    $it = $row;
 }
 
 $v = fn(string $k) => e((string)($it[$k] ?? ''));
