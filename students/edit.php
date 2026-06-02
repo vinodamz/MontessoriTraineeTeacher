@@ -330,7 +330,7 @@ require __DIR__ . '/../includes/header.php';
             <select name="teacher_id" required>
                 <option value="">—</option>
                 <?php foreach ($teachers as $t): ?>
-                    <option value="<?= (int)$t['id'] ?>" <?= ($s['teacher_id'] ?? 0) === (int)$t['id'] ? 'selected' : '' ?>>
+                    <option value="<?= (int)$t['id'] ?>" <?= (int)($s['teacher_id'] ?? 0) === (int)$t['id'] ? 'selected' : '' ?>>
                         <?= e($t['name']) ?>
                     </option>
                 <?php endforeach; ?>
