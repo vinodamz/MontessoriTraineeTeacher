@@ -1070,3 +1070,33 @@ a.admin-tile:hover {
 .log-item-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .15rem; }
 .log-item-meta { margin-top: .2rem; }
 .pill-ok { background: #d8f3c8; color: #14532d; }
+
+/* ============================================================================
+   Students grid editor — spreadsheet-style bulk edit
+   ============================================================================ */
+.grid-actions-bar {
+    display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
+    margin: .8rem 0; position: sticky; top: 56px; z-index: 5;
+    background: var(--bg); padding: .4rem 0;
+}
+.grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.grid-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: .85rem; background: var(--bg-card); }
+.grid-table th, .grid-table td { padding: .2rem .3rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line-soft); white-space: nowrap; }
+.grid-table thead th {
+    position: sticky; top: 0; z-index: 3;
+    background: #f8f5ef; text-align: left; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .03em; color: var(--ink-soft); padding: .4rem .3rem;
+}
+.grid-table input[type="text"], .grid-table input:not([type]), .grid-table select {
+    width: 100%; min-width: 7ch; border: 1px solid transparent; background: transparent;
+    padding: .3rem .35rem; border-radius: 4px; font-size: .85rem; color: var(--ink);
+}
+.grid-table input:focus, .grid-table select:focus {
+    border-color: var(--accent); background: #fff; outline: none;
+    box-shadow: 0 0 0 2px rgba(236,64,122,.12);
+}
+.grid-table tbody tr:hover td { background: #fffaf3; }
+.grid-sticky-col { position: sticky; left: 0; z-index: 2; background: var(--bg-card); }
+.grid-table thead .grid-sticky-col { z-index: 4; background: #f8f5ef; }
+.grid-table tbody tr:hover .grid-sticky-col { background: #fffaf3; }
+.btn-small { padding: .2rem .5rem; font-size: .8rem; }
