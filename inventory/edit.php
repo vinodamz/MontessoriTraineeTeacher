@@ -81,7 +81,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$it = [];
+$it = [
+    'name'          => '',
+    'category'      => 'other',
+    'sku'           => '',
+    'unit'          => 'pcs',
+    'reorder_level' => '0',
+    'location'      => '',
+    'unit_cost'     => null,
+    'supplier'      => '',
+    'notes'         => '',
+    'is_active'     => 1,
+];
 if ($isEdit) {
     $stmt = $pdo->prepare("SELECT * FROM inventory_items WHERE id = :id");
     $stmt->execute([':id' => $id]);
@@ -109,7 +120,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="row">
         <div class="field" style="flex:2 1 280px;">
             <label>Item name *</label>
-            <input name="name" required maxlength="160" value="<?= $v('name') ?>" autofocus>
+            <input type="text" name="name" required maxlength="160" value="<?= $v('name') ?>" autofocus>
         </div>
         <div class="field">
             <label>Category</label>
@@ -124,14 +135,14 @@ require __DIR__ . '/../includes/header.php';
     <div class="row">
         <div class="field">
             <label>Unit</label>
-            <input name="unit" list="unitlist" maxlength="20" value="<?= e((string)($it['unit'] ?? 'pcs')) ?>">
+            <input type="text" name="unit" list="unitlist" maxlength="20" value="<?= e((string)($it['unit'] ?? 'pcs')) ?>">
             <datalist id="unitlist">
                 <?php foreach (inventory_units() as $u): ?><option value="<?= e($u) ?>"><?php endforeach; ?>
             </datalist>
         </div>
         <div class="field">
             <label>SKU / code</label>
-            <input name="sku" maxlength="60" value="<?= $v('sku') ?>" placeholder="optional">
+            <input type="text" name="sku" maxlength="60" value="<?= $v('sku') ?>" placeholder="optional">
         </div>
         <div class="field">
             <label>Reorder level</label>
@@ -148,15 +159,15 @@ require __DIR__ . '/../includes/header.php';
     <div class="row">
         <div class="field">
             <label>Unit cost (₹)</label>
-            <input type="number" name="unit_cost" min="0" step="0.01" value="<?= $it && $it['unit_cost'] !== null ? e((string)$it['unit_cost']) : '' ?>" placeholder="optional">
+            <input type="number" name="unit_cost" min="0" step="0.01" value="<?= $it['unit_cost'] !== null ? e((string)$it['unit_cost']) : '' ?>" placeholder="optional">
         </div>
         <div class="field">
             <label>Location</label>
-            <input name="location" maxlength="80" value="<?= $v('location') ?>" placeholder="e.g. Store room shelf 3">
+            <input type="text" name="location" maxlength="80" value="<?= $v('location') ?>" placeholder="e.g. Store room shelf 3">
         </div>
         <div class="field" style="flex:2 1 280px;">
             <label>Supplier</label>
-            <input name="supplier" maxlength="120" value="<?= $v('supplier') ?>" placeholder="optional">
+            <input type="text" name="supplier" maxlength="120" value="<?= $v('supplier') ?>" placeholder="optional">
         </div>
     </div>
 
