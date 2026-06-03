@@ -109,7 +109,7 @@ require __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="field" style="flex:2 1 240px;">
                     <label>Note</label>
-                    <input name="note" maxlength="255" placeholder="optional">
+                    <input type="text" name="note" maxlength="255" placeholder="optional">
                 </div>
             </div>
             <div class="actions"><button class="btn btn-primary" type="submit">Record</button></div>
