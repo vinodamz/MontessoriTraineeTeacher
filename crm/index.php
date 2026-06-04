@@ -89,7 +89,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'reassign'
 // ---- Owner filter --------------------------------------------------------
 // Default to "mine" so each user sees their pipeline first; toggle to "all"
 // for the team-wide view or "unassigned" to triage.
-$ownerFilter = (string)($_GET['owner'] ?? 'mine');
+//
+// When the user types a search term without picking an owner chip, expand
+// to the whole team — otherwise a search for someone you don't own returns
+// "nothing found" and feels broken.
+$hasOwnerParam = isset($_GET['owner']) && $_GET['owner'] !== '';
+$hasSearch     = isset($_GET['q']) && trim((string)$_GET['q']) !== '';
+$ownerFilter = $hasOwnerParam
+    ? (string)$_GET['owner']
+    : ($hasSearch ? 'all' : 'mine');
 $ownerWhere  = '';
 $ownerParam  = null;
 if ($ownerFilter === 'mine') {
@@ -113,49 +121,89 @@ $teamById = [];
 foreach ($team as $tu) $teamById[(int)$tu['id']] = $tu['name'];
 
 // ---- Free-text search ----------------------------------------------------
-// Matches against any text field on the family + its children, parents,
-// campaign, owner, source, status, and notes — so a single box covers
-// "find Vinod", "find +91 98...", "find school_visited", "find sibling tag".
-$q       = trim((string)($_GET['q'] ?? ''));
+// Search is whitespace-tokenized: every word must hit at least one column,
+// across name / phone / email / source / notes / status code+label /
+// campaign / owner / child / parent / tag.
+//
+// Phone matching strips non-digits on both sides so "9876543210" finds
+// "+91 98765-43210" and vice versa.
+//
+// Status matching covers both the code ("school_visited") and the human
+// label ("School visited") via a CASE expression.
+$q     = trim((string)($_GET['q'] ?? ''));
+$words = $q === '' ? [] : preg_split('/\s+/', $q);
+
+// Build the CASE expression that maps status codes to their human labels
+// once so each word can LIKE against it. Status codes are safe — they
+// come from crm_statuses().
+$statusCase = "CASE f.status";
+foreach (crm_statuses() as $code => $meta) {
+    $statusCase .= " WHEN " . db()->quote($code) . " THEN " . db()->quote($meta['label']);
+}
+$statusCase .= " ELSE f.status END";
+
+// Strip non-digits from a phone column with nested REPLACE — works across
+// MySQL versions that don't have REGEXP_REPLACE.
+$digitOnly = function (string $col): string {
+    return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE($col,' ',''),'+',''),'-',''),'(',''),')',''),'.','')";
+};
+
 $qWhere  = '';
 $qParams = [];
-if ($q !== '') {
-    // Native PDO prepares don't allow reusing a named placeholder, so each
-    // LIKE gets its own bound name. They all carry the same %term% value.
+$wordConds = [];
+foreach ($words as $i => $w) {
+    $w = trim($w);
+    if ($w === '') continue;
+    // 14 unique placeholders (one per text column) + 2 for phone digits.
     $names = [];
-    for ($i = 1; $i <= 15; $i++) {
-        $names[$i] = ':q' . $i;
-        $qParams[$names[$i]] = '%' . $q . '%';
+    for ($j = 0; $j < 14; $j++) {
+        $name = ':w' . $i . '_' . $j;
+        $names[$j] = $name;
+        $qParams[$name] = '%' . $w . '%';
     }
-    $qWhere = "
-        AND (
-               f.primary_name  LIKE {$names[1]}
-            OR f.primary_phone LIKE {$names[2]}
-            OR f.primary_email LIKE {$names[3]}
-            OR f.source        LIKE {$names[4]}
-            OR f.notes         LIKE {$names[5]}
-            OR f.status        LIKE {$names[6]}
-            OR c.name          LIKE {$names[7]}
-            OR u.name          LIKE {$names[8]}
-            OR EXISTS (
-                SELECT 1 FROM inquiry_children k
-                 WHERE k.family_id = f.id
-                   AND (CONCAT_WS(' ', k.first_name, k.last_name) LIKE {$names[9]}
-                        OR k.target_grade LIKE {$names[10]})
-            )
-            OR EXISTS (
-                SELECT 1 FROM inquiry_parents p
-                 WHERE p.family_id = f.id
-                   AND (p.name LIKE {$names[11]} OR p.phone LIKE {$names[12]}
-                        OR p.email LIKE {$names[13]} OR p.occupation LIKE {$names[14]})
-            )
-            OR EXISTS (
-                SELECT 1 FROM inquiry_family_tags ft
-                 JOIN crm_tags t ON t.id = ft.tag_id
-                 WHERE ft.family_id = f.id AND t.name LIKE {$names[15]}
-            )
+    $phoneName = ':w' . $i . '_pf';
+    $parPhone  = ':w' . $i . '_pp';
+    $digits    = preg_replace('/\D/', '', $w);
+    // If the word had no digits, fall back to the raw term so non-phone
+    // searches still match "Sharma" against the phone column normally.
+    $phoneVal  = $digits !== '' ? '%' . $digits . '%' : '%' . $w . '%';
+    $qParams[$phoneName] = $phoneVal;
+    $qParams[$parPhone]  = $phoneVal;
+
+    $famPhoneCol = $digitOnly('f.primary_phone');
+    $parPhoneCol = $digitOnly('p.phone');
+
+    $wordConds[] = "(
+           f.primary_name  LIKE {$names[0]}
+        OR $famPhoneCol    LIKE {$phoneName}
+        OR f.primary_email LIKE {$names[1]}
+        OR f.source        LIKE {$names[2]}
+        OR f.notes         LIKE {$names[3]}
+        OR f.status        LIKE {$names[4]}
+        OR {$statusCase}   LIKE {$names[5]}
+        OR c.name          LIKE {$names[6]}
+        OR u.name          LIKE {$names[7]}
+        OR EXISTS (
+            SELECT 1 FROM inquiry_children k
+             WHERE k.family_id = f.id
+               AND (CONCAT_WS(' ', k.first_name, k.last_name) LIKE {$names[8]}
+                    OR k.target_grade LIKE {$names[9]})
         )
-    ";
+        OR EXISTS (
+            SELECT 1 FROM inquiry_parents p
+             WHERE p.family_id = f.id
+               AND (p.name LIKE {$names[10]} OR $parPhoneCol LIKE {$parPhone}
+                    OR p.email LIKE {$names[11]} OR p.occupation LIKE {$names[12]})
+        )
+        OR EXISTS (
+            SELECT 1 FROM inquiry_family_tags ft
+             JOIN crm_tags ct ON ct.id = ft.tag_id
+             WHERE ft.family_id = f.id AND ct.name LIKE {$names[13]}
+        )
+    )";
+}
+if ($wordConds) {
+    $qWhere = ' AND ' . implode(' AND ', $wordConds);
 }
 
 $sql = "
@@ -277,13 +325,23 @@ require __DIR__ . '/../includes/header.php';
     <div class="crm-pipe-search">
         <label for="crm-q" class="sr-only">Search</label>
         <input id="crm-q" type="search" name="q" value="<?= e($q) ?>"
-               placeholder="Search name, phone, email, child, tag, source…" autocomplete="off">
-        <input type="hidden" name="owner" value="<?= e($ownerFilter) ?>">
-        <button class="btn btn-small" type="submit">Search</button>
+               placeholder="Search by name, phone, email, child, tag, source, stage…" autocomplete="off">
+        <?php if ($hasOwnerParam): ?>
+            <input type="hidden" name="owner" value="<?= e($ownerFilter) ?>">
+        <?php endif; ?>
+        <button class="btn btn-small btn-primary" type="submit">Search</button>
         <?php if ($q !== ''): ?>
-            <a class="btn btn-small btn-ghost" href="<?= e($filterUrl($ownerFilter)) ?>">Clear</a>
+            <a class="btn btn-small btn-ghost" href="/crm/index.php">Clear</a>
         <?php endif; ?>
     </div>
+    <?php if ($q !== ''): ?>
+        <p class="crm-pipe-hint muted small" style="margin:0;">
+            <?= count($rows) ?> match<?= count($rows) === 1 ? '' : 'es' ?> for
+            <strong>&ldquo;<?= e($q) ?>&rdquo;</strong>
+            <?php if (!$hasOwnerParam): ?> · searched the whole team<?php endif; ?>
+            · multiple words = all must match (e.g. <em>sharma 9876</em>).
+        </p>
+    <?php endif; ?>
     <div class="crm-pipe-chips" role="tablist" aria-label="Owner filter">
         <a class="crm-pipe-chip <?= $ownerFilter === 'mine' ? 'on' : '' ?>" href="<?= e($filterUrl('mine')) ?>">
             Mine <span class="pill"><?= (int)$ownerCounts['mine'] ?></span>
