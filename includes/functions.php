@@ -359,7 +359,14 @@ function next_academic_year(string $year): string
     return $start . '-' . substr((string)($start + 1), -2);
 }
 
-/** All academic years that have at least one student row, plus the current one. */
+/**
+ * All academic years that show up in selectors. Position 0 is the default
+ * pick — it must be the **current** academic year so anything that grabs
+ * `academic_years_in_use()[0]` lands today's students in today's year, not
+ * next year. The next-year option is still offered (so the office can
+ * pre-enroll for the upcoming session), but appended at the end so it
+ * never becomes the default.
+ */
 function academic_years_in_use(): array
 {
     static $years = null;
@@ -374,12 +381,16 @@ function academic_years_in_use(): array
         } catch (Throwable $e) {
             $years = [];
         }
-        $cur = current_academic_year();
-        if (!in_array($cur, $years, true)) array_unshift($years, $cur);
-        // Also offer "next year" so admin can start enrolling for it before
-        // the calendar tips over to June.
+        $cur  = current_academic_year();
         $next = next_academic_year($cur);
-        if (!in_array($next, $years, true)) array_unshift($years, $next);
+
+        // Strip current/next so we can re-place them deterministically.
+        $years = array_values(array_filter($years, fn($y) => $y !== $cur && $y !== $next));
+
+        // Current year first → becomes the default for any `[0]` picker.
+        array_unshift($years, $cur);
+        // Next year still selectable, at the bottom of the dropdown.
+        $years[] = $next;
     }
     return $years;
 }
