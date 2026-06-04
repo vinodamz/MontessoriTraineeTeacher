@@ -72,9 +72,26 @@ jobs:
       - name: 3/3 — Self-test the unified login URL
         run: |
           set +e
+          URL="https://mtt.thelittlegraduates.in/login.php"
+          # cPanel rsync needs a beat to settle the docroot.
           sleep 6
+
+          # Diagnostics first — if curl's "couldn't connect" hits again we want
+          # the workflow log to show whether it was DNS, TCP, or TLS.
+          echo "--- DNS lookup ---"
+          getent hosts mtt.thelittlegraduates.in || echo "(getent failed)"
+          echo "--- TCP probe ---"
+          timeout 5 bash -c '</dev/tcp/mtt.thelittlegraduates.in/443' \
+              && echo "TCP/443 reachable" \
+              || echo "TCP/443 unreachable"
+
+          # Retry with backoff so a transient hostgator hiccup right after the
+          # rsync doesn't fail the whole workflow. --retry-all-errors picks up
+          # exit 7 (connect failed) and exit 28 (timeout), not just HTTP 5xx.
           STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
-            "https://mtt.thelittlegraduates.in/login.php?_=$(date +%s)")
+            --connect-timeout 10 --max-time 30 \
+            --retry 5 --retry-delay 6 --retry-all-errors \
+            "${URL}?_=$(date +%s)")
           echo "GET /login.php → HTTP $STATUS"
           if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ]; then
             echo "::error::Live URL returned $STATUS — the deploy looks complete but the URL is dead."
