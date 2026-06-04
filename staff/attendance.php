@@ -51,10 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      WHERE id = :id
                 ")->execute([':t' => $now, ':st' => $late, ':id' => $existing['id']]);
             } else {
+                // Note: :u (user_id) and :by (marked_by) need distinct names —
+                // PDO native prepares (EMULATE_PREPARES=false) reject a reused
+                // placeholder and the page goes blank under display_errors=off.
                 db()->prepare("
                     INSERT INTO staff_attendance (user_id, att_date, status, check_in, marked_by)
-                    VALUES (:u, :d, :st, :t, :u)
-                ")->execute([':u' => $uid, ':d' => $today, ':st' => $late, ':t' => $now]);
+                    VALUES (:u, :d, :st, :t, :by)
+                ")->execute([':u' => $uid, ':d' => $today, ':st' => $late, ':t' => $now, ':by' => $uid]);
             }
             flash_set('ok', 'Checked in at ' . substr($now, 0, 5) . '.');
         } else {
