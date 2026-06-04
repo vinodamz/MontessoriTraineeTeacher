@@ -191,6 +191,15 @@ if ($id > 0) {
     $parents = $stmt->fetchAll();
 }
 
+// New-inquiry flow: let /crm/index.php's per-column "+" button pass
+// ?status=<code> so the new card lands directly in that stage.
+if ($id <= 0) {
+    $startStatus = (string)($_GET['status'] ?? '');
+    if ($startStatus !== '' && array_key_exists($startStatus, crm_statuses())) {
+        $family = ['status' => $startStatus];
+    }
+}
+
 // Pad to at least one empty row each so the form is usable for new entries.
 while (count($children) < 1) $children[] = ['first_name' => '', 'last_name' => '', 'dob' => '', 'gender' => '', 'target_grade' => '', 'notes' => ''];
 while (count($parents)  < 1) $parents[]  = ['name' => '', 'relation' => 'guardian', 'phone' => '', 'email' => '', 'occupation' => '', 'is_primary' => 1];
