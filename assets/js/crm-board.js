@@ -14,9 +14,30 @@
     var csrf     = board.dataset.csrf || '';
     var isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 
+    // Lost reasons populated server-side so the dropdown stays in sync with
+    // crm_lost_reasons() without a second round-trip.
+    var lostReasons = {};
+    try { lostReasons = JSON.parse(board.dataset.lostReasons || '{}'); } catch (e) {}
+
     // Guard against double-posting the same move (e.g. SortableJS firing
     // onEnd twice due to a browser quirk, or a fast drag + select combo).
     var inflight = {};
+
+    function promptLostReason() {
+        var labels = Object.keys(lostReasons).map(function (k) { return k + ' — ' + lostReasons[k]; });
+        var msg = 'Why was this inquiry lost?\n\n' +
+                  labels.map(function (l, i) { return (i + 1) + '. ' + l; }).join('\n') +
+                  '\n\nEnter the number (1-' + labels.length + '):';
+        var pick = window.prompt(msg, '');
+        if (pick === null) return null;          // cancelled
+        var idx = parseInt(String(pick).trim(), 10) - 1;
+        var codes = Object.keys(lostReasons);
+        if (isNaN(idx) || idx < 0 || idx >= codes.length) {
+            alert('Please pick a number from the list.');
+            return null;
+        }
+        return codes[idx];
+    }
 
     function moveCard(card, newStatus, oldStatus, onSnapBack) {
         if (!newStatus || newStatus === oldStatus) return Promise.resolve(false);
@@ -25,6 +46,18 @@
             alert('To enroll children, open the card and use the "Enroll children" form — it needs a grade and class teacher per child.');
             return Promise.resolve(false);
         }
+
+        // For Lost, capture the reason BEFORE we hit the server so we don't
+        // bounce on the "lost_reason required" 400 and surprise the user.
+        var lostReason = null;
+        if (newStatus === 'lost') {
+            lostReason = promptLostReason();
+            if (lostReason === null) {
+                if (onSnapBack) onSnapBack();
+                return Promise.resolve(false);
+            }
+        }
+
         var inquiryId = parseInt(card.dataset.inquiryId, 10);
         if (!inquiryId) return Promise.resolve(false);
 
@@ -40,6 +73,7 @@
         fd.append('op', 'move');
         fd.append('id', String(inquiryId));
         fd.append('status', newStatus);
+        if (lostReason) fd.append('lost_reason', lostReason);
         return fetch('/crm/index.php', {
             method: 'POST',
             body: fd,
@@ -55,6 +89,12 @@
             }
             dedup(inquiryId);
             updateColumnCounts();
+            // Reload after landing in Lost so the "Lost: <reason>" pill shows
+            // on the card without JS having to mirror the server template.
+            if (newStatus === 'lost') {
+                window.location.reload();
+                return true;
+            }
             return true;
         }).catch(function (err) {
             delete inflight[inquiryId];

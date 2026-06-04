@@ -31,17 +31,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'move' && 
             exit;
         }
         // Read previous status for the audit entry.
-        $prev = db()->prepare("SELECT status FROM inquiry_families WHERE id = :id");
+        $prev = db()->prepare("SELECT status, lost_reason FROM inquiry_families WHERE id = :id");
         $prev->execute([':id' => $id]);
-        $prevStatus = (string)$prev->fetchColumn();
+        $prevRow    = $prev->fetch() ?: [];
+        $prevStatus = (string)($prevRow['status'] ?? '');
+        $prevReason = $prevRow['lost_reason'] ?? null;
 
-        db()->prepare("UPDATE inquiry_families SET status = :s WHERE id = :id")
-            ->execute([':s' => $st, ':id' => $id]);
+        // When the card lands in "lost", the client must include a reason
+        // chosen from crm_lost_reasons(). Moving OUT of lost clears it.
+        if ($st === 'lost') {
+            $reason = (string)($_POST['lost_reason'] ?? '');
+            if (!array_key_exists($reason, crm_lost_reasons())) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'lost_reason required', 'need_reason' => true]);
+                exit;
+            }
+            db()->prepare("UPDATE inquiry_families SET status = :s, lost_reason = :r WHERE id = :id")
+                ->execute([':s' => $st, ':r' => $reason, ':id' => $id]);
+        } else {
+            db()->prepare("UPDATE inquiry_families SET status = :s, lost_reason = NULL WHERE id = :id")
+                ->execute([':s' => $st, ':id' => $id]);
+        }
 
         if ($prevStatus !== '' && $prevStatus !== $st) {
-            crm_audit_log('status_changed', $id, [
-                'from' => $prevStatus, 'to' => $st, 'via' => 'kanban_drag',
-            ]);
+            $meta = ['from' => $prevStatus, 'to' => $st, 'via' => 'kanban_drag'];
+            if ($st === 'lost')          $meta['lost_reason'] = $_POST['lost_reason'] ?? null;
+            if ($prevStatus === 'lost')  $meta['prev_lost_reason'] = $prevReason;
+            crm_audit_log('status_changed', $id, $meta);
         }
         echo json_encode(['ok' => true]);
         exit;
@@ -422,7 +438,9 @@ require __DIR__ . '/../includes/header.php';
         <p>No inquiries yet. <a href="/crm/edit.php">Add your first inquiry</a> to kick off the funnel.</p>
     </div>
 <?php else: ?>
-    <div class="crm-board" data-csrf="<?= e(csrf_token()) ?>">
+    <div class="crm-board"
+         data-csrf="<?= e(csrf_token()) ?>"
+         data-lost-reasons="<?= e(json_encode(crm_lost_reasons(), JSON_UNESCAPED_UNICODE)) ?>">
         <?php foreach (crm_pipeline_statuses() as $code => $meta):
             $cards = $byStatus[$code];
             $colCount = count($cards);
@@ -466,6 +484,11 @@ require __DIR__ . '/../includes/header.php';
                                 <?php if ($r['next_followup']): ?>
                                     <div class="crm-card-meta muted small">
                                         ↻ <?= e(date('j M', strtotime($r['next_followup']))) ?>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($r['status'] === 'lost' && !empty($r['lost_reason'])): ?>
+                                    <div class="crm-card-meta crm-card-lost">
+                                        <span class="pill pill-lost-reason">Lost: <?= e(crm_lost_reason_label($r['lost_reason'])) ?></span>
                                     </div>
                                 <?php endif; ?>
                                 <div class="crm-card-meta crm-card-owner">

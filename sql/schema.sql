@@ -475,6 +475,9 @@ CREATE TABLE inquiry_families (
     -- than an ENUM so admins can add stages from /crm/stages.php without
     -- a schema change.
     status          VARCHAR(40)  NOT NULL DEFAULT 'new',
+    -- When status='lost' this captures the why (cost, distance, no_response, …).
+    -- Free-form VARCHAR — label list lives in includes/crm.php.
+    lost_reason     VARCHAR(40)  NULL,
     probability     TINYINT UNSIGNED NOT NULL DEFAULT 20,
     priority        ENUM('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
     expected_fee    DECIMAL(10,2) NULL,
@@ -488,8 +491,9 @@ CREATE TABLE inquiry_families (
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_inq_odoo_lead (odoo_lead_id),
-    KEY idx_inq_status   (status),
-    KEY idx_inq_created  (created_at),
+    KEY idx_inq_status      (status),
+    KEY idx_inq_lost_reason (lost_reason),
+    KEY idx_inq_created     (created_at),
     KEY idx_inq_priority (priority),
     KEY idx_inq_campaign (campaign_id),
     KEY idx_inq_ip_recent (ip_hash, created_at),
