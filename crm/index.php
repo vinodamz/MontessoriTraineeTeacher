@@ -290,16 +290,24 @@ $projection = crm_revenue_projection();
 $money      = fn(float $v) => '₹' . number_format($v, 0);
 
 // Follow-ups due in the next 7 days — handy reminder above the board.
-$dueFollowups = db()->query("
-    SELECT t.id, t.family_id, t.follow_up_at, t.kind, f.primary_name
+// Filtered by the same owner chip as the kanban so the card and the
+// board stay in sync (Mine → only the user's, Team → everyone's,
+// Unassigned → null-owner only, specific teammate → that user's).
+$dueSql = "
+    SELECT t.id, t.family_id, t.follow_up_at, t.kind, f.primary_name, f.owner_id
     FROM inquiry_touchpoints t
     JOIN inquiry_families f ON f.id = t.family_id
     WHERE t.follow_up_at IS NOT NULL
       AND t.follow_up_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
       AND f.status IN ('" . implode("','", crm_open_statuses()) . "')
+      $ownerWhere
     ORDER BY t.follow_up_at
     LIMIT 10
-")->fetchAll();
+";
+$dueStmt = db()->prepare($dueSql);
+if ($ownerParam !== null) $dueStmt->bindValue(':owner_param', $ownerParam, PDO::PARAM_INT);
+$dueStmt->execute();
+$dueFollowups = $dueStmt->fetchAll();
 
 $pageTitle  = 'Admissions';
 $wideLayout = true;
@@ -416,16 +424,31 @@ require __DIR__ . '/../includes/header.php';
     </li>
 </ul>
 
+<?php
+// Scope label mirrors the owner chip so users know whose follow-ups they're seeing.
+$followupScope = $ownerFilter === 'mine'       ? 'Mine'
+              : ($ownerFilter === 'all'        ? 'Team'
+              : ($ownerFilter === 'unassigned' ? 'Unassigned'
+              : ($teamById[(int)$ownerFilter] ?? null)));
+?>
 <?php if ($dueFollowups): ?>
     <div class="card">
-        <h3 style="margin-bottom:.6rem;">Upcoming follow-ups</h3>
+        <h3 style="margin-bottom:.6rem;">
+            Upcoming follow-ups
+            <?php if ($followupScope): ?>
+                <span class="muted small" style="font-weight:400;">· <?= e($followupScope) ?></span>
+            <?php endif; ?>
+        </h3>
         <ul class="followup-list" role="list">
-            <?php foreach ($dueFollowups as $f): ?>
+            <?php foreach ($dueFollowups as $f):
+                $ownerLabel = $f['owner_id'] ? ($teamById[(int)$f['owner_id']] ?? null) : 'Unassigned';
+            ?>
                 <li>
                     <a href="/crm/view.php?id=<?= (int)$f['family_id'] ?>"><?= e($f['primary_name']) ?></a>
                     <span class="muted small">
                         · <?= e(crm_touchpoint_kinds()[$f['kind']] ?? $f['kind']) ?>
                         · <?= e(date('D, j M · H:i', strtotime($f['follow_up_at']))) ?>
+                        <?php if ($ownerLabel): ?> · <?= e($ownerLabel) ?><?php endif; ?>
                     </span>
                 </li>
             <?php endforeach; ?>
