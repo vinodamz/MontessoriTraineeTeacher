@@ -16,7 +16,13 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/staff.php';
 
-$user    = require_module('staff');
+$user    = require_login();
+// Self check-in/out is open to everyone in the staff roster (admins,
+// teachers, and anyone with the staff module). Other ops (the admin grid
+// view, op=mark) still need the staff module — checked below.
+$inStaffRoster = ($user['role'] === 'admin')
+    || ($user['role'] === 'teacher')
+    || user_has_module($user, 'staff');
 $isAdmin = staff_is_admin($user);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -24,6 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $op = $_POST['op'] ?? '';
 
     if ($op === 'self_in' || $op === 'self_out') {
+        if (!$inStaffRoster) {
+            http_response_code(403);
+            echo 'Forbidden — only staff can check in.';
+            exit;
+        }
         $today = date('Y-m-d');
         $uid   = (int)$user['id'];
         $stmt  = db()->prepare("SELECT id, check_in, status FROM staff_attendance WHERE user_id = :u AND att_date = :d");
@@ -96,6 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ---- GET ----------------------------------------------------------------
+// Anyone in the staff roster can view their own attendance row; the admin
+// roster grid + op=mark still need the staff module.
+if (!$inStaffRoster) {
+    http_response_code(403);
+    echo 'Forbidden — you do not have access to the staff module.';
+    exit;
+}
 $date = $_GET['date'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
 
