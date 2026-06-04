@@ -58,15 +58,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prob  = max(0, min(100, (int)($_POST['probability'] ?? 0)));
         $open  = !empty($_POST['is_open'])   ? 1 : 0;
         $act   = !empty($_POST['is_active']) ? 1 : 0;
+        // WhatsApp messaging config (migrate_027). Stored NULL when blank so an
+        // unconfigured stage cleanly reports "nothing to send".
+        $waText = trim((string)($_POST['wa_text'] ?? ''));
+        $waTpl  = trim((string)($_POST['wa_template'] ?? ''));
+        $waLang = trim((string)($_POST['wa_template_lang'] ?? ''));
         if ($label === '' || $id <= 0) {
             flash_set('error', 'Stage label is required.');
             redirect('/crm/stages.php');
         }
         $pdo->prepare("
             UPDATE crm_stages
-            SET label=:l, probability=:p, is_open=:o, is_active=:a
+            SET label=:l, probability=:p, is_open=:o, is_active=:a,
+                wa_text=:wt, wa_template=:wtpl, wa_template_lang=:wlang
             WHERE id=:id
-        ")->execute([':l' => $label, ':p' => $prob, ':o' => $open, ':a' => $act, ':id' => $id]);
+        ")->execute([
+            ':l' => $label, ':p' => $prob, ':o' => $open, ':a' => $act,
+            ':wt'    => $waText === '' ? null : $waText,
+            ':wtpl'  => $waTpl  === '' ? null : $waTpl,
+            ':wlang' => $waLang === '' ? 'en_US' : $waLang,
+            ':id' => $id,
+        ]);
         flash_set('ok', 'Stage updated.');
         redirect('/crm/stages.php');
     }
@@ -202,6 +214,34 @@ foreach ($rows as $r):
                     <button class="btn btn-small"            type="submit" form="stage-edit-<?= $rid ?>">Save</button>
                     <button class="btn btn-small btn-danger" type="submit" form="stage-del-<?= $rid ?>"
                         <?= (int)$r['family_count'] > 0 ? 'disabled title="Has inquiries — deactivate instead"' : '' ?>>Delete</button>
+                </td>
+            </tr>
+            <tr class="stage-wa-row">
+                <td></td>
+                <td colspan="7">
+                    <details<?= (trim((string)($r['wa_text'] ?? '')) !== '' || trim((string)($r['wa_template'] ?? '')) !== '') ? ' open' : '' ?>>
+                        <summary class="muted" style="cursor:pointer;">WhatsApp message for this stage</summary>
+                        <div style="margin-top:.5rem; display:grid; gap:.4rem;">
+                            <label class="muted" style="font-size:.85em;">
+                                In-window text <small>(sent when the parent messaged within 24h — supports
+                                <code>{parent_name}</code> <code>{child_name}</code> <code>{school_name}</code> <code>{stage}</code>)</small>
+                                <textarea form="stage-edit-<?= $rid ?>" name="wa_text" rows="2"
+                                    style="width:100%;" placeholder="Hi {parent_name}, …"><?= e((string)($r['wa_text'] ?? '')) ?></textarea>
+                            </label>
+                            <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
+                                <label class="muted" style="font-size:.85em; flex:2 1 12rem;">
+                                    Out-of-window template <small>(Meta-approved name)</small>
+                                    <input form="stage-edit-<?= $rid ?>" type="text" name="wa_template" style="width:100%;"
+                                        value="<?= e((string)($r['wa_template'] ?? '')) ?>" placeholder="e.g. admissions_followup">
+                                </label>
+                                <label class="muted" style="font-size:.85em; flex:1 1 6rem;">
+                                    Template language
+                                    <input form="stage-edit-<?= $rid ?>" type="text" name="wa_template_lang" style="width:100%;"
+                                        value="<?= e((string)($r['wa_template_lang'] ?? 'en_US')) ?>" placeholder="en_US">
+                                </label>
+                            </div>
+                        </div>
+                    </details>
                 </td>
             </tr>
             <?php endforeach; ?>

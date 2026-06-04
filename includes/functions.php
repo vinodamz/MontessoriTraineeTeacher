@@ -131,6 +131,76 @@ function wacrm_launch_url(): string
     return rtrim($url, '/') . '/api/sso/mtt?token=' . urlencode($tok);
 }
 
+/**
+ * Send a WhatsApp message to a lead through WACRM's hybrid endpoint
+ * (/api/whatsapp/send-to-lead). WACRM decides text-vs-template by the 24-hour
+ * session window: free text if the parent messaged within 24h, otherwise the
+ * Meta-approved template. Server-to-server, authed with the shared
+ * wacrm_sso_secret (== WACRM's MTT_SSO_SECRET env var).
+ *
+ * @param string   $phone    recipient (any format; WACRM normalises)
+ * @param string   $text     free-text body (used inside the 24h window)
+ * @param string   $template Meta-approved template name (used outside it)
+ * @param string   $lang     template language code
+ * @param string[] $params   ordered template body variables ({{1}}, {{2}}, …)
+ * @return array{ok:bool,status:int,sent:?string,error:?string}
+ */
+function wacrm_send_to_lead(
+    string $phone,
+    string $text = '',
+    string $template = '',
+    string $lang = 'en_US',
+    array $params = []
+): array {
+    $base   = external_app_url('wacrm');
+    $secret = (string)app_setting('wacrm_sso_secret', '');
+    if ($base === '' || $secret === '') {
+        return ['ok' => false, 'status' => 0, 'sent' => null,
+                'error' => 'WhatsApp CRM not configured — set its URL and SSO secret in Admin.'];
+    }
+    if (trim($phone) === '') {
+        return ['ok' => false, 'status' => 0, 'sent' => null, 'error' => 'No phone number on this lead.'];
+    }
+    if ($text === '' && $template === '') {
+        return ['ok' => false, 'status' => 0, 'sent' => null,
+                'error' => 'This stage has no WhatsApp text or template configured.'];
+    }
+
+    $body = ['phone' => $phone];
+    if ($text !== '') {
+        $body['text'] = $text;
+    }
+    if ($template !== '') {
+        $body['template_name']     = $template;
+        $body['template_language'] = $lang !== '' ? $lang : 'en_US';
+        $body['template_params']   = array_values($params);
+    }
+
+    $ch = curl_init(rtrim($base, '/') . '/api/whatsapp/send-to-lead');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'X-Lead-Secret: ' . $secret],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $resp = curl_exec($ch);
+    if ($resp === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        return ['ok' => false, 'status' => 0, 'sent' => null, 'error' => 'Network error: ' . $err];
+    }
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $data = json_decode((string)$resp, true);
+    if ($status >= 200 && $status < 300 && !empty($data['success'])) {
+        return ['ok' => true, 'status' => $status, 'sent' => (string)($data['sent'] ?? ''), 'error' => null];
+    }
+    $msg = is_array($data) && isset($data['error']) ? (string)$data['error'] : ('HTTP ' . $status);
+    return ['ok' => false, 'status' => $status, 'sent' => null, 'error' => $msg];
+}
+
 function redirect(string $url): void
 {
     header("Location: $url");

@@ -330,6 +330,37 @@ function crm_wa_substitute(string $body, array $vars): string
 }
 
 /**
+ * Per-stage WhatsApp message config (migrate_027). Drives the "Send via
+ * WhatsApp CRM" button on each lead: the lead's current stage decides which
+ * text/template gets sent. Returns blanks if unset or the columns are missing
+ * (pre-migration), so callers never break.
+ *
+ * @return array{wa_text:string, wa_template:string, wa_template_lang:string}
+ */
+function crm_stage_wa(string $code): array
+{
+    $blank = ['wa_text' => '', 'wa_template' => '', 'wa_template_lang' => 'en_US'];
+    if ($code === '') return $blank;
+    try {
+        $st = db()->prepare("
+            SELECT wa_text, wa_template, wa_template_lang
+            FROM crm_stages WHERE code = :c LIMIT 1
+        ");
+        $st->execute([':c' => $code]);
+        $r = $st->fetch();
+        if (!$r) return $blank;
+        $lang = trim((string)($r['wa_template_lang'] ?? ''));
+        return [
+            'wa_text'          => (string)($r['wa_text'] ?? ''),
+            'wa_template'      => trim((string)($r['wa_template'] ?? '')),
+            'wa_template_lang' => $lang !== '' ? $lang : 'en_US',
+        ];
+    } catch (Throwable $e) {
+        return $blank;
+    }
+}
+
+/**
  * Pull per-family substitution vars in one batched query so the kanban
  * doesn't go N+1. Returns [family_id => ['parent_name' => …, 'child_name' => …]].
  */

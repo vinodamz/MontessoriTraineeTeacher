@@ -45,6 +45,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/crm/view.php?id=' . $id);
     }
 
+    if ($op === 'wa_send') {
+        // Send the current stage's WhatsApp message via the WhatsApp CRM.
+        // Hybrid: WACRM picks free-text (inside the 24h window) vs the
+        // Meta-approved template (outside it). Template auto-chosen by stage.
+        $fam = $pdo->prepare("SELECT primary_name, primary_phone, status FROM inquiry_families WHERE id=:id");
+        $fam->execute([':id' => $id]);
+        $f = $fam->fetch();
+        if (!$f) {
+            flash_set('error', 'Inquiry not found.');
+            redirect('/crm/index.php');
+        }
+        $phone = trim((string)($f['primary_phone'] ?? ''));
+        if ($phone === '') {
+            flash_set('error', 'No phone number on this lead — add one first.');
+            redirect('/crm/view.php?id=' . $id);
+        }
+        $wa = crm_stage_wa((string)$f['status']);
+        if ($wa['wa_text'] === '' && $wa['wa_template'] === '') {
+            flash_set('error', 'No WhatsApp message is set for the "' . crm_status_label((string)$f['status'])
+                . '" stage. Configure it in Pipeline → Stages.');
+            redirect('/crm/view.php?id=' . $id);
+        }
+        // Substitution vars for the free-text body + template param.
+        $vars = crm_wa_vars_for_families([$id])[$id] ?? ['parent_name' => '', 'child_name' => ''];
+        $vars['school_name'] = app_name();
+        $vars['stage']       = crm_status_label((string)$f['status']);
+        $parentName = $vars['parent_name'] !== '' ? $vars['parent_name'] : (string)$f['primary_name'];
+        $text = $wa['wa_text'] !== '' ? crm_wa_substitute($wa['wa_text'], $vars) : '';
+
+        $res = wacrm_send_to_lead(
+            $phone,
+            $text,
+            $wa['wa_template'],
+            $wa['wa_template_lang'],
+            $wa['wa_template'] !== '' ? [$parentName] : []
+        );
+        if ($res['ok']) {
+            crm_audit_log('wa_sent', $id, ['stage' => $f['status'], 'mode' => $res['sent']]);
+            $how = $res['sent'] === 'template' ? 'approved template' : 'message';
+            flash_set('ok', 'WhatsApp ' . $how . ' sent via the CRM. It will appear in the inbox.');
+        } else {
+            flash_set('error', 'Could not send: ' . $res['error']);
+        }
+        redirect('/crm/view.php?id=' . $id);
+    }
+
     if ($op === 'status') {
         $st = $_POST['status'] ?? '';
         if (!array_key_exists($st, crm_statuses())) {
@@ -286,6 +332,23 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
         <a class="btn" href="/crm/edit.php?id=<?= $id ?>">Edit</a>
         <a class="btn" href="/fees/guide.php?inquiry_id=<?= $id ?>" title="Generate personalised fee guide for this family">Fee Guide</a>
+        <?php
+            // "Send via WhatsApp CRM" — only when we have a phone, the CRM is
+            // configured, and this stage has a message set up.
+            $waStageMsg = $family['primary_phone'] ? crm_stage_wa((string)$family['status']) : null;
+            $waConfigured = external_app_url('wacrm') !== '' && (string)app_setting('wacrm_sso_secret', '') !== '';
+            if ($waStageMsg && $waConfigured && ($waStageMsg['wa_text'] !== '' || $waStageMsg['wa_template'] !== '')):
+        ?>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('Send the &quot;<?= e(crm_status_label((string)$family['status'])) ?>&quot; WhatsApp message to <?= e($family['primary_phone']) ?> via the WhatsApp CRM?');">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op" value="wa_send">
+                <button class="btn" style="background:#25d366; border-color:#1da851; color:#fff;"
+                        title="Send this stage's WhatsApp message — free text within 24h, approved template otherwise">
+                    Send via WhatsApp CRM
+                </button>
+            </form>
+        <?php endif; ?>
         <form method="post" style="display:inline;"
               onsubmit="return confirm('Delete this inquiry permanently? Touchpoints and unpromoted children will be lost.')">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
