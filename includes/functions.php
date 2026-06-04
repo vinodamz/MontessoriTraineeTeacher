@@ -519,6 +519,74 @@ function student_doc_category_label(string $code): string
     return STUDENT_DOC_CATEGORIES[$code] ?? $code;
 }
 
+// ---------- Student photo upload helpers ------------------------------------
+
+/**
+ * Photos for the child, father, mother. Stored under /uploads/student_photos/
+ * (gitignored). Served via /students/photo.php with an auth check — keep
+ * this directory outside the web root if your host supports it.
+ */
+function student_photos_dir(): string
+{
+    $dir = realpath(__DIR__ . '/..') . '/uploads/student_photos';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    return $dir;
+}
+
+const STUDENT_PHOTO_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const STUDENT_PHOTO_MIME_ALLOW = [
+    'image/jpeg' => 'jpg',
+    'image/png'  => 'png',
+    'image/webp' => 'webp',
+    'image/gif'  => 'gif',
+];
+
+/**
+ * Move an uploaded $_FILES entry into student_photos_dir() under a unique
+ * filename and return the basename (suitable for storing in
+ * students.photo_path / student_parents.photo_path). Returns null when no
+ * file was uploaded. Throws RuntimeException on validation failure.
+ */
+function student_photo_store(array $file, string $prefix = 'photo'): ?string
+{
+    if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) return null;
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Upload failed (code ' . (int)$file['error'] . ').');
+    }
+    if ((int)$file['size'] <= 0 || (int)$file['size'] > STUDENT_PHOTO_MAX_BYTES) {
+        throw new RuntimeException('Image too large — max ' . format_bytes(STUDENT_PHOTO_MAX_BYTES) . '.');
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = (string)$finfo->file($file['tmp_name']);
+    if (!isset(STUDENT_PHOTO_MIME_ALLOW[$mime])) {
+        throw new RuntimeException('Only JPEG / PNG / WebP / GIF images are allowed.');
+    }
+    $ext   = STUDENT_PHOTO_MIME_ALLOW[$mime];
+    $name  = $prefix . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $dest  = student_photos_dir() . '/' . $name;
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not move uploaded file.');
+    }
+    @chmod($dest, 0644);
+    return $name;
+}
+
+/** Best-effort unlink for a stored photo. Silent if missing. */
+function student_photo_delete(?string $stored): void
+{
+    if ($stored === null || $stored === '') return;
+    $p = student_photos_dir() . '/' . basename($stored);
+    if (is_file($p)) @unlink($p);
+}
+
+/** URL for an uploaded photo via the auth-checked serving script. */
+function student_photo_url(string $stored): string
+{
+    return '/students/photo.php?f=' . rawurlencode(basename($stored));
+}
+
 // ---------- Expense receipt upload helpers ----------------------------------
 
 /** Absolute filesystem path to the receipts directory. Created on demand. */

@@ -22,3 +22,6 @@ uploads/receipts/*
 
 uploads/logbook/*
 !uploads/logbook/.gitkeep
+
+uploads/student_photos/*
+!uploads/student_photos/.gitkeep
