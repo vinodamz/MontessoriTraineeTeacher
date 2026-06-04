@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook', 'inventory']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook', 'inventory', 'wacrm', 'n8n']);
     return implode(',', $valid);
 }
 
@@ -133,6 +133,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $upsert->execute([':k' => 'app_name',       ':v' => substr($newName,  0, 120)]);
         $upsert->execute([':k' => 'app_short_name', ':v' => substr($newShort, 0, 30)]);
+        // External app endpoints — admin can change these without a code
+        // deploy. Empty string clears the integration.
+        foreach (external_apps_registry() as $appKey => $appMeta) {
+            $url = trim((string)($_POST[$appMeta['settings_key']] ?? ''));
+            $upsert->execute([':k' => $appMeta['settings_key'], ':v' => substr($url, 0, 255)]);
+        }
         app_setting_clear_cache();
         flash_set('ok', 'App settings saved. The new name appears everywhere on next page load.');
         redirect('/admin.php');
@@ -286,6 +292,20 @@ require __DIR__ . '/includes/header.php';
                 <span class="muted small">Reserved for spaces where the long name doesn't fit. Currently unused on UI.</span>
             </div>
         </div>
+        <h3 style="margin:.8rem 0 .4rem;">External app URLs</h3>
+        <p class="muted small" style="margin-top:0;">Each external integration appears as a tile on the home dashboard for users you've granted the matching module to. Set the URL here, then assign the module on a user.</p>
+        <div class="row">
+            <?php foreach (external_apps_registry() as $appKey => $appMeta): ?>
+                <div class="field" style="flex: 1 1 280px;">
+                    <label><?= e($appMeta['name']) ?> URL</label>
+                    <input type="url" name="<?= e($appMeta['settings_key']) ?>"
+                           value="<?= e(external_app_url($appKey)) ?>"
+                           placeholder="https://…"
+                           maxlength="255">
+                    <span class="muted small"><?= e($appMeta['subtitle']) ?> — leave blank to hide the embed.</span>
+                </div>
+            <?php endforeach; ?>
+        </div>
         <div class="actions">
             <button class="btn btn-primary" type="submit">Save</button>
         </div>
@@ -325,6 +345,8 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="fees"><span>Fees</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="logbook"><span>Logbook</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="inventory"><span>Inventory</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="wacrm"><span>WACRM</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="n8n"><span>n8n</span></label>
             </div>
         </div>
         <div class="actions">
@@ -363,6 +385,8 @@ require __DIR__ . '/includes/header.php';
         $hasF    = in_array('fees', $mods, true);
         $hasL    = in_array('logbook', $mods, true);
         $hasInv  = in_array('inventory', $mods, true);
+        $hasWa   = in_array('wacrm',     $mods, true);
+        $hasN8n  = in_array('n8n',       $mods, true);
     ?>
         <li class="team-row" style="--card: <?= e(user_color((int)$u['id'])) ?>;">
             <div class="team-dot"><?= e(user_initials($u['name'])) ?></div>
@@ -424,6 +448,14 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Inventory module (stock of materials, supplies, equipment)">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="inventory" <?= $hasInv ? 'checked' : '' ?>>
                     <span>Inventory</span>
+                </label>
+                <label class="checkbox" title="WACRM — WhatsApp CRM workspace (external app)">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="wacrm" <?= $hasWa ? 'checked' : '' ?>>
+                    <span>WACRM</span>
+                </label>
+                <label class="checkbox" title="n8n — workflow automation (external app)">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="n8n" <?= $hasN8n ? 'checked' : '' ?>>
+                    <span>n8n</span>
                 </label>
                 <label class="checkbox" title="Active">
                     <input form="<?= $fid ?>" type="checkbox" name="active" value="1" <?= $u['active'] ? 'checked' : '' ?>>
