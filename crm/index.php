@@ -472,6 +472,10 @@ $followupScope = $ownerFilter === 'mine'       ? 'Mine'
                 <header class="crm-col-head">
                     <h3><?= e($meta['label']) ?></h3>
                     <span class="pill"><?= $colCount ?></span>
+                    <a class="crm-col-add"
+                       href="/crm/edit.php?status=<?= e($code) ?>"
+                       title="Add a new inquiry directly into &quot;<?= e($meta['label']) ?>&quot;"
+                       aria-label="Add inquiry to <?= e($meta['label']) ?>">+</a>
                 </header>
                 <ul class="crm-col-list" data-status="<?= e($code) ?>" role="list">
                     <?php foreach ($cards as $r):
