@@ -281,7 +281,7 @@ require __DIR__ . '/../includes/header.php';
 
     <div class="grid-actions-bar">
         <button class="btn btn-primary" type="submit">Save all changes</button>
-        <span class="muted small">Editing <?= count($students) ?> rows · all text fields editable inline · photos managed on the full edit page (<a href="#" title="open any row's ⤢">⤢</a>).</span>
+        <span class="muted small">Editing <?= count($students) ?> row<?= count($students) === 1 ? '' : 's' ?> · all text fields editable inline · use the ⤢ column to open the full profile and upload photos.</span>
     </div>
 
     <div class="grid-scroll">
@@ -290,14 +290,14 @@ require __DIR__ . '/../includes/header.php';
                 <tr>
                     <th class="grid-sticky-col">First name</th>
                     <th>Last name</th>
-                    <th>Photo</th>
+                    <th class="grid-cell-center">Photo</th>
                     <th>Admission #</th>
                     <th>Grade</th>
                     <th>Teacher</th>
                     <th>Gender</th>
                     <th>Status</th>
                     <th>Year</th>
-                    <th>Active</th>
+                    <th class="grid-cell-center">Active</th>
                     <th>Emergency name</th>
                     <th>Emergency phone</th>
                     <th>Father name</th>
@@ -308,7 +308,7 @@ require __DIR__ . '/../includes/header.php';
                     <th>Mother email</th>
                     <th>Home address</th>
                     <th>Permanent address</th>
-                    <th></th>
+                    <th class="grid-cell-center">Open</th>
                 </tr>
             </thead>
             <tbody>
@@ -318,17 +318,16 @@ require __DIR__ . '/../includes/header.php';
                     $mother = $parentByStudent[$sid]['mother'] ?? ['name'=>'','phone'=>'','email'=>''];
                 ?>
                     <tr>
-                        <td class="grid-sticky-col"><input name="<?= $p ?>[first_name]" value="<?= e($s['first_name']) ?>" required></td>
-                        <td><input name="<?= $p ?>[last_name]" value="<?= e($s['last_name'] ?? '') ?>"></td>
-                        <td style="text-align:center;">
+                        <td class="grid-sticky-col"><input type="text" name="<?= $p ?>[first_name]" value="<?= e($s['first_name']) ?>" required></td>
+                        <td><input type="text" name="<?= $p ?>[last_name]" value="<?= e($s['last_name'] ?? '') ?>"></td>
+                        <td class="grid-cell-center">
                             <?php if (!empty($s['photo_path'])): ?>
-                                <img src="<?= e(student_photo_url($s['photo_path'])) ?>" alt=""
-                                     style="height:32px; width:32px; border-radius:50%; object-fit:cover; border:1px solid var(--line);">
+                                <img class="grid-avatar" src="<?= e(student_photo_url($s['photo_path'])) ?>" alt="">
                             <?php else: ?>
-                                <a href="/students/edit.php?id=<?= $sid ?>" class="muted small" title="Upload on the full edit page">+</a>
+                                <a class="grid-photo-add" href="/students/edit.php?id=<?= $sid ?>" title="Upload on the full edit page" aria-label="Upload photo">+</a>
                             <?php endif; ?>
                         </td>
-                        <td><input name="<?= $p ?>[admission_number]" value="<?= e($s['admission_number'] ?? '') ?>" style="width:9ch;"></td>
+                        <td><input type="text" name="<?= $p ?>[admission_number]" value="<?= e($s['admission_number'] ?? '') ?>"></td>
                         <td>
                             <select name="<?= $p ?>[grade]">
                                 <?php foreach ($VALID_GRADES as $g): ?>
@@ -366,18 +365,18 @@ require __DIR__ . '/../includes/header.php';
                                 <?php endforeach; ?>
                             </select>
                         </td>
-                        <td style="text-align:center;"><input type="checkbox" name="<?= $p ?>[is_active]" value="1" <?= ($s['is_active'] ?? 1) ? 'checked' : '' ?>></td>
-                        <td><input name="<?= $p ?>[emergency_name]"  value="<?= e($s['emergency_contact_name']  ?? '') ?>"></td>
-                        <td><input name="<?= $p ?>[emergency_phone]" value="<?= e($s['emergency_contact_phone'] ?? '') ?>" style="width:14ch;"></td>
-                        <td><input name="<?= $p ?>[father][name]"  value="<?= e($father['name'])  ?>"></td>
-                        <td><input name="<?= $p ?>[father][phone]" value="<?= e($father['phone']) ?>" style="width:14ch;"></td>
-                        <td><input name="<?= $p ?>[father][email]" value="<?= e($father['email']) ?>" type="email"></td>
-                        <td><input name="<?= $p ?>[mother][name]"  value="<?= e($mother['name'])  ?>"></td>
-                        <td><input name="<?= $p ?>[mother][phone]" value="<?= e($mother['phone']) ?>" style="width:14ch;"></td>
-                        <td><input name="<?= $p ?>[mother][email]" value="<?= e($mother['email']) ?>" type="email"></td>
-                        <td><textarea name="<?= $p ?>[home_address]"      rows="1" style="min-width:18ch;"><?= e($s['home_address']      ?? '') ?></textarea></td>
-                        <td><textarea name="<?= $p ?>[permanent_address]" rows="1" style="min-width:18ch;"><?= e($s['permanent_address'] ?? '') ?></textarea></td>
-                        <td><a class="btn btn-ghost btn-small" href="/students/edit.php?id=<?= $sid ?>" title="Full profile (upload photos here)">⤢</a></td>
+                        <td class="grid-cell-center"><input type="checkbox" name="<?= $p ?>[is_active]" value="1" <?= ($s['is_active'] ?? 1) ? 'checked' : '' ?>></td>
+                        <td><input type="text"  name="<?= $p ?>[emergency_name]"  value="<?= e($s['emergency_contact_name']  ?? '') ?>"></td>
+                        <td><input type="tel"   name="<?= $p ?>[emergency_phone]" value="<?= e($s['emergency_contact_phone'] ?? '') ?>"></td>
+                        <td><input type="text"  name="<?= $p ?>[father][name]"  value="<?= e($father['name'])  ?>"></td>
+                        <td><input type="tel"   name="<?= $p ?>[father][phone]" value="<?= e($father['phone']) ?>"></td>
+                        <td><input type="email" name="<?= $p ?>[father][email]" value="<?= e($father['email']) ?>"></td>
+                        <td><input type="text"  name="<?= $p ?>[mother][name]"  value="<?= e($mother['name'])  ?>"></td>
+                        <td><input type="tel"   name="<?= $p ?>[mother][phone]" value="<?= e($mother['phone']) ?>"></td>
+                        <td><input type="email" name="<?= $p ?>[mother][email]" value="<?= e($mother['email']) ?>"></td>
+                        <td><textarea name="<?= $p ?>[home_address]"      rows="1"><?= e($s['home_address']      ?? '') ?></textarea></td>
+                        <td><textarea name="<?= $p ?>[permanent_address]" rows="1"><?= e($s['permanent_address'] ?? '') ?></textarea></td>
+                        <td class="grid-cell-center"><a class="btn btn-ghost btn-small" href="/students/edit.php?id=<?= $sid ?>" title="Full profile (upload photos here)" aria-label="Open full profile">⤢</a></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
