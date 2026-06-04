@@ -1151,3 +1151,44 @@ a.admin-tile:hover {
 .app-icon-inventory { background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%); }
 .inv-low td { background: #fff4e1; }
 .inv-low td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+
+/* Admissions pipeline: search + owner-filter bar above the kanban. */
+.crm-pipe-filter { display: flex; flex-direction: column; gap: .6rem; padding: .75rem 1rem; }
+.crm-pipe-search { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
+.crm-pipe-search input[type="search"] {
+    flex: 1 1 280px; min-width: 200px;
+    padding: .5rem .65rem; border: 1px solid var(--line);
+    border-radius: var(--radius-sm); background: #fff; font: inherit; color: var(--ink);
+}
+.crm-pipe-chips { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.crm-pipe-chip {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .3rem .7rem; border-radius: 999px;
+    border: 1px solid var(--line); background: #fff;
+    color: var(--ink-soft); font-size: .85rem; font-weight: 500;
+    text-decoration: none;
+}
+.crm-pipe-chip:hover { background: var(--line-soft); text-decoration: none; }
+.crm-pipe-chip.on   { background: var(--ink); color: #fff; border-color: var(--ink); }
+.crm-pipe-chip .pill { background: rgba(255,255,255,.18); color: inherit; font-size: .75rem; padding: 0 .4rem; }
+.crm-pipe-chip:not(.on) .pill { background: var(--line-soft); color: var(--ink-soft); }
+.crm-pipe-owner-select {
+    padding: .35rem .55rem; border: 1px solid var(--line);
+    border-radius: var(--radius-sm); background: #fff; font: inherit; font-size: .85rem;
+    color: var(--ink-soft);
+}
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* Owner line on each pipeline card + reassign picker styling matches the move picker. */
+.crm-card-owner { font-size: .8rem; gap: .25rem; }
+.crm-card-owner-select {
+    width: 100%; margin-top: .3rem;
+    font-size: .85rem; padding: .4rem .55rem;
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--bg-card); color: var(--ink-soft); appearance: menulist;
+}
+.crm-card-owner-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.crm-card-owner-select:disabled { opacity: .6; }

@@ -13,6 +13,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/crm.php';
 
 $user = require_module('crm');
+$userId = (int)$user['id'];
 
 // ---- AJAX: drag-and-drop status change -----------------------------------
 // Mirrors the tasks/tasks.php op=move pattern: POST + X-Requested-With,
@@ -51,17 +52,132 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'move' && 
     }
 }
 
-$rows = db()->query("
+// ---- AJAX: reassign owner ------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'reassign' && $isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        csrf_check();
+        $id    = (int)($_POST['id'] ?? 0);
+        $newId = (int)($_POST['owner_id'] ?? 0);
+        if ($id <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'bad input']);
+            exit;
+        }
+        $prev = db()->prepare("SELECT owner_id FROM inquiry_families WHERE id = :id");
+        $prev->execute([':id' => $id]);
+        $prevOwner = $prev->fetchColumn();
+        $prevOwner = $prevOwner === false || $prevOwner === null ? null : (int)$prevOwner;
+
+        db()->prepare("UPDATE inquiry_families SET owner_id = :o WHERE id = :id")
+            ->execute([':o' => $newId > 0 ? $newId : null, ':id' => $id]);
+
+        if (($prevOwner ?? 0) !== ($newId > 0 ? $newId : 0)) {
+            crm_audit_log('owner_changed', $id, [
+                'from' => $prevOwner, 'to' => $newId > 0 ? $newId : null, 'via' => 'kanban_picker',
+            ]);
+        }
+        echo json_encode(['ok' => true]);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
+
+// ---- Owner filter --------------------------------------------------------
+// Default to "mine" so each user sees their pipeline first; toggle to "all"
+// for the team-wide view or "unassigned" to triage.
+$ownerFilter = (string)($_GET['owner'] ?? 'mine');
+$ownerWhere  = '';
+$ownerParam  = null;
+if ($ownerFilter === 'mine') {
+    $ownerWhere = ' AND f.owner_id = :owner_param';
+    $ownerParam = $userId;
+} elseif ($ownerFilter === 'unassigned') {
+    $ownerWhere = ' AND f.owner_id IS NULL';
+} elseif (ctype_digit($ownerFilter) && (int)$ownerFilter > 0) {
+    $ownerWhere = ' AND f.owner_id = :owner_param';
+    $ownerParam = (int)$ownerFilter;
+}
+// 'all' → no extra clause.
+
+// Team list for the filter dropdown + the reassign picker on each card.
+$team = db()->query("
+    SELECT id, name FROM users
+    WHERE active = 1 AND (role = 'admin' OR FIND_IN_SET('crm', modules) > 0)
+    ORDER BY name
+")->fetchAll();
+$teamById = [];
+foreach ($team as $tu) $teamById[(int)$tu['id']] = $tu['name'];
+
+// ---- Free-text search ----------------------------------------------------
+// Matches against any text field on the family + its children, parents,
+// campaign, owner, source, status, and notes — so a single box covers
+// "find Vinod", "find +91 98...", "find school_visited", "find sibling tag".
+$q       = trim((string)($_GET['q'] ?? ''));
+$qWhere  = '';
+$qParams = [];
+if ($q !== '') {
+    // Native PDO prepares don't allow reusing a named placeholder, so each
+    // LIKE gets its own bound name. They all carry the same %term% value.
+    $names = [];
+    for ($i = 1; $i <= 15; $i++) {
+        $names[$i] = ':q' . $i;
+        $qParams[$names[$i]] = '%' . $q . '%';
+    }
+    $qWhere = "
+        AND (
+               f.primary_name  LIKE {$names[1]}
+            OR f.primary_phone LIKE {$names[2]}
+            OR f.primary_email LIKE {$names[3]}
+            OR f.source        LIKE {$names[4]}
+            OR f.notes         LIKE {$names[5]}
+            OR f.status        LIKE {$names[6]}
+            OR c.name          LIKE {$names[7]}
+            OR u.name          LIKE {$names[8]}
+            OR EXISTS (
+                SELECT 1 FROM inquiry_children k
+                 WHERE k.family_id = f.id
+                   AND (CONCAT_WS(' ', k.first_name, k.last_name) LIKE {$names[9]}
+                        OR k.target_grade LIKE {$names[10]})
+            )
+            OR EXISTS (
+                SELECT 1 FROM inquiry_parents p
+                 WHERE p.family_id = f.id
+                   AND (p.name LIKE {$names[11]} OR p.phone LIKE {$names[12]}
+                        OR p.email LIKE {$names[13]} OR p.occupation LIKE {$names[14]})
+            )
+            OR EXISTS (
+                SELECT 1 FROM inquiry_family_tags ft
+                 JOIN crm_tags t ON t.id = ft.tag_id
+                 WHERE ft.family_id = f.id AND t.name LIKE {$names[15]}
+            )
+        )
+    ";
+}
+
+$sql = "
     SELECT f.*,
            c.name AS campaign_name,
+           u.name AS owner_name,
            (SELECT COUNT(*) FROM inquiry_children k WHERE k.family_id = f.id) AS kid_count,
            (SELECT MIN(t.follow_up_at) FROM inquiry_touchpoints t
              WHERE t.family_id = f.id AND t.follow_up_at >= NOW())            AS next_followup
     FROM inquiry_families f
     LEFT JOIN crm_campaigns c ON c.id = f.campaign_id
+    LEFT JOIN users         u ON u.id = f.owner_id
     WHERE f.status <> 'lead'
+    $ownerWhere
+    $qWhere
     ORDER BY FIELD(f.priority,'urgent','high','normal','low'), f.updated_at DESC
-")->fetchAll();
+";
+$stmt = db()->prepare($sql);
+if ($ownerParam !== null) $stmt->bindValue(':owner_param', $ownerParam, PDO::PARAM_INT);
+foreach ($qParams as $k => $v) $stmt->bindValue($k, $v);
+$stmt->execute();
+$rows = $stmt->fetchAll();
 
 // Batch-load substitution vars for the WhatsApp template picker so the
 // kanban doesn't go N+1 (one parent + child lookup per card).
@@ -78,6 +194,33 @@ foreach ($rows as $r) {
 
 // Count of leads sitting in /crm/leads.php — shown as a quick-link chip.
 $leadCount = (int)db()->query("SELECT COUNT(*) FROM inquiry_families WHERE status = 'lead'")->fetchColumn();
+
+// Counts for the owner-filter chips so users see how many they own at a glance.
+$ownerCounts = [];
+try {
+    $cstmt = db()->query("
+        SELECT
+            SUM(owner_id = $userId)               AS mine,
+            SUM(owner_id IS NULL)                 AS unassigned,
+            COUNT(*)                              AS total
+        FROM inquiry_families
+        WHERE status <> 'lead'
+    ")->fetch();
+    $ownerCounts = [
+        'mine'       => (int)($cstmt['mine'] ?? 0),
+        'unassigned' => (int)($cstmt['unassigned'] ?? 0),
+        'all'        => (int)($cstmt['total'] ?? 0),
+    ];
+} catch (Throwable $e) {
+    $ownerCounts = ['mine' => 0, 'unassigned' => 0, 'all' => 0];
+}
+
+// Build the filter querystring helper so each chip preserves the search term.
+$filterUrl = function (string $ownerVal) use ($q): string {
+    $params = ['owner' => $ownerVal];
+    if ($q !== '') $params['q'] = $q;
+    return '/crm/index.php?' . http_build_query($params);
+};
 
 $projection = crm_revenue_projection();
 $money      = fn(float $v) => '₹' . number_format($v, 0);
@@ -116,9 +259,9 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn" href="/crm/calendar.php" title="Monthly calendar view">Calendar</a>
         <a class="btn" href="/crm/funnel.php"   title="Conversion funnel report">Funnel</a>
         <a class="btn" href="/crm/campaigns.php">Campaigns</a>
+        <a class="btn" href="/crm/tags.php" title="Add or edit inquiry tags">Tags</a>
         <?php if ($user['role'] === 'admin'): ?>
             <a class="btn" href="/crm/stages.php"       title="Manage pipeline stages">Stages</a>
-            <a class="btn" href="/crm/tags.php"         title="Manage inquiry tags">Tags</a>
             <a class="btn" href="/crm/probability_rules.php" title="Auto-set probability based on tags">Rules</a>
             <a class="btn" href="/crm/wa_templates.php" title="Manage WhatsApp message templates">WA templates</a>
             <a class="btn" href="/crm/audit.php"        title="Admin: full activity log">Audit</a>
@@ -129,6 +272,44 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn btn-primary" href="/crm/edit.php">+ New inquiry</a>
     </div>
 </div>
+
+<form method="get" class="crm-pipe-filter card" role="search">
+    <div class="crm-pipe-search">
+        <label for="crm-q" class="sr-only">Search</label>
+        <input id="crm-q" type="search" name="q" value="<?= e($q) ?>"
+               placeholder="Search name, phone, email, child, tag, source…" autocomplete="off">
+        <input type="hidden" name="owner" value="<?= e($ownerFilter) ?>">
+        <button class="btn btn-small" type="submit">Search</button>
+        <?php if ($q !== ''): ?>
+            <a class="btn btn-small btn-ghost" href="<?= e($filterUrl($ownerFilter)) ?>">Clear</a>
+        <?php endif; ?>
+    </div>
+    <div class="crm-pipe-chips" role="tablist" aria-label="Owner filter">
+        <a class="crm-pipe-chip <?= $ownerFilter === 'mine' ? 'on' : '' ?>" href="<?= e($filterUrl('mine')) ?>">
+            Mine <span class="pill"><?= (int)$ownerCounts['mine'] ?></span>
+        </a>
+        <a class="crm-pipe-chip <?= $ownerFilter === 'all' ? 'on' : '' ?>" href="<?= e($filterUrl('all')) ?>">
+            Team <span class="pill"><?= (int)$ownerCounts['all'] ?></span>
+        </a>
+        <a class="crm-pipe-chip <?= $ownerFilter === 'unassigned' ? 'on' : '' ?>" href="<?= e($filterUrl('unassigned')) ?>">
+            Unassigned <span class="pill"><?= (int)$ownerCounts['unassigned'] ?></span>
+        </a>
+        <select class="crm-pipe-owner-select"
+                onchange="if(this.value)location.href=this.value;"
+                aria-label="Filter by team member">
+            <option value="">Pick teammate…</option>
+            <?php foreach ($team as $tu):
+                $tid = (int)$tu['id'];
+                if ($tid === $userId) continue; // already a "Mine" chip
+            ?>
+                <option value="<?= e($filterUrl((string)$tid)) ?>"
+                        <?= $ownerFilter === (string)$tid ? 'selected' : '' ?>>
+                    <?= e($tu['name']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+</form>
 
 <ul class="admin-tiles" role="list" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
     <li>
@@ -229,6 +410,10 @@ require __DIR__ . '/../includes/header.php';
                                         ↻ <?= e(date('j M', strtotime($r['next_followup']))) ?>
                                     </div>
                                 <?php endif; ?>
+                                <div class="crm-card-meta crm-card-owner">
+                                    <span class="muted small">Owner:</span>
+                                    <strong class="small"><?= e($r['owner_name'] ?? '—') ?></strong>
+                                </div>
                                 <div class="crm-card-move">
                                     <select class="crm-card-status-select"
                                             aria-label="Move to another stage"
@@ -238,6 +423,20 @@ require __DIR__ . '/../includes/header.php';
                                             <option value="<?= e($sc) ?>"
                                                     <?= $sc === $code ? 'hidden' : '' ?>>
                                                 <?= e($sm['label']) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <select class="crm-card-owner-select"
+                                            aria-label="Reassign owner"
+                                            data-current="<?= (int)($r['owner_id'] ?? 0) ?>">
+                                        <option value="">Reassign to…</option>
+                                        <option value="0" <?= (int)($r['owner_id'] ?? 0) === 0 ? 'hidden' : '' ?>>— Unassigned —</option>
+                                        <?php foreach ($team as $tu):
+                                            $tid = (int)$tu['id'];
+                                        ?>
+                                            <option value="<?= $tid ?>"
+                                                    <?= $tid === (int)($r['owner_id'] ?? 0) ? 'hidden' : '' ?>>
+                                                <?= e($tu['name']) ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>

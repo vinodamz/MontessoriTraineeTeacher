@@ -96,31 +96,73 @@
         sel.dataset.current = newStatus;
     }
 
-    // ----- Move-to picker (works on every device) -----
+    // ----- Move-to picker + owner reassign (works on every device) -----
     board.addEventListener('change', function (ev) {
         var sel = ev.target;
-        if (!sel.matches('.crm-card-status-select')) return;
-        var newStatus = sel.value;
-        if (!newStatus) return;
+        if (sel.matches('.crm-card-status-select')) {
+            var newStatus = sel.value;
+            if (!newStatus) return;
 
-        var li         = sel.closest('.crm-card-li');
-        var fromList   = sel.closest('.crm-col-list');
-        var targetList = board.querySelector('.crm-col-list[data-status="' + newStatus + '"]');
-        var oldStatus  = fromList ? fromList.dataset.status : '';
-        if (!li || !targetList) { sel.value = ''; return; }
+            var li         = sel.closest('.crm-card-li');
+            var fromList   = sel.closest('.crm-col-list');
+            var targetList = board.querySelector('.crm-col-list[data-status="' + newStatus + '"]');
+            var oldStatus  = fromList ? fromList.dataset.status : '';
+            if (!li || !targetList) { sel.value = ''; return; }
 
-        sel.disabled = true;
-        moveCard(li, newStatus, oldStatus, function () {
-            sel.disabled = false;
-            sel.value = '';
-        }).then(function (ok) {
-            if (ok) {
-                targetList.appendChild(li);
-                syncSelect(li, newStatus);
+            sel.disabled = true;
+            moveCard(li, newStatus, oldStatus, function () {
                 sel.disabled = false;
-            }
-        });
+                sel.value = '';
+            }).then(function (ok) {
+                if (ok) {
+                    targetList.appendChild(li);
+                    syncSelect(li, newStatus);
+                    sel.disabled = false;
+                }
+            });
+            return;
+        }
+
+        if (sel.matches('.crm-card-owner-select')) {
+            var li2 = sel.closest('.crm-card-li');
+            if (!li2) { sel.value = ''; return; }
+            var newOwnerId = sel.value; // '' = noop, '0' = unassign, otherwise user id
+            if (newOwnerId === '') return;
+            sel.disabled = true;
+            reassignCard(li2, newOwnerId).then(function (ok) {
+                sel.disabled = false;
+                sel.value = '';
+                if (ok) window.location.reload();
+            });
+        }
     });
+
+    function reassignCard(card, newOwnerId) {
+        var inquiryId = parseInt(card.dataset.inquiryId, 10);
+        if (!inquiryId) return Promise.resolve(false);
+        var fd = new FormData();
+        fd.append('_csrf', csrf);
+        fd.append('op', 'reassign');
+        fd.append('id', String(inquiryId));
+        fd.append('owner_id', String(newOwnerId));
+        return fetch('/crm/index.php', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (!data || !data.ok) {
+                console.error('reassign failed:', data && data.error);
+                alert('Reassign failed.');
+                return false;
+            }
+            return true;
+        }).catch(function (err) {
+            console.error('network error:', err);
+            alert('Network error — could not reassign.');
+            return false;
+        });
+    }
 
     // ----- Drag-and-drop (desktop only) -----
     if (isCoarse) return; // mobile: picker only
