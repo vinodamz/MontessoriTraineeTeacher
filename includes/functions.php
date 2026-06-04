@@ -88,6 +88,49 @@ function external_app_url(string $key): string
     return (string)app_setting($reg[$key]['settings_key'], '');
 }
 
+/* ------------------------------------------------------------------ *
+ * WACRM single sign-on.
+ *
+ * MTT is the identity provider: we mint a short-lived HMAC-signed token
+ * for the logged-in user and hand it to WACRM's /api/sso/mtt endpoint,
+ * which verifies it, syncs the user into the CRM account, and logs them
+ * in — so the embedded/opened CRM is already authenticated.
+ *
+ * The shared secret lives in app_settings('wacrm_sso_secret') and must
+ * match WACRM's MTT_SSO_SECRET env var. With no secret set, we fall back
+ * to the bare URL (the CRM shows its own login).
+ * ------------------------------------------------------------------ */
+function mtt_b64url(string $bin): string
+{
+    return rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+}
+
+/** Signed SSO token for the current session user. '' if no secret set. */
+function mtt_sso_token(): string
+{
+    $secret = (string)app_setting('wacrm_sso_secret', '');
+    if ($secret === '') return '';
+    $payload = json_encode([
+        'uid'  => (int)($_SESSION['user_id'] ?? 0),
+        'name' => (string)($_SESSION['user_name'] ?? ''),
+        'role' => (string)($_SESSION['user_role'] ?? 'teacher'),
+        'exp'  => time() + 300,
+    ], JSON_UNESCAPED_UNICODE);
+    $p   = mtt_b64url((string)$payload);
+    $sig = mtt_b64url(hash_hmac('sha256', $p, $secret, true));
+    return $p . '.' . $sig;
+}
+
+/** WACRM launch URL — SSO entry with a fresh token, or the bare URL. */
+function wacrm_launch_url(): string
+{
+    $url = external_app_url('wacrm');
+    if ($url === '') return '';
+    $tok = mtt_sso_token();
+    if ($tok === '') return $url;
+    return rtrim($url, '/') . '/api/sso/mtt?token=' . urlencode($tok);
+}
+
 function redirect(string $url): void
 {
     header("Location: $url");

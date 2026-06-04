@@ -18,6 +18,16 @@ if (!isset($reg[$appKey])) {
 $meta = $reg[$appKey];
 $url  = external_app_url($appKey);
 
+// For WACRM, hand off via SSO so the embedded/opened CRM is already
+// logged in. $frameUrl carries a fresh token for the iframe; $openUrl
+// points at the launcher so the new-tab token is always fresh on click.
+$frameUrl = $url;
+$openUrl  = $url;
+if ($appKey === 'wacrm' && $url !== '') {
+    $frameUrl = wacrm_launch_url();
+    $openUrl  = '/wacrm/index.php?launch=1';
+}
+
 $pageTitle  = $meta['name'];
 $wideLayout = true;
 require __DIR__ . '/header.php';
@@ -30,7 +40,7 @@ require __DIR__ . '/header.php';
     </div>
     <?php if ($url !== ''): ?>
         <div class="actionbar">
-            <a class="btn" href="<?= e($url) ?>" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a>
+            <a class="btn btn-primary" href="<?= e($openUrl) ?>" target="_blank" rel="noopener noreferrer">Open logged-in in new tab ↗</a>
         </div>
     <?php endif; ?>
 </div>
@@ -48,14 +58,14 @@ require __DIR__ . '/header.php';
 <?php else: ?>
     <div class="external-frame-wrap">
         <iframe class="external-frame"
-                src="<?= e($url) ?>"
+                src="<?= e($frameUrl) ?>"
                 title="<?= e($meta['name']) ?>"
                 referrerpolicy="no-referrer"
                 allow="clipboard-read; clipboard-write"
                 loading="lazy"></iframe>
         <p class="muted small" style="margin-top:.5rem;">
-            If the panel above stays blank, <?= e($meta['name']) ?> may block being embedded. Use
-            <a href="<?= e($url) ?>" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a> instead.
+            If the panel above stays blank (some browsers block embedded logins), use
+            <a href="<?= e($openUrl) ?>" target="_blank" rel="noopener noreferrer">Open logged-in in new tab ↗</a> instead.
         </p>
     </div>
 <?php endif; ?>

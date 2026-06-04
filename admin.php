@@ -139,6 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $url = trim((string)($_POST[$appMeta['settings_key']] ?? ''));
             $upsert->execute([':k' => $appMeta['settings_key'], ':v' => substr($url, 0, 255)]);
         }
+        // WACRM single-sign-on secret — must match the CRM's MTT_SSO_SECRET.
+        $ssoSecret = trim((string)($_POST['wacrm_sso_secret'] ?? ''));
+        $upsert->execute([':k' => 'wacrm_sso_secret', ':v' => substr($ssoSecret, 0, 128)]);
         app_setting_clear_cache();
         flash_set('ok', 'App settings saved. The new name appears everywhere on next page load.');
         redirect('/admin.php');
@@ -305,6 +308,18 @@ require __DIR__ . '/includes/header.php';
                     <span class="muted small"><?= e($appMeta['subtitle']) ?> — leave blank to hide the embed.</span>
                 </div>
             <?php endforeach; ?>
+        </div>
+        <h3 style="margin:.8rem 0 .4rem;">WACRM single sign-on</h3>
+        <p class="muted small" style="margin-top:0;">Paste the shared secret from the CRM server (its <code>MTT_SSO_SECRET</code>). When set, opening WACRM logs the user straight in — no second login. Leave blank to disable SSO.</p>
+        <div class="row">
+            <div class="field" style="flex: 2 1 360px;">
+                <label>WACRM SSO secret</label>
+                <input type="text" name="wacrm_sso_secret"
+                       value="<?= e((string)app_setting('wacrm_sso_secret', '')) ?>"
+                       placeholder="paste the secret from the CRM server"
+                       maxlength="128" autocomplete="off" spellcheck="false">
+                <span class="muted small">Must exactly match the CRM's <code>MTT_SSO_SECRET</code>. Only users with the WACRM module are synced.</span>
+            </div>
         </div>
         <div class="actions">
             <button class="btn btn-primary" type="submit">Save</button>
