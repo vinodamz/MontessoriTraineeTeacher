@@ -1193,3 +1193,14 @@ a.admin-tile:hover {
 }
 .crm-card-owner-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .crm-card-owner-select:disabled { opacity: .6; }
+
+
+/* External-app integrations (wacrm, n8n) */
+.app-icon-wacrm { background: linear-gradient(135deg, #25d366 0%, #128c7e 100%); }
+.app-icon-n8n   { background: linear-gradient(135deg, #ea4b71 0%, #b3164b 100%); }
+.external-frame-wrap { display: flex; flex-direction: column; }
+.external-frame {
+    width: 100%; height: calc(100vh - 220px); min-height: 480px;
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: #fff;
+}

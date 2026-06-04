@@ -64,6 +64,8 @@ $hasExpenses = user_has_module($user, 'expenses');
 $hasFees     = user_has_module($user, 'fees');
 $hasLogbook  = user_has_module($user, 'logbook');
 $hasInventory = user_has_module($user, 'inventory');
+$hasWacrm     = user_has_module($user, 'wacrm');
+$hasN8n       = user_has_module($user, 'n8n');
 
 // Quick-checkin: show for anyone in the staff roster (teachers, admins,
 // or anyone with the staff module). Pulls today's attendance row so the
@@ -79,18 +81,20 @@ if ($inStaffRoster) {
 }
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasWacrm + (int)$hasN8n;
 if ($moduleCount === 1) {
-    if ($hasTasks)    redirect('/tasks/index.php');
-    if ($hasMontess)  redirect('/assessment/index.php');
-    if ($hasStudents) redirect('/students/index.php');
-    if ($hasCrm)      redirect('/crm/index.php');
-    if ($hasRecruit)  redirect('/recruitment/index.php');
-    if ($hasStaff)    redirect('/staff/index.php');
-    if ($hasExpenses) redirect('/expenses/index.php');
-    if ($hasFees)     redirect('/fees/index.php');
-    if ($hasLogbook)  redirect('/logbook/index.php');
+    if ($hasTasks)     redirect('/tasks/index.php');
+    if ($hasMontess)   redirect('/assessment/index.php');
+    if ($hasStudents)  redirect('/students/index.php');
+    if ($hasCrm)       redirect('/crm/index.php');
+    if ($hasRecruit)   redirect('/recruitment/index.php');
+    if ($hasStaff)     redirect('/staff/index.php');
+    if ($hasExpenses)  redirect('/expenses/index.php');
+    if ($hasFees)      redirect('/fees/index.php');
+    if ($hasLogbook)   redirect('/logbook/index.php');
     if ($hasInventory) redirect('/inventory/index.php');
+    if ($hasWacrm)     redirect('/wacrm/index.php');
+    if ($hasN8n)       redirect('/n8n/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -349,6 +353,24 @@ if ($hasInventory) {
     if ($invStats['low'] > 0) $stats[] = ['label' => $invStats['low'] . ' low', 'tone' => 'warn'];
     $apps[] = ['key' => 'inventory', 'name' => 'Inventory', 'subtitle' => 'Stock · Supplies · Reorder', 'href' => '/inventory/index.php', 'stats' => $stats];
 }
+// External apps (wacrm, n8n) — driven by external_apps_registry() in
+// includes/functions.php. Each tile shows the configured host as a hint,
+// or "Not configured" prompting admin to set the URL.
+foreach (external_apps_registry() as $appKey => $appMeta) {
+    if (!user_has_module($user, $appKey)) continue;
+    $url   = external_app_url($appKey);
+    $host  = $url !== '' ? (parse_url($url, PHP_URL_HOST) ?: 'configured') : '';
+    $stats = $host !== ''
+        ? [['label' => $host, 'tone' => '']]
+        : [['label' => 'Not configured', 'tone' => 'warn']];
+    $apps[] = [
+        'key'      => $appKey,
+        'name'     => $appMeta['name'],
+        'subtitle' => $appMeta['subtitle'],
+        'href'     => $appMeta['route'],
+        'stats'    => $stats,
+    ];
+}
 
 // SVG glyphs — simple line icons (24x24, 1.8 stroke). Each module key maps here.
 $icons = [
@@ -363,6 +385,10 @@ $icons = [
     'logbook'     => '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z"/><path d="M9 3v18M13 8h4M13 12h4"/>',
     'inventory'   => '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
 ];
+// External-app SVGs are owned by the registry so they ship in one place.
+foreach (external_apps_registry() as $extKey => $extMeta) {
+    $icons[$extKey] = $extMeta['svg'];
+}
 ?>
 
 <ul class="app-grid" role="list">

@@ -95,7 +95,7 @@ CREATE TABLE users (
     name        VARCHAR(120) NOT NULL,
     pin_hash    VARCHAR(255) NOT NULL,
     role        ENUM('teacher','admin') NOT NULL DEFAULT 'teacher',
-    modules     SET('tasks','montessori','students','crm','recruitment','staff','expenses','fees','logbook','inventory') NOT NULL DEFAULT '',
+    modules     SET('tasks','montessori','students','crm','recruitment','staff','expenses','fees','logbook','inventory','wacrm','n8n') NOT NULL DEFAULT '',
     active      TINYINT(1)   NOT NULL DEFAULT 1,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -50,6 +50,44 @@ function app_short_name(): string
     return (string)app_setting('app_short_name', $cfg['app']['short_name'] ?? 'LG');
 }
 
+/**
+ * Central registry of external apps the school plugs into MTT. One entry
+ * per integration — the same shape drives the home-dashboard tile, the
+ * nav link, and the admin module checkbox.
+ *
+ * Add a new external app by appending an entry here and inserting its
+ * `<key>_url` row in app_settings (see migrate_026).
+ */
+function external_apps_registry(): array
+{
+    return [
+        'wacrm' => [
+            'name'        => 'WACRM',
+            'subtitle'    => 'WhatsApp CRM workspace',
+            'settings_key'=> 'wacrm_url',
+            'route'       => '/wacrm/index.php',
+            'tile_gradient' => 'linear-gradient(135deg, #25d366 0%, #128c7e 100%)',
+            'svg'         => '<path d="M20 12a8 8 0 1 1-3.5-6.6L20 4l-1.4 3.5A8 8 0 0 1 20 12Z"/><path d="M8 11.5c0 2.5 2 4.5 4.5 4.5l1.5-1.5-2-1-1 1c-1-.5-1.5-1-2-2l1-1-1-2L7.5 10c0 .5.5 1 .5 1.5Z"/>',
+        ],
+        'n8n' => [
+            'name'        => 'n8n',
+            'subtitle'    => 'Workflow automation',
+            'settings_key'=> 'n8n_url',
+            'route'       => '/n8n/index.php',
+            'tile_gradient' => 'linear-gradient(135deg, #ea4b71 0%, #b3164b 100%)',
+            'svg'         => '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><circle cx="12" cy="12" r="2.5"/><path d="M8.5 6h7M8.5 18h7M6 8.5v7M18 8.5v7M8.3 7.7l2.4 2.4M15.7 7.7l-2.4 2.4M8.3 16.3l2.4-2.4M15.7 16.3l-2.4-2.4"/>',
+        ],
+    ];
+}
+
+/** URL configured for an external app via app_settings. '' if unset. */
+function external_app_url(string $key): string
+{
+    $reg = external_apps_registry();
+    if (!isset($reg[$key])) return '';
+    return (string)app_setting($reg[$key]['settings_key'], '');
+}
+
 function redirect(string $url): void
 {
     header("Location: $url");
