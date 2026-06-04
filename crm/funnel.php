@@ -122,6 +122,20 @@ $srcStmt = $pdo->prepare("
 $srcStmt->execute([':from' => $from, ':to' => $to]);
 $sources = $srcStmt->fetchAll();
 
+// ---- Lost reasons breakdown ---------------------------------------------
+$lostStmt = $pdo->prepare("
+    SELECT
+        COALESCE(NULLIF(f.lost_reason, ''), '(none)') AS reason,
+        COUNT(*) AS n
+    FROM inquiry_families f
+    WHERE f.created_at >= :from AND f.created_at < :to
+      AND f.status = 'lost'
+    GROUP BY reason
+    ORDER BY n DESC
+");
+$lostStmt->execute([':from' => $from, ':to' => $to]);
+$lostBreakdown = $lostStmt->fetchAll();
+
 function pct($num, $denom): string
 {
     if (!$denom) return '—';
@@ -249,6 +263,28 @@ require __DIR__ . '/../includes/header.php';
                         <td><?= (int)$s['enrolled'] ?></td>
                         <td><?= (int)$s['lost'] ?></td>
                         <td><?= e(pct((int)$s['enrolled'], (int)$s['total'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
+</section>
+
+<section class="card">
+    <h3>Lost reasons</h3>
+    <?php if (!$lostBreakdown): ?>
+        <p class="muted">No lost inquiries in this window.</p>
+    <?php else: ?>
+        <table class="data-table">
+            <thead>
+                <tr><th>Reason</th><th>Count</th><th>% of lost</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($lostBreakdown as $lr): ?>
+                    <tr>
+                        <td><?= e($lr['reason'] === '(none)' ? '(no reason captured)' : crm_lost_reason_label($lr['reason'])) ?></td>
+                        <td><?= (int)$lr['n'] ?></td>
+                        <td><?= e(pct((int)$lr['n'], $lost)) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

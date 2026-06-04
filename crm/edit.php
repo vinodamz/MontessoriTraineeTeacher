@@ -33,6 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = $_POST['status'] ?? 'new';
     if (!array_key_exists($status, crm_statuses())) $status = 'new';
 
+    // Lost reason is only meaningful when status = lost. Other statuses clear it.
+    $lostReason = null;
+    if ($status === 'lost') {
+        $lr = trim((string)($_POST['lost_reason'] ?? ''));
+        $lostReason = ($lr !== '' && array_key_exists($lr, crm_lost_reasons())) ? $lr : null;
+    }
+
     $probability = max(0, min(100, (int)($_POST['probability'] ?? crm_default_probability($status))));
     $fee         = $_POST['expected_fee'] !== '' ? (float)$_POST['expected_fee'] : null;
     $start       = $_POST['expected_start'] !== '' ? $_POST['expected_start'] : null;
@@ -48,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("
                 UPDATE inquiry_families
                 SET primary_name=:n, primary_phone=:p, primary_email=:e, source=:s,
-                    status=:st, probability=:pr, priority=:prio, campaign_id=:cid,
+                    status=:st, lost_reason=:lr, probability=:pr, priority=:prio, campaign_id=:cid,
                     expected_fee=:f, expected_start=:start,
                     notes=:notes, owner_id=:o
                 WHERE id=:id
@@ -57,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':p' => trim($_POST['primary_phone'] ?? '') ?: null,
                 ':e' => trim($_POST['primary_email'] ?? '') ?: null,
                 ':s' => trim($_POST['source'] ?? '') ?: null,
-                ':st'=> $status, ':pr' => $probability,
+                ':st'=> $status, ':lr' => $lostReason, ':pr' => $probability,
                 ':prio' => $priority, ':cid' => $campaignId,
                 ':f' => $fee, ':start' => $start,
                 ':notes' => trim($_POST['notes'] ?? '') ?: null,
@@ -68,15 +75,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("
                 INSERT INTO inquiry_families
                     (primary_name, primary_phone, primary_email, source,
-                     status, probability, priority, campaign_id,
+                     status, lost_reason, probability, priority, campaign_id,
                      expected_fee, expected_start, notes, owner_id)
-                VALUES (:n, :p, :e, :s, :st, :pr, :prio, :cid, :f, :start, :notes, :o)
+                VALUES (:n, :p, :e, :s, :st, :lr, :pr, :prio, :cid, :f, :start, :notes, :o)
             ")->execute([
                 ':n' => $primaryName,
                 ':p' => trim($_POST['primary_phone'] ?? '') ?: null,
                 ':e' => trim($_POST['primary_email'] ?? '') ?: null,
                 ':s' => trim($_POST['source'] ?? '') ?: null,
-                ':st'=> $status, ':pr' => $probability,
+                ':st'=> $status, ':lr' => $lostReason, ':pr' => $probability,
                 ':prio' => $priority, ':cid' => $campaignId,
                 ':f' => $fee, ':start' => $start,
                 ':notes' => trim($_POST['notes'] ?? '') ?: null,
@@ -258,11 +265,23 @@ require __DIR__ . '/../includes/header.php';
     <div class="row">
         <div class="field">
             <label>Status</label>
-            <select name="status">
+            <select name="status" id="crm-status-select">
                 <?php foreach (crm_statuses() as $code => $meta): ?>
                     <option value="<?= e($code) ?>"
                         <?= ($family['status'] ?? 'new') === $code ? 'selected' : '' ?>>
                         <?= e($meta['label']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="field" id="crm-lost-reason-wrap" <?= ($family['status'] ?? '') === 'lost' ? '' : 'hidden' ?>>
+            <label>Lost reason</label>
+            <select name="lost_reason" id="crm-lost-reason-select">
+                <option value="">— pick a reason —</option>
+                <?php foreach (crm_lost_reasons() as $code => $label): ?>
+                    <option value="<?= e($code) ?>"
+                        <?= ($family['lost_reason'] ?? '') === $code ? 'selected' : '' ?>>
+                        <?= e($label) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -398,6 +417,25 @@ function cloneRow(containerId) {
     });
     c.appendChild(copy);
 }
+
+// Show the "Lost reason" field only when status is Lost.
+(function () {
+    var statusSel = document.getElementById('crm-status-select');
+    var wrap      = document.getElementById('crm-lost-reason-wrap');
+    var reasonSel = document.getElementById('crm-lost-reason-select');
+    if (!statusSel || !wrap || !reasonSel) return;
+    function sync() {
+        if (statusSel.value === 'lost') {
+            wrap.hidden = false;
+            reasonSel.required = true;
+        } else {
+            wrap.hidden = true;
+            reasonSel.required = false;
+        }
+    }
+    statusSel.addEventListener('change', sync);
+    sync();
+})();
 </script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

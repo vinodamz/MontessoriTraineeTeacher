@@ -51,18 +51,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', 'Unknown status.');
             redirect('/crm/view.php?id=' . $id);
         }
+        $lostReason = null;
+        if ($st === 'lost') {
+            $lr = trim((string)($_POST['lost_reason'] ?? ''));
+            if ($lr === '' || !array_key_exists($lr, crm_lost_reasons())) {
+                flash_set('error', 'Pick a "Lost reason" before saving.');
+                redirect('/crm/view.php?id=' . $id);
+            }
+            $lostReason = $lr;
+        }
         $prob = isset($_POST['probability'])
             ? max(0, min(100, (int)$_POST['probability']))
             : crm_default_probability($st);
         $prevStmt = $pdo->prepare("SELECT status FROM inquiry_families WHERE id = :id");
         $prevStmt->execute([':id' => $id]);
         $prevStatus = (string)$prevStmt->fetchColumn();
-        $pdo->prepare("UPDATE inquiry_families SET status=:s, probability=:p WHERE id=:id")
-            ->execute([':s' => $st, ':p' => $prob, ':id' => $id]);
+        $pdo->prepare("UPDATE inquiry_families SET status=:s, lost_reason=:lr, probability=:p WHERE id=:id")
+            ->execute([':s' => $st, ':lr' => $lostReason, ':p' => $prob, ':id' => $id]);
         if ($prevStatus !== $st) {
-            crm_audit_log('status_changed', $id, [
-                'from' => $prevStatus, 'to' => $st, 'via' => 'detail_form',
-            ]);
+            $meta = ['from' => $prevStatus, 'to' => $st, 'via' => 'detail_form'];
+            if ($st === 'lost') $meta['lost_reason'] = $lostReason;
+            crm_audit_log('status_changed', $id, $meta);
         }
         flash_set('ok', 'Status updated.');
         redirect('/crm/view.php?id=' . $id);
@@ -252,6 +261,9 @@ require __DIR__ . '/../includes/header.php';
         <p class="muted">
             <a href="/crm/index.php">← Pipeline</a>
             · <span class="pill pill-status-<?= e($family['status']) ?>"><?= e(crm_status_label($family['status'])) ?></span>
+            <?php if ($family['status'] === 'lost' && !empty($family['lost_reason'])): ?>
+                · <span class="pill pill-lost-reason">Reason: <?= e(crm_lost_reason_label($family['lost_reason'])) ?></span>
+            <?php endif; ?>
             <?php if (($family['priority'] ?? 'normal') !== 'normal'): ?>
                 · <span class="pill pill-prio-<?= e($family['priority']) ?>"><?= e(crm_priority_label($family['priority'])) ?></span>
             <?php endif; ?>
@@ -339,10 +351,22 @@ require __DIR__ . '/../includes/header.php';
             <input type="hidden" name="op" value="status">
             <div class="field">
                 <label>Status</label>
-                <select name="status">
+                <select name="status" id="view-status-select">
                     <?php foreach (crm_statuses() as $code => $meta): ?>
                         <option value="<?= e($code) ?>" <?= $family['status'] === $code ? 'selected' : '' ?>>
                             <?= e($meta['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="field" id="view-lost-wrap" <?= $family['status'] === 'lost' ? '' : 'hidden' ?>>
+                <label>Lost reason</label>
+                <select name="lost_reason" id="view-lost-select">
+                    <option value="">— pick a reason —</option>
+                    <?php foreach (crm_lost_reasons() as $code => $label): ?>
+                        <option value="<?= e($code) ?>"
+                            <?= ($family['lost_reason'] ?? '') === $code ? 'selected' : '' ?>>
+                            <?= e($label) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -354,6 +378,20 @@ require __DIR__ . '/../includes/header.php';
             </div>
             <div class="actions"><button class="btn btn-primary">Save</button></div>
         </form>
+        <script>
+        (function () {
+            var s = document.getElementById('view-status-select');
+            var w = document.getElementById('view-lost-wrap');
+            var r = document.getElementById('view-lost-select');
+            if (!s || !w || !r) return;
+            function sync() {
+                if (s.value === 'lost') { w.hidden = false; r.required = true; }
+                else                    { w.hidden = true;  r.required = false; }
+            }
+            s.addEventListener('change', sync);
+            sync();
+        })();
+        </script>
         <p class="muted small">Tip: when status is <em>Offered</em>, scroll down to the
             <a href="#enroll">Enroll children</a> form to promote them into the students module.</p>
     </div>

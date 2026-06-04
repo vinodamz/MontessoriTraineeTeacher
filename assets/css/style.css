@@ -704,6 +704,7 @@ a.admin-tile:hover {
 .pill-status-enrolled              { background: #d8f3c8; color: #14532d; }
 .pill-status-waitlisted            { background: #f1e2ff; color: #5b21b6; }
 .pill-status-lost                  { background: #f3d6d6; color: #7f1d1d; }
+.pill-lost-reason                  { background: #fde7e9; color: #991b1b; border: 1px dashed #f1bcbc; font-style: italic; }
 
 /* Phone with click-to-call + click-to-WhatsApp buttons. Used on kanban
    cards, leads list, and the inquiry detail page. */

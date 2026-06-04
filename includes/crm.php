@@ -125,6 +125,35 @@ function crm_pipeline_statuses(): array
     return array_filter(crm_statuses(), fn($_, $code) => $code !== 'lead', ARRAY_FILTER_USE_BOTH);
 }
 
+/**
+ * Reasons a family can be "Lost" — shown as the dropdown that pops up
+ * whenever a card is moved into the Lost column. Stored on
+ * inquiry_families.lost_reason as the short code; the label here is what
+ * the funnel report and the audit log show.
+ *
+ * Extend by appending entries — no schema change needed since lost_reason
+ * is a free-form VARCHAR(40).
+ */
+function crm_lost_reasons(): array
+{
+    return [
+        'too_expensive'      => 'Cost / fees too high',
+        'distance'           => 'Distance / location',
+        'chose_other_school' => 'Chose another school',
+        'no_response'        => 'Stopped responding',
+        'timing'             => 'Timing — not this year',
+        'fit'                => 'Not the right fit',
+        'duplicate'          => 'Duplicate / spam',
+        'other'              => 'Other reason',
+    ];
+}
+
+function crm_lost_reason_label(?string $code): string
+{
+    if ($code === null || $code === '') return '';
+    return crm_lost_reasons()[$code] ?? $code;
+}
+
 function crm_touchpoint_kinds(): array
 {
     return [
