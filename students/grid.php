@@ -38,6 +38,49 @@ $teacherIds = array_map(fn($t) => (int)$t['id'], $teachers);
 
 $availableYears = academic_years_in_use();
 
+// Helper: upsert one parent row (father / mother) for a student. Inserts
+// when name is set and no row exists; updates when both exist; deletes the
+// row when name is cleared.
+function grid_upsert_parent(PDO $pdo, int $studentId, string $relation, array $r): void
+{
+    $name  = trim((string)($r['name']  ?? ''));
+    $phone = trim((string)($r['phone'] ?? ''));
+    $email = trim((string)($r['email'] ?? ''));
+
+    $sel = $pdo->prepare("SELECT id FROM student_parents WHERE student_id = :s AND relation = :r LIMIT 1");
+    $sel->execute([':s' => $studentId, ':r' => $relation]);
+    $existingId = (int)($sel->fetchColumn() ?: 0);
+
+    if ($name === '' && $phone === '' && $email === '') {
+        // Empty triple → remove the relation row if present.
+        if ($existingId > 0) {
+            $pdo->prepare("DELETE FROM student_parents WHERE id = :id")->execute([':id' => $existingId]);
+        }
+        return;
+    }
+    // Must have at least a name for the parent record to be meaningful.
+    if ($name === '') $name = ucfirst($relation);
+
+    if ($existingId > 0) {
+        $pdo->prepare("
+            UPDATE student_parents SET name=:n, phone=:p, email=:e
+            WHERE id=:id
+        ")->execute([
+            ':n'=>$name, ':p'=>$phone ?: null, ':e'=>$email ?: null,
+            ':id'=>$existingId,
+        ]);
+    } else {
+        $pdo->prepare("
+            INSERT INTO student_parents (student_id, relation, name, phone, email, is_primary)
+            VALUES (:s, :rel, :n, :p, :e, :pr)
+        ")->execute([
+            ':s'=>$studentId, ':rel'=>$relation, ':n'=>$name,
+            ':p'=>$phone ?: null, ':e'=>$email ?: null,
+            ':pr'=>$relation === 'father' ? 1 : 0, // father defaults to primary if no one else
+        ]);
+    }
+}
+
 // ---------- POST: bulk save ----------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -52,7 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 UPDATE students SET
                     admission_number = :adm, first_name = :f, last_name = :l,
                     grade = :g, teacher_id = :tid, gender = :gender,
-                    enrollment_status = :es, academic_year = :ay, is_active = :active
+                    enrollment_status = :es, academic_year = :ay, is_active = :active,
+                    emergency_contact_name = :emN, emergency_contact_phone = :emP,
+                    home_address = :addr, permanent_address = :paddr
                 WHERE id = :id
             ");
             foreach ($rows as $sid => $r) {
@@ -80,12 +125,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $adm    = trim($r['admission_number'] ?? '');
                 $active = !empty($r['is_active']) ? 1 : 0;
 
+                $emN  = trim($r['emergency_name']  ?? '');
+                $emP  = trim($r['emergency_phone'] ?? '');
+                $addr = trim($r['home_address']      ?? '');
+                $paddr= trim($r['permanent_address'] ?? '');
+
                 $upd->execute([
                     ':adm' => $adm !== '' ? $adm : null,
                     ':f' => $first, ':l' => trim($r['last_name'] ?? ''),
                     ':g' => $grade, ':tid' => $tid, ':gender' => $gender ?: null,
-                    ':es' => $es, ':ay' => $ay, ':active' => $active, ':id' => $sid,
+                    ':es' => $es, ':ay' => $ay, ':active' => $active,
+                    ':emN' => $emN ?: null, ':emP' => $emP ?: null,
+                    ':addr' => $addr ?: null, ':paddr' => $paddr ?: null,
+                    ':id' => $sid,
                 ]);
+
+                if (is_array($r['father'] ?? null)) grid_upsert_parent($pdo, $sid, 'father', $r['father']);
+                if (is_array($r['mother'] ?? null)) grid_upsert_parent($pdo, $sid, 'mother', $r['mother']);
+
                 $saved++;
             }
             $pdo->commit();
@@ -122,7 +179,9 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
 
 $sql = "
     SELECT s.id, s.admission_number, s.first_name, s.last_name, s.grade,
-           s.teacher_id, s.gender, s.enrollment_status, s.academic_year, s.is_active
+           s.teacher_id, s.gender, s.enrollment_status, s.academic_year, s.is_active,
+           s.emergency_contact_name, s.emergency_contact_phone,
+           s.home_address, s.permanent_address, s.photo_path
     FROM students s
     " . ($where ? 'WHERE ' . implode(' AND ', $where) : '') . "
     ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name, s.last_name
@@ -130,6 +189,27 @@ $sql = "
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $students = $stmt->fetchAll();
+
+// Batch-load father + mother rows for every student on screen so the grid
+// can render their name / phone / email inline without N+1 queries.
+$parentByStudent = []; // [student_id][relation] = ['name','phone','email']
+if ($students) {
+    $ids = array_map(fn($r) => (int)$r['id'], $students);
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    $pst = db()->prepare("
+        SELECT student_id, relation, name, phone, email
+        FROM student_parents
+        WHERE student_id IN ($place) AND relation IN ('father','mother')
+    ");
+    $pst->execute($ids);
+    foreach ($pst->fetchAll() as $pr) {
+        $parentByStudent[(int)$pr['student_id']][$pr['relation']] = [
+            'name'  => $pr['name']  ?? '',
+            'phone' => $pr['phone'] ?? '',
+            'email' => $pr['email'] ?? '',
+        ];
+    }
+}
 
 // Year option list must include the current filter even if no rows use it.
 if ($fYear !== '' && $fYear !== 'all' && !in_array($fYear, $availableYears, true)) {
@@ -201,7 +281,7 @@ require __DIR__ . '/../includes/header.php';
 
     <div class="grid-actions-bar">
         <button class="btn btn-primary" type="submit">Save all changes</button>
-        <span class="muted small">Editing <?= count($students) ?> rows · only Name / Admission / Grade / Teacher / Gender / Status / Year / Active</span>
+        <span class="muted small">Editing <?= count($students) ?> rows · all text fields editable inline · photos managed on the full edit page (<a href="#" title="open any row's ⤢">⤢</a>).</span>
     </div>
 
     <div class="grid-scroll">
@@ -210,6 +290,7 @@ require __DIR__ . '/../includes/header.php';
                 <tr>
                     <th class="grid-sticky-col">First name</th>
                     <th>Last name</th>
+                    <th>Photo</th>
                     <th>Admission #</th>
                     <th>Grade</th>
                     <th>Teacher</th>
@@ -217,14 +298,36 @@ require __DIR__ . '/../includes/header.php';
                     <th>Status</th>
                     <th>Year</th>
                     <th>Active</th>
+                    <th>Emergency name</th>
+                    <th>Emergency phone</th>
+                    <th>Father name</th>
+                    <th>Father phone</th>
+                    <th>Father email</th>
+                    <th>Mother name</th>
+                    <th>Mother phone</th>
+                    <th>Mother email</th>
+                    <th>Home address</th>
+                    <th>Permanent address</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($students as $s): $sid = (int)$s['id']; $p = "rows[$sid]"; ?>
+                <?php foreach ($students as $s):
+                    $sid = (int)$s['id']; $p = "rows[$sid]";
+                    $father = $parentByStudent[$sid]['father'] ?? ['name'=>'','phone'=>'','email'=>''];
+                    $mother = $parentByStudent[$sid]['mother'] ?? ['name'=>'','phone'=>'','email'=>''];
+                ?>
                     <tr>
                         <td class="grid-sticky-col"><input name="<?= $p ?>[first_name]" value="<?= e($s['first_name']) ?>" required></td>
                         <td><input name="<?= $p ?>[last_name]" value="<?= e($s['last_name'] ?? '') ?>"></td>
+                        <td style="text-align:center;">
+                            <?php if (!empty($s['photo_path'])): ?>
+                                <img src="<?= e(student_photo_url($s['photo_path'])) ?>" alt=""
+                                     style="height:32px; width:32px; border-radius:50%; object-fit:cover; border:1px solid var(--line);">
+                            <?php else: ?>
+                                <a href="/students/edit.php?id=<?= $sid ?>" class="muted small" title="Upload on the full edit page">+</a>
+                            <?php endif; ?>
+                        </td>
                         <td><input name="<?= $p ?>[admission_number]" value="<?= e($s['admission_number'] ?? '') ?>" style="width:9ch;"></td>
                         <td>
                             <select name="<?= $p ?>[grade]">
@@ -264,7 +367,17 @@ require __DIR__ . '/../includes/header.php';
                             </select>
                         </td>
                         <td style="text-align:center;"><input type="checkbox" name="<?= $p ?>[is_active]" value="1" <?= ($s['is_active'] ?? 1) ? 'checked' : '' ?>></td>
-                        <td><a class="btn btn-ghost btn-small" href="/students/view.php?id=<?= $sid ?>" title="Full profile">⤢</a></td>
+                        <td><input name="<?= $p ?>[emergency_name]"  value="<?= e($s['emergency_contact_name']  ?? '') ?>"></td>
+                        <td><input name="<?= $p ?>[emergency_phone]" value="<?= e($s['emergency_contact_phone'] ?? '') ?>" style="width:14ch;"></td>
+                        <td><input name="<?= $p ?>[father][name]"  value="<?= e($father['name'])  ?>"></td>
+                        <td><input name="<?= $p ?>[father][phone]" value="<?= e($father['phone']) ?>" style="width:14ch;"></td>
+                        <td><input name="<?= $p ?>[father][email]" value="<?= e($father['email']) ?>" type="email"></td>
+                        <td><input name="<?= $p ?>[mother][name]"  value="<?= e($mother['name'])  ?>"></td>
+                        <td><input name="<?= $p ?>[mother][phone]" value="<?= e($mother['phone']) ?>" style="width:14ch;"></td>
+                        <td><input name="<?= $p ?>[mother][email]" value="<?= e($mother['email']) ?>" type="email"></td>
+                        <td><textarea name="<?= $p ?>[home_address]"      rows="1" style="min-width:18ch;"><?= e($s['home_address']      ?? '') ?></textarea></td>
+                        <td><textarea name="<?= $p ?>[permanent_address]" rows="1" style="min-width:18ch;"><?= e($s['permanent_address'] ?? '') ?></textarea></td>
+                        <td><a class="btn btn-ghost btn-small" href="/students/edit.php?id=<?= $sid ?>" title="Full profile (upload photos here)">⤢</a></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

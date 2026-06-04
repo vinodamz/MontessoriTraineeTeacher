@@ -119,6 +119,8 @@ CREATE TABLE students (
     allergies                TEXT         NULL,
     medical_notes            TEXT         NULL,
     home_address             TEXT         NULL,
+    -- Permanent / home-town address. home_address is the local/current address.
+    permanent_address        TEXT         NULL,
     pickup_person            VARCHAR(120) NULL,
     pickup_phone             VARCHAR(40)  NULL,
     emergency_contact_name   VARCHAR(120) NULL,
@@ -156,6 +158,7 @@ CREATE TABLE student_parents (
     email       VARCHAR(120) NULL,
     occupation  VARCHAR(120) NULL,
     address     TEXT         NULL,
+    photo_path  VARCHAR(255) NULL,
     is_primary  TINYINT(1)   NOT NULL DEFAULT 0,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

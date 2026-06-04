@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $allg   = trim($_POST['allergies'] ?? '');
     $med    = trim($_POST['medical_notes'] ?? '');
     $addr   = trim($_POST['home_address'] ?? '');
+    $permAddr = trim($_POST['permanent_address'] ?? '');
     $pickN  = trim($_POST['pickup_person'] ?? '');
     $pickP  = trim($_POST['pickup_phone'] ?? '');
     $emN    = trim($_POST['emergency_contact_name'] ?? '');
@@ -91,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     first_name = :f, last_name = :l, grade = :g, teacher_id = :tid,
                     gender = :gender, dob = :dob, joining_date = :join,
                     blood_group = :blood, allergies = :allg, medical_notes = :med,
-                    home_address = :addr,
+                    home_address = :addr, permanent_address = :paddr,
                     pickup_person = :pickN, pickup_phone = :pickP,
                     emergency_contact_name = :emN, emergency_contact_phone = :emP,
                     notes = :notes, is_active = :active,
@@ -103,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':adm' => $adm, ':f' => $first, ':l' => $last, ':g' => $grade, ':tid' => $tid,
                 ':gender' => $gender ?: null, ':dob' => $dob ?: null, ':join' => $join ?: null,
                 ':blood' => $blood ?: null, ':allg' => $allg ?: null, ':med' => $med ?: null,
-                ':addr' => $addr ?: null,
+                ':addr' => $addr ?: null, ':paddr' => $permAddr ?: null,
                 ':pickN' => $pickN ?: null, ':pickP' => $pickP ?: null,
                 ':emN' => $emN ?: null, ':emP' => $emP ?: null,
                 ':notes' => $notes ?: null, ':active' => $active,
@@ -117,21 +118,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 INSERT INTO students
                     (admission_number, first_name, last_name, grade, teacher_id,
                      gender, dob, joining_date, blood_group, allergies, medical_notes,
-                     home_address, pickup_person, pickup_phone,
+                     home_address, permanent_address, pickup_person, pickup_phone,
                      emergency_contact_name, emergency_contact_phone, notes, is_active,
                      academic_year, enrollment_status,
                      withdrawal_date, withdrawal_reason, withdrawal_notes)
                 VALUES
                     (:adm, :f, :l, :g, :tid,
                      :gender, :dob, :join, :blood, :allg, :med,
-                     :addr, :pickN, :pickP, :emN, :emP, :notes, :active,
+                     :addr, :paddr, :pickN, :pickP, :emN, :emP, :notes, :active,
                      :ay, :es, :wd, :wr, :wn)
             ");
             $stmt->execute([
                 ':adm' => $adm, ':f' => $first, ':l' => $last, ':g' => $grade, ':tid' => $tid,
                 ':gender' => $gender ?: null, ':dob' => $dob ?: null, ':join' => $join ?: null,
                 ':blood' => $blood ?: null, ':allg' => $allg ?: null, ':med' => $med ?: null,
-                ':addr' => $addr ?: null,
+                ':addr' => $addr ?: null, ':paddr' => $permAddr ?: null,
                 ':pickN' => $pickN ?: null, ':pickP' => $pickP ?: null,
                 ':emN' => $emN ?: null, ':emP' => $emP ?: null,
                 ':notes' => $notes ?: null, ':active' => 1,
@@ -197,6 +198,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ins->execute($bind + [':sid' => $studentId]);
                 }
             }
+        }
+
+        // Child photo upload — single file field, optional. The "Remove"
+        // checkbox clears the existing one without uploading a new file.
+        $currentPhoto = null;
+        if ($isEdit) {
+            $cp = $pdo->prepare("SELECT photo_path FROM students WHERE id = :id");
+            $cp->execute([':id' => $studentId]);
+            $currentPhoto = $cp->fetchColumn() ?: null;
+        }
+        $newPhoto = null;
+        if (!empty($_FILES['child_photo']['name'])) {
+            $newPhoto = student_photo_store($_FILES['child_photo'], 'child' . $studentId);
+        }
+        $removePhoto = !empty($_POST['child_photo_remove']);
+        if ($newPhoto !== null) {
+            $pdo->prepare("UPDATE students SET photo_path = :p WHERE id = :id")
+                ->execute([':p' => $newPhoto, ':id' => $studentId]);
+            if ($currentPhoto) student_photo_delete($currentPhoto);
+        } elseif ($removePhoto && $currentPhoto) {
+            $pdo->prepare("UPDATE students SET photo_path = NULL WHERE id = :id")
+                ->execute([':id' => $studentId]);
+            student_photo_delete($currentPhoto);
         }
 
         $pdo->commit();
@@ -295,7 +319,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<form method="post" class="card card-form">
+<form method="post" class="card card-form" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
     <?php if ($isEdit): ?><input type="hidden" name="id" value="<?= (int)$s['id'] ?>"><?php endif; ?>
 
@@ -383,6 +407,28 @@ require __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
+    <h2 class="section-h-spaced">Photo</h2>
+    <div class="row">
+        <div class="field" style="flex: 0 0 auto;">
+            <label>Child photo</label>
+            <?php if (!empty($s['photo_path'])): ?>
+                <img src="<?= e(student_photo_url($s['photo_path'])) ?>" alt=""
+                     style="height:96px; border-radius:8px; border:1px solid var(--line); display:block; margin-bottom:.4rem;">
+                <label class="checkbox">
+                    <input type="checkbox" name="child_photo_remove" value="1">
+                    <span class="small">Remove current photo</span>
+                </label>
+            <?php else: ?>
+                <p class="muted small" style="margin:.2rem 0;">No photo on file.</p>
+            <?php endif; ?>
+        </div>
+        <div class="field">
+            <label>Upload new photo</label>
+            <input type="file" name="child_photo" accept="image/jpeg,image/png,image/webp,image/gif">
+            <p class="muted small">JPG / PNG / WebP / GIF, max 5 MB.</p>
+        </div>
+    </div>
+
     <h2 class="section-h-spaced">Enrollment</h2>
     <?php
         $currentAY    = $s['academic_year']     ?? current_academic_year();
@@ -444,8 +490,14 @@ require __DIR__ . '/../includes/header.php';
     <h2 class="section-h-spaced">Address &amp; emergency</h2>
     <div class="row">
         <div class="field" style="flex: 1 1 100%;">
-            <label>Home address</label>
+            <label>Home address <span class="muted small">(current / local)</span></label>
             <textarea name="home_address" rows="2" maxlength="2000"><?= e($s['home_address'] ?? '') ?></textarea>
+        </div>
+    </div>
+    <div class="row">
+        <div class="field" style="flex: 1 1 100%;">
+            <label>Permanent address <span class="muted small">(home town)</span></label>
+            <textarea name="permanent_address" rows="2" maxlength="2000"><?= e($s['permanent_address'] ?? '') ?></textarea>
         </div>
     </div>
     <div class="row">
