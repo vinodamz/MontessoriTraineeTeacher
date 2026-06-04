@@ -13,7 +13,10 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/crm.php';
 
-require_admin();
+// Tag management is open to every CRM user — adding/renaming a tag is part
+// of day-to-day pipeline work. Deletion still cascades to inquiries, so it's
+// confirmed inline; admins can still hit /crm/audit.php to see what changed.
+require_module('crm');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();

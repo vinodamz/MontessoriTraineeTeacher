@@ -461,6 +461,7 @@ function crm_audit_actions(): array
         'touchpoint_added'      => 'Touchpoint added',
         'touchpoint_deleted'    => 'Touchpoint deleted',
         'tags_updated'          => 'Tags updated',
+        'owner_changed'         => 'Owner reassigned',
         'phone_call_initiated'  => 'Phone call (Call button)',
         'whatsapp_initiated'    => 'WhatsApp opened',
         'contact_saved'         => 'Saved as contact (vCard)',
