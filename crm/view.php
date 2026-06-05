@@ -398,6 +398,17 @@ require __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
+<?php if (!empty($family['wa_summary'])): ?>
+    <div class="card" style="border-left: 4px solid #25d366; background:#f6fffa;">
+        <h3 style="margin-top:0;">💬 WA Conversation Summary
+            <?php if (!empty($family['wa_summary_at'])): ?>
+                <small class="muted" style="font-weight:normal;">· updated <?= e(date('M j, g:i a', strtotime((string)$family['wa_summary_at']))) ?></small>
+            <?php endif; ?>
+        </h3>
+        <p style="margin:0; white-space:pre-wrap;"><?= e((string)$family['wa_summary']) ?></p>
+    </div>
+<?php endif; ?>
+
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 1 1 320px;">
         <h3>Contact</h3>
