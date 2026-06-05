@@ -66,10 +66,18 @@ $TERMINAL = ['enrolled', 'lost'];
 try {
     $pdo = db();
 
-    // 1. Find the most recent lead for this phone, else create one.
-    $find = $pdo->prepare("SELECT id, primary_name, status FROM inquiry_families
-                           WHERE primary_phone = :p ORDER BY created_at DESC LIMIT 1");
-    $find->execute([':p' => $phone]);
+    // 1. Find an existing lead for this phone (format-proof: match on the last
+    //    10 digits so "+91 70289…", "9170289…" and "70289…" all resolve to the
+    //    same lead instead of creating duplicates). Prefer an open lead, then
+    //    the most recent.
+    $last10 = substr(preg_replace('/\D/', '', $phone), -10);
+    $find = $pdo->prepare("
+        SELECT id, primary_name, status FROM inquiry_families
+        WHERE RIGHT(REGEXP_REPLACE(COALESCE(primary_phone,''), '[^0-9]', ''), 10) = :d
+          AND :d <> ''
+        ORDER BY (status NOT IN ('lost','enrolled')) DESC, created_at DESC
+        LIMIT 1");
+    $find->execute([':d' => $last10]);
     $lead = $find->fetch();
 
     if (!$lead) {
