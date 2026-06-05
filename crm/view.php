@@ -333,19 +333,24 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn" href="/crm/edit.php?id=<?= $id ?>">Edit</a>
         <a class="btn" href="/fees/guide.php?inquiry_id=<?= $id ?>" title="Generate personalised fee guide for this family">Fee Guide</a>
         <?php
-            // "Send via WhatsApp CRM" — only when we have a phone, the CRM is
-            // configured, and this stage has a message set up.
-            $waStageMsg = $family['primary_phone'] ? crm_stage_wa((string)$family['status']) : null;
+            // "Send via WhatsApp CRM" — show on any lead with a phone once the
+            // CRM is configured and migrate_027 has run. If this stage has no
+            // message yet, the op=wa_send handler points to Pipeline → Stages.
             $waConfigured = external_app_url('wacrm') !== '' && (string)app_setting('wacrm_sso_secret', '') !== '';
-            if ($waStageMsg && $waConfigured && ($waStageMsg['wa_text'] !== '' || $waStageMsg['wa_template'] !== '')):
+            if ($family['primary_phone'] && $waConfigured && crm_stage_wa_ready()):
+                $waStageMsg = crm_stage_wa((string)$family['status']);
+                $waHasMsg   = $waStageMsg['wa_text'] !== '' || $waStageMsg['wa_template'] !== '';
+                $waConfirm  = $waHasMsg
+                    ? 'Send the &quot;' . e(crm_status_label((string)$family['status'])) . '&quot; WhatsApp message to ' . e($family['primary_phone']) . ' via the WhatsApp CRM?'
+                    : 'This stage has no WhatsApp message yet — you can set one in Pipeline → Stages. Continue anyway?';
         ?>
             <form method="post" style="display:inline;"
-                  onsubmit="return confirm('Send the &quot;<?= e(crm_status_label((string)$family['status'])) ?>&quot; WhatsApp message to <?= e($family['primary_phone']) ?> via the WhatsApp CRM?');">
+                  onsubmit="return confirm('<?= $waConfirm ?>');">
                 <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="op" value="wa_send">
                 <button class="btn" style="background:#25d366; border-color:#1da851; color:#fff;"
                         title="Send this stage's WhatsApp message — free text within 24h, approved template otherwise">
-                    Send via WhatsApp CRM
+                    Send via WhatsApp CRM<?= $waHasMsg ? '' : ' *' ?>
                 </button>
             </form>
         <?php endif; ?>

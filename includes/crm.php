@@ -361,6 +361,23 @@ function crm_stage_wa(string $code): array
 }
 
 /**
+ * True once migrate_027 has added the WhatsApp columns to crm_stages — used to
+ * decide whether to show the "Send via WhatsApp CRM" button at all. Cached.
+ */
+function crm_stage_wa_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+        db()->query("SELECT wa_text FROM crm_stages LIMIT 1");
+        $ready = true;
+    } catch (Throwable $e) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+/**
  * Pull per-family substitution vars in one batched query so the kanban
  * doesn't go N+1. Returns [family_id => ['parent_name' => …, 'child_name' => …]].
  */
