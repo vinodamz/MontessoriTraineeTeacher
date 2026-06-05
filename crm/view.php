@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $text,
             $wa['wa_template'],
             $wa['wa_template_lang'],
-            $wa['wa_template'] !== '' ? [$parentName] : []
+            $vars
         );
         if ($res['ok']) {
             crm_audit_log('wa_sent', $id, ['stage' => $f['status'], 'mode' => $res['sent']]);
@@ -93,13 +93,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($op === 'mark_visited') {
-        // You ran the school visit — move to 'Visited' and start the 3-day
-        // post-visit reminder clock (attention.php picks it up).
+        // You ran the school visit — move to 'School visited' and start the
+        // 3-day post-visit reminder clock (attention.php picks it up).
         $pdo->prepare("UPDATE inquiry_families
-                       SET status='visited', visited_at=NOW(),
+                       SET status='school_visited', visited_at=NOW(),
                            post_visit_reminded_at=NULL, probability=:p
                        WHERE id=:id")
-            ->execute([':p' => crm_default_probability('visited'), ':id' => $id]);
+            ->execute([':p' => crm_default_probability('school_visited'), ':id' => $id]);
         crm_audit_log('visit_marked', $id, ['via' => 'detail_form']);
         flash_set('ok', 'Visit marked done. I\'ll remind you to follow up in 3 days if there\'s no reply.');
         redirect('/crm/view.php?id=' . $id);
@@ -371,7 +371,7 @@ require __DIR__ . '/../includes/header.php';
         <?php
             // "Mark visit done" — you conduct the visit, then tap this to start
             // the 3-day post-visit reminder. Hidden once visited or closed.
-            if (!in_array($family['status'], ['visited', 'enrolled', 'lost'], true)):
+            if (!in_array($family['status'], ['school_visited', 'visited', 'enrolled', 'lost'], true)):
         ?>
             <form method="post" style="display:inline;"
                   onsubmit="return confirm('Mark the school visit as done for <?= e($family['primary_name']) ?>? This starts the 3-day follow-up reminder.');">

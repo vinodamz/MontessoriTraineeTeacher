@@ -145,12 +145,30 @@ function wacrm_launch_url(): string
  * @param string[] $params   ordered template body variables ({{1}}, {{2}}, …)
  * @return array{ok:bool,status:int,sent:?string,error:?string}
  */
+/**
+ * Ordered template variables ({{1}},{{2}},…) for a Meta template, built from a
+ * named-vars array (parent_name / child_name / school_name). Each approved
+ * template was submitted with its own variable order, so this map keeps the
+ * count and order correct — Meta rejects the send otherwise.
+ */
+function wacrm_template_params(string $template, array $vars): array
+{
+    $orders = [
+        'welcome_admissions'   => ['parent_name', 'school_name'],
+        'visit_invitation'     => ['parent_name', 'school_name'],
+        'post_visit_followup'  => ['parent_name', 'school_name', 'child_name'],
+        'admission_next_steps' => ['parent_name', 'child_name', 'school_name'],
+    ];
+    $order = $orders[$template] ?? ['parent_name'];
+    return array_map(static fn($k) => (string) ($vars[$k] ?? ''), $order);
+}
+
 function wacrm_send_to_lead(
     string $phone,
     string $text = '',
     string $template = '',
     string $lang = 'en_US',
-    array $params = []
+    array $vars = []
 ): array {
     $base   = external_app_url('wacrm');
     $secret = (string)app_setting('wacrm_sso_secret', '');
@@ -173,7 +191,7 @@ function wacrm_send_to_lead(
     if ($template !== '') {
         $body['template_name']     = $template;
         $body['template_language'] = $lang !== '' ? $lang : 'en_US';
-        $body['template_params']   = array_values($params);
+        $body['template_params']   = wacrm_template_params($template, $vars);
     }
 
     $ch = curl_init(rtrim($base, '/') . '/api/whatsapp/send-to-lead');

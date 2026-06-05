@@ -55,10 +55,13 @@ if ($phone === '') {
 }
 
 // intent → destination stage (forward-only). info/unclear never move.
+// Mirrors the live pipeline: Leads → New → Details shared → Tour scheduled →
+// School visited → Application submitted → Offered → Enrolled (+ Lost).
 $STAGE_FOR = [
     'interested'     => 'new',
+    'asked_details'  => 'details_shared',        // asked about fees/programmes/timings
     'wants_visit'    => 'tour_scheduled',
-    'ready'          => 'offered',
+    'ready'          => 'application_submitted',  // ready to admit / enrol
     'not_interested' => 'lost',
 ];
 $TERMINAL = ['enrolled', 'lost'];

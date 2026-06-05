@@ -82,7 +82,7 @@ try {
     $pv = $pdo->prepare("
         SELECT id, primary_name, primary_phone, status, visited_at
         FROM inquiry_families
-        WHERE status = 'visited'
+        WHERE status = 'school_visited'
           AND visited_at IS NOT NULL
           AND visited_at <= NOW() - INTERVAL :d DAY
           AND post_visit_reminded_at IS NULL
