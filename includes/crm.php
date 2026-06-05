@@ -361,6 +361,37 @@ function crm_stage_wa(string $code): array
 }
 
 /**
+ * Document attachments (PDFs) configured for a stage (migrate_030). Returns a
+ * list of ['link'=>, 'filename'=>, 'caption'=>]. Isolated in its own try/catch
+ * so a missing wa_docs column never breaks crm_stage_wa() or the send button.
+ */
+function crm_stage_docs(string $code): array
+{
+    if ($code === '') return [];
+    try {
+        $st = db()->prepare("SELECT wa_docs FROM crm_stages WHERE code = :c LIMIT 1");
+        $st->execute([':c' => $code]);
+        $raw = (string) ($st->fetchColumn() ?: '');
+        if ($raw === '') return [];
+        $arr = json_decode($raw, true);
+        if (!is_array($arr)) return [];
+        $out = [];
+        foreach ($arr as $d) {
+            $link = trim((string) ($d['link'] ?? ''));
+            if ($link === '') continue;
+            $out[] = [
+                'link'     => $link,
+                'filename' => (string) ($d['filename'] ?? ''),
+                'caption'  => (string) ($d['caption'] ?? ''),
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
  * True once migrate_027 has added the WhatsApp columns to crm_stages — used to
  * decide whether to show the "Send via WhatsApp CRM" button at all. Cached.
  */

@@ -42,7 +42,7 @@ try {
             if ($code === '') continue;
             $sets = [];
             $args = [':c' => $code];
-            foreach (['wa_text', 'wa_template', 'wa_template_lang'] as $f) {
+            foreach (['wa_text', 'wa_template', 'wa_template_lang', 'wa_docs'] as $f) {
                 if (array_key_exists($f, $s)) {
                     $v = trim((string) $s[$f]);
                     $sets[] = "$f = :$f";
@@ -60,7 +60,7 @@ try {
 
     $rows = $pdo->query("
         SELECT id, code, label, display_order, is_open, is_active,
-               wa_text, wa_template, wa_template_lang
+               wa_text, wa_template, wa_template_lang, wa_docs
         FROM crm_stages ORDER BY display_order, id")->fetchAll();
     $stages = [];
     foreach ($rows as $r) {
@@ -74,6 +74,7 @@ try {
             'wa_text'          => (string) ($r['wa_text'] ?? ''),
             'wa_template'      => (string) ($r['wa_template'] ?? ''),
             'wa_template_lang' => (string) ($r['wa_template_lang'] ?? ''),
+            'wa_docs'          => (string) ($r['wa_docs'] ?? ''),
         ];
     }
     echo json_encode(['ok' => true, 'count' => count($stages), 'stages' => $stages], JSON_UNESCAPED_UNICODE);

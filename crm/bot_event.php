@@ -121,6 +121,7 @@ try {
     $askReason = false;
     $target    = $current;
     $replyText = null;
+    $documents = [];
 
     // 5. Decide the move.
     if ($intent === 'not_interested') {
@@ -155,6 +156,14 @@ try {
             if ($wa['wa_text'] !== '') {
                 $replyText = crm_wa_substitute($wa['wa_text'], $vars);
             }
+            // Any PDFs configured on this stage (e.g. Details shared → handbook).
+            foreach (crm_stage_docs($dest) as $doc) {
+                $documents[] = [
+                    'link'     => $doc['link'],
+                    'filename' => $doc['filename'],
+                    'caption'  => crm_wa_substitute($doc['caption'], $vars),
+                ];
+            }
         }
     }
 
@@ -169,6 +178,7 @@ try {
         'to_label'   => crm_status_label($target),
         'ask_reason' => $askReason,
         'reply_text' => $replyText,
+        'documents'  => $documents,
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);
