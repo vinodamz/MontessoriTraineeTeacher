@@ -98,6 +98,13 @@ Great news, {{1}}! Here are the next steps to secure {{2}}'s place at {{3}}. Rep
 ```
 Samples: {{1}}=Priya, {{2}}=Aarav, {{3}}=The Little Graduates
 
+### `staff_reminder` — category: UTILITY  *(this one is sent to YOU, not parents)*
+```
+You have {{1}} admissions lead(s) needing attention at The Little Graduates — post-visit follow-ups and parents to call back. Open the CRM to follow up.
+```
+Samples: {{1}}=3
+> Powers the "WhatsApp reminder to you" (to 917028915026). Once approved, set `REMINDER_WA_TEMPLATE=staff_reminder` in `~/wacrm/ops/alerts/.reminders.env` on the mini and it turns on automatically.
+
 > Note on categories: Meta may reclassify nurture wording as MARKETING (needs the parent to have opted in, which an inbound enquiry generally satisfies). UTILITY templates are approved faster and can be sent more freely. If `visit_invitation` gets rejected as MARKETING, we soften it or move that nudge inside the 24h window only.
 
 ## 6. Build phases (after sign-off)
