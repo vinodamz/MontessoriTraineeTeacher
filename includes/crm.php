@@ -399,6 +399,18 @@ function crm_stage_rank(string $code): int
 }
 
 /**
+ * Fill blank WhatsApp substitution vars with friendly fallbacks so messages
+ * never render gaps like "you and ." when a lead has no child name on file.
+ */
+function crm_wa_defaults(array $vars): array
+{
+    if (trim((string) ($vars['parent_name'] ?? '')) === '') $vars['parent_name'] = 'there';
+    if (trim((string) ($vars['child_name'] ?? '')) === '')  $vars['child_name']  = 'your little one';
+    if (trim((string) ($vars['school_name'] ?? '')) === '') $vars['school_name'] = app_name();
+    return $vars;
+}
+
+/**
  * Map a free-text "why not interested" reply onto a crm_lost_reasons() key.
  * Falls back to 'other'. Keep the keyword lists lowercase.
  */

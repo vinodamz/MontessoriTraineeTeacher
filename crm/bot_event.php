@@ -103,8 +103,8 @@ try {
 
     // 4. Resolve substitution vars for any outbound message.
     $vars = crm_wa_vars_for_families([$leadId])[$leadId] ?? ['parent_name' => '', 'child_name' => ''];
-    $vars['school_name'] = app_name();
-    $pname = $vars['parent_name'] !== '' ? $vars['parent_name'] : ($name !== '' ? $name : 'there');
+    if (($vars['parent_name'] ?? '') === '' && $name !== '') $vars['parent_name'] = $name;
+    $vars = crm_wa_defaults($vars);
 
     $moved     = false;
     $askReason = false;

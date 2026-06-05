@@ -69,9 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         // Substitution vars for the free-text body + template param.
         $vars = crm_wa_vars_for_families([$id])[$id] ?? ['parent_name' => '', 'child_name' => ''];
-        $vars['school_name'] = app_name();
-        $vars['stage']       = crm_status_label((string)$f['status']);
-        $parentName = $vars['parent_name'] !== '' ? $vars['parent_name'] : (string)$f['primary_name'];
+        if (($vars['parent_name'] ?? '') === '') $vars['parent_name'] = (string)$f['primary_name'];
+        $vars['stage'] = crm_status_label((string)$f['status']);
+        $vars = crm_wa_defaults($vars);
+        $parentName = $vars['parent_name'];
         $text = $wa['wa_text'] !== '' ? crm_wa_substitute($wa['wa_text'], $vars) : '';
 
         $res = wacrm_send_to_lead(
