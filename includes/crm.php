@@ -378,6 +378,50 @@ function crm_stage_wa_ready(): bool
 }
 
 /**
+ * Ordinal rank of a stage by its pipeline position (display_order), so the bot
+ * can enforce forward-only auto-moves. Unknown/terminal codes return a sentinel
+ * that keeps them from being auto-advanced. Cached.
+ */
+function crm_stage_rank(string $code): int
+{
+    static $ranks = null;
+    if ($ranks === null) {
+        $ranks = [];
+        try {
+            foreach (db()->query("SELECT code, display_order FROM crm_stages") as $r) {
+                $ranks[$r['code']] = (int)$r['display_order'];
+            }
+        } catch (Throwable $e) {
+            $ranks = [];
+        }
+    }
+    return $ranks[$code] ?? -1;
+}
+
+/**
+ * Map a free-text "why not interested" reply onto a crm_lost_reasons() key.
+ * Falls back to 'other'. Keep the keyword lists lowercase.
+ */
+function crm_map_lost_reason(string $text): string
+{
+    $t = mb_strtolower(trim($text));
+    if ($t === '') return 'no_response';
+    $rules = [
+        'too_expensive'      => ['expensive', 'costly', 'cost', 'fee', 'fees', 'budget', 'afford', 'price'],
+        'distance'           => ['far', 'distance', 'location', 'commute', 'travel', 'away'],
+        'chose_other_school' => ['another school', 'other school', 'already admitted', 'chose', 'joined', 'enrolled elsewhere'],
+        'timing'             => ['next year', 'later', 'not this year', 'too early', 'not now', 'postpone'],
+        'fit'                => ['not suitable', 'not the right', 'age', 'curriculum', 'not a fit', "doesn't fit"],
+    ];
+    foreach ($rules as $key => $words) {
+        foreach ($words as $w) {
+            if (mb_strpos($t, $w) !== false) return $key;
+        }
+    }
+    return 'other';
+}
+
+/**
  * Pull per-family substitution vars in one batched query so the kanban
  * doesn't go N+1. Returns [family_id => ['parent_name' => …, 'child_name' => …]].
  */

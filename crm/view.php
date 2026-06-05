@@ -91,6 +91,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/crm/view.php?id=' . $id);
     }
 
+    if ($op === 'mark_visited') {
+        // You ran the school visit — move to 'Visited' and start the 3-day
+        // post-visit reminder clock (attention.php picks it up).
+        $pdo->prepare("UPDATE inquiry_families
+                       SET status='visited', visited_at=NOW(),
+                           post_visit_reminded_at=NULL, probability=:p
+                       WHERE id=:id")
+            ->execute([':p' => crm_default_probability('visited'), ':id' => $id]);
+        crm_audit_log('visit_marked', $id, ['via' => 'detail_form']);
+        flash_set('ok', 'Visit marked done. I\'ll remind you to follow up in 3 days if there\'s no reply.');
+        redirect('/crm/view.php?id=' . $id);
+    }
+
     if ($op === 'status') {
         $st = $_POST['status'] ?? '';
         if (!array_key_exists($st, crm_statuses())) {
@@ -351,6 +364,20 @@ require __DIR__ . '/../includes/header.php';
                 <button class="btn" style="background:#25d366; border-color:#1da851; color:#fff;"
                         title="Send this stage's WhatsApp message — free text within 24h, approved template otherwise">
                     Send via WhatsApp CRM<?= $waHasMsg ? '' : ' *' ?>
+                </button>
+            </form>
+        <?php endif; ?>
+        <?php
+            // "Mark visit done" — you conduct the visit, then tap this to start
+            // the 3-day post-visit reminder. Hidden once visited or closed.
+            if (!in_array($family['status'], ['visited', 'enrolled', 'lost'], true)):
+        ?>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('Mark the school visit as done for <?= e($family['primary_name']) ?>? This starts the 3-day follow-up reminder.');">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op" value="mark_visited">
+                <button class="btn" title="You showed the family around — start the post-visit follow-up clock">
+                    Mark visit done
                 </button>
             </form>
         <?php endif; ?>
