@@ -35,6 +35,25 @@ try {
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $in = json_decode((string) file_get_contents('php://input'), true);
+
+        // Optional: create new stages. { create:[{code,label,display_order?,probability?,is_open?}] }
+        $created = [];
+        foreach ((is_array($in['create'] ?? null) ? $in['create'] : []) as $c) {
+            $code = strtolower(trim((string) ($c['code'] ?? '')));
+            if (!preg_match('/^[a-z][a-z0-9_]{1,39}$/', $code)) continue;
+            $label = trim((string) ($c['label'] ?? $code)) ?: $code;
+            $prob  = max(0, min(100, (int) ($c['probability'] ?? 20)));
+            $open  = !empty($c['is_open']) ? 1 : 0;
+            $order = array_key_exists('display_order', $c)
+                ? (int) $c['display_order']
+                : (int) $pdo->query("SELECT COALESCE(MAX(display_order),0)+10 FROM crm_stages")->fetchColumn();
+            $st = $pdo->prepare("INSERT IGNORE INTO crm_stages
+                (code, label, display_order, probability, is_open, is_active)
+                VALUES (:c, :l, :d, :p, :o, 1)");
+            $st->execute([':c' => $code, ':l' => $label, ':d' => $order, ':p' => $prob, ':o' => $open]);
+            if ($st->rowCount() > 0) $created[] = $code;
+        }
+
         $stages = is_array($in['stages'] ?? null) ? $in['stages'] : [];
         $updated = [];
         foreach ($stages as $s) {
@@ -54,7 +73,7 @@ try {
             $st->execute($args);
             if ($st->rowCount() >= 0) $updated[] = $code;
         }
-        echo json_encode(['ok' => true, 'updated' => $updated], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'created' => $created, 'updated' => $updated], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

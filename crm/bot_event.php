@@ -122,9 +122,24 @@ try {
     $target    = $current;
     $replyText = null;
     $documents = [];
+    $intro     = false;
 
     // 5. Decide the move.
-    if ($intent === 'not_interested') {
+    if ($current === 'lead') {
+        // First interaction with this lead — send the intro + buttons and mark
+        // 'Intro sent'. n8n turns $intro into an interactive list menu.
+        $dest = 'intro_sent';
+        $pdo->prepare("UPDATE inquiry_families SET status=:s, probability=:p WHERE id=:id")
+            ->execute([':s' => $dest, ':p' => crm_default_probability($dest), ':id' => $leadId]);
+        crm_audit_log('bot_intro_sent', $leadId, ['from' => $current]);
+        $moved  = true;
+        $target = $dest;
+        $intro  = true;
+        $wa = crm_stage_wa($dest);
+        if ($wa['wa_text'] !== '') {
+            $replyText = crm_wa_substitute($wa['wa_text'], $vars);
+        }
+    } elseif ($intent === 'not_interested') {
         if ($reason !== '') {
             // Step 2: capture the reason and mark Lost.
             $lr = crm_map_lost_reason($reason);
@@ -179,6 +194,7 @@ try {
         'ask_reason' => $askReason,
         'reply_text' => $replyText,
         'documents'  => $documents,
+        'intro'      => $intro,
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);
