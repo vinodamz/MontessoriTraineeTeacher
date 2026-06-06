@@ -198,5 +198,10 @@ try {
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['error' => 'event_failed']);
+    $out = ['error' => 'event_failed'];
+    if (($_GET['debug'] ?? '') === '1') {
+        $out['detail'] = $e->getMessage();
+        $out['where']  = basename($e->getFile()) . ':' . $e->getLine();
+    }
+    echo json_encode($out);
 }
