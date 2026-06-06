@@ -74,14 +74,16 @@ try {
     //    same lead instead of creating duplicates). Prefer an open lead, then
     //    the most recent.
     $last10 = substr(preg_replace('/\D/', '', $phone), -10);
-    $find = $pdo->prepare("
-        SELECT id, primary_name, status FROM inquiry_families
-        WHERE RIGHT(REGEXP_REPLACE(COALESCE(primary_phone,''), '[^0-9]', ''), 10) = :d
-          AND :d <> ''
-        ORDER BY (status NOT IN ('lost','enrolled')) DESC, created_at DESC
-        LIMIT 1");
-    $find->execute([':d' => $last10]);
-    $lead = $find->fetch();
+    $lead = false;
+    if ($last10 !== '') {
+        $find = $pdo->prepare("
+            SELECT id, primary_name, status FROM inquiry_families
+            WHERE RIGHT(REGEXP_REPLACE(COALESCE(primary_phone,''), '[^0-9]', ''), 10) = :d
+            ORDER BY (status NOT IN ('lost','enrolled')) DESC, created_at DESC
+            LIMIT 1");
+        $find->execute([':d' => $last10]);
+        $lead = $find->fetch();
+    }
 
     if (!$lead) {
         $pdo->prepare("INSERT INTO inquiry_families
@@ -198,10 +200,5 @@ try {
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);
-    $out = ['error' => 'event_failed'];
-    if (($_GET['debug'] ?? '') === '1') {
-        $out['detail'] = $e->getMessage();
-        $out['where']  = basename($e->getFile()) . ':' . $e->getLine();
-    }
-    echo json_encode($out);
+    echo json_encode(['error' => 'event_failed']);
 }
