@@ -58,6 +58,12 @@ foreach ($pstmt->fetchAll() as $row) {
     }
 }
 
+/**
+ * Set of "$category|$title" keys for documents already on file for this
+ * student. Used by the form to show "on file" hints next to each upload.
+ */
+$docsOnFile = parent_form_docs_on_file($studentId);
+
 $flash = ['ok' => '', 'err' => ''];
 
 // ---------------------------------------------------------------------------
@@ -199,18 +205,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Birth certificate → student_documents (category=birth_certificate)
-        $docCategories = [
-            'birth_certificate' => 'Birth certificate',
-            'id_proof'          => 'Aadhar card',
+        // Documents → student_documents. Each entry is (form field, category,
+        // title). Aadhar / photo-ID is captured separately for child / father /
+        // mother — same category, distinguished by title. Re-uploading any of
+        // them replaces the prior row for that (category, title) pair so the
+        // family can fix a blurry scan without admin cleanup.
+        $docUploads = [
+            ['birth_certificate', 'birth_certificate', 'Birth certificate'],
+            ['aadhar_child',      'id_proof',          'Aadhar — Child'],
+            ['aadhar_father',     'id_proof',          'Aadhar — Father'],
+            ['aadhar_mother',     'id_proof',          'Aadhar — Mother'],
         ];
-        foreach ($docCategories as $cat => $defaultTitle) {
-            $field = $cat === 'birth_certificate' ? 'birth_certificate' : 'aadhar';
+        foreach ($docUploads as [$field, $cat, $title]) {
             if (empty($_FILES[$field]['name'])) continue;
             try {
-                parent_form_store_document($_FILES[$field], $studentId, $cat, $defaultTitle);
+                parent_form_store_document($_FILES[$field], $studentId, $cat, $title, true);
             } catch (Throwable $e) {
-                $flash['err'] .= "$defaultTitle: " . $e->getMessage() . ' ';
+                $flash['err'] .= "$title: " . $e->getMessage() . ' ';
             }
         }
 
@@ -224,6 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($pstmt->fetchAll() as $row) {
             if (!isset($parents[$row['relation']])) $parents[$row['relation']] = $row;
         }
+        $docsOnFile = parent_form_docs_on_file($studentId);
     } catch (Throwable $e) {
         if (db()->inTransaction()) db()->rollBack();
         $flash['err'] = 'Save failed: ' . $e->getMessage();
@@ -233,6 +245,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---------------------------------------------------------------------------
 // Helpers used by the page above.
 // ---------------------------------------------------------------------------
+/**
+ * Return a set of "$category|$title" keys for documents already on file
+ * for this student. Used to render "on file" hints next to upload slots.
+ */
+function parent_form_docs_on_file(int $studentId): array
+{
+    $stmt = db()->prepare("SELECT DISTINCT category, title FROM student_documents WHERE student_id = :sid");
+    $stmt->execute([':sid' => $studentId]);
+    $set = [];
+    foreach ($stmt->fetchAll() as $r) {
+        $set[(string)$r['category'] . '|' . (string)$r['title']] = true;
+    }
+    return $set;
+}
+
 function parent_form_parse_date(string $s): ?string
 {
     $s = trim($s);
@@ -245,7 +272,7 @@ function parent_form_parse_date(string $s): ?string
     return $t ? date('Y-m-d', $t) : null;
 }
 
-function parent_form_store_document(array $file, int $studentId, string $category, string $defaultTitle): void
+function parent_form_store_document(array $file, int $studentId, string $category, string $title, bool $replace = false): void
 {
     if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) return;
     if ($file['error'] !== UPLOAD_ERR_OK) {
@@ -280,10 +307,28 @@ function parent_form_store_document(array $file, int $studentId, string $categor
     ")->execute([
         ':sid'  => $studentId, ':sid2' => $studentId,
         ':cat'  => $category,
-        ':t'    => $defaultTitle,
+        ':t'    => $title,
         ':orig' => $orig, ':stored' => $stored,
         ':mime' => $mime, ':sz' => $size,
     ]);
+    $newId = (int)db()->lastInsertId();
+
+    if ($replace) {
+        // Clear previous rows with the same (student, category, title) so a
+        // re-upload doesn't leave a stale copy on disk. Done after the new
+        // INSERT succeeds — if cleanup fails the worst case is a duplicate,
+        // never missing data.
+        $old = db()->prepare("
+            SELECT id, stored_filename FROM student_documents
+            WHERE  student_id = :sid AND category = :cat AND title = :t AND id <> :newId
+        ");
+        $old->execute([':sid' => $studentId, ':cat' => $category, ':t' => $title, ':newId' => $newId]);
+        $delStmt = db()->prepare("DELETE FROM student_documents WHERE id = :id");
+        foreach ($old->fetchAll() as $row) {
+            @unlink(student_docs_dir() . '/' . basename((string)$row['stored_filename']));
+            $delStmt->execute([':id' => (int)$row['id']]);
+        }
+    }
 }
 
 /**
@@ -361,7 +406,7 @@ $full     = trim((string)$s['first_name'] . ' ' . (string)$s['last_name']);
 $father   = $parents['father']   ?? null;
 $mother   = $parents['mother']   ?? null;
 
-parent_form_render_shell('Admission form for ' . $full, function () use ($s, $father, $mother, $token, $flash, $full) {
+parent_form_render_shell('Admission form for ' . $full, function () use ($s, $father, $mother, $token, $flash, $full, $docsOnFile) {
     ?>
     <?php if ($flash['ok']): ?>
         <div class="flash-ok"><?= e($flash['ok']) ?></div>
@@ -522,15 +567,27 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
 
         <div class="card">
             <h2>Documents</h2>
-            <span class="small">Upload a clear photo or PDF scan. Up to <?= e(format_bytes(STUDENT_DOC_MAX_BYTES)) ?> each.</span>
-            <div class="field" style="margin-top:.6rem;">
-                <label>Birth certificate</label>
-                <input type="file" name="birth_certificate" accept="application/pdf,image/jpeg,image/png">
-            </div>
-            <div class="field">
-                <label>Aadhar card</label>
-                <input type="file" name="aadhar" accept="application/pdf,image/jpeg,image/png">
-            </div>
+            <span class="small">Clear photo or PDF scan, up to <?= e(format_bytes(STUDENT_DOC_MAX_BYTES)) ?> each. Re-uploading replaces the previous file.</span>
+            <?php
+            $docSlots = [
+                ['birth_certificate', 'birth_certificate', 'Birth certificate (child)',    'Birth certificate'],
+                ['aadhar_child',      'id_proof',          'Aadhar / Photo ID — Child',    'Aadhar — Child'],
+                ['aadhar_father',     'id_proof',          'Aadhar / Photo ID — Father',   'Aadhar — Father'],
+                ['aadhar_mother',     'id_proof',          'Aadhar / Photo ID — Mother',   'Aadhar — Mother'],
+            ];
+            foreach ($docSlots as [$field, $cat, $label, $title]):
+                $onFile = isset($docsOnFile[$cat . '|' . $title]);
+            ?>
+                <div class="field" style="margin-top:.6rem;">
+                    <label>
+                        <?= e($label) ?>
+                        <?php if ($onFile): ?>
+                            <span class="pill" style="background:#d8efd8; color:#2c5f2c; font-size:.7rem;">✓ on file</span>
+                        <?php endif; ?>
+                    </label>
+                    <input type="file" name="<?= e($field) ?>" accept="application/pdf,image/jpeg,image/png">
+                </div>
+            <?php endforeach; ?>
         </div>
 
         <div class="submit-row">
