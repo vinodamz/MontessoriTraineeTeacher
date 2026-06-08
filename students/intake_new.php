@@ -50,12 +50,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo = db();
             $pdo->beginTransaction();
+            // is_active=1 from the start — the enrollment_status filter
+            // (default 'enrolled') already hides intake_pending rows from
+            // the main list, so we don't also need is_active=0 to do it,
+            // and keeping is_active=1 means the status=intake_pending
+            // dropdown surfaces these rows without also needing the user
+            // to flip the Active filter to "All".
             $ins = $pdo->prepare("
                 INSERT INTO students
                     (first_name, last_name, grade, teacher_id,
                      enrollment_status, is_active, academic_year)
                 VALUES
-                    (:f, '', :g, :tid, 'intake_pending', 0, :ay)
+                    (:f, '', :g, :tid, 'intake_pending', 1, :ay)
             ");
             $ins->execute([':f' => $first, ':g' => $grade, ':tid' => $tid, ':ay' => $year]);
             $sid = (int)$pdo->lastInsertId();
