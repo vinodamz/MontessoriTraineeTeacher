@@ -114,7 +114,14 @@ $childPhoto   = pdf_data_uri($s['photo_path'] ?? null);
 $fatherPhoto  = $father ? pdf_data_uri($father['photo_path'] ?? null) : '';
 $motherPhoto  = $mother ? pdf_data_uri($mother['photo_path'] ?? null) : '';
 $grade        = (string)$s['grade'];
-$appName      = function_exists('app_name') ? app_name() : 'Little Graduates';
+$appName      = function_exists('app_name') ? app_name() : 'The Little Graduates';
+
+// School logo embedded as a data URI so the downloaded PDF is self-contained.
+$logoUri = '';
+$logoPath = realpath(__DIR__ . '/../assets/img/logo.png');
+if ($logoPath && is_file($logoPath)) {
+    $logoUri = 'data:image/png;base64,' . base64_encode((string)file_get_contents($logoPath));
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -123,55 +130,74 @@ $appName      = function_exists('app_name') ? app_name() : 'Little Graduates';
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admission Form — <?= e($full) ?></title>
 <style>
-  :root { color-scheme: light; }
+  /* Theme: Little Graduates pink + green from the school logo. */
+  :root {
+    --tlg-pink: #e91e63;
+    --tlg-pink-dark: #ad1457;
+    --tlg-pink-wash: #fce4ec;
+    --tlg-green: #66bb6a;
+    color-scheme: light;
+  }
   * { box-sizing: border-box; }
-  html, body { background: #eee; margin: 0; padding: 0;
+  html, body { background: #f4eef1; margin: 0; padding: 0;
                font: 11pt/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
                color: #1a1a1a; }
   .sheet { background: #fff; width: 210mm; min-height: 297mm; margin: 1.5rem auto;
-           padding: 14mm 14mm 18mm; box-shadow: 0 2px 12px rgba(0,0,0,.12); position: relative; }
+           padding: 14mm 14mm 18mm; box-shadow: 0 2px 12px rgba(0,0,0,.12); position: relative;
+           border-top: 6px solid var(--tlg-pink); }
   .toolbar { position: sticky; top: 0; z-index: 5;
-             background: #fafafa; border-bottom: 1px solid #ddd; padding: .6rem 1rem;
+             background: #fff; border-bottom: 1px solid #e9c2d3; padding: .6rem 1rem;
              display: flex; gap: .5rem; align-items: center; justify-content: flex-end; }
-  .btn { padding: .45rem .9rem; background: #6b4226; color: #fff; border: 0; border-radius: 5px;
+  .btn { padding: .45rem .9rem; background: var(--tlg-pink); color: #fff; border: 0; border-radius: 5px;
          font: 500 .9rem/1 inherit; cursor: pointer; text-decoration: none; }
-  .btn-ghost { background: transparent; color: #6b4226; border: 1px solid #6b4226; }
+  .btn:hover { background: var(--tlg-pink-dark); }
+  .btn-ghost { background: transparent; color: var(--tlg-pink); border: 1px solid var(--tlg-pink); }
 
-  h1.title { text-align: center; margin: 0 0 .2rem; font-size: 22pt; color: #2b2b2b; letter-spacing: .5px; }
-  .subtitle { text-align: center; margin: 0 0 1rem; font-size: 10pt; color: #555; }
+  /* Branded header with logo + school name. */
+  .brand { display: grid; grid-template-columns: 28mm 1fr auto; gap: 1rem; align-items: center;
+           padding-bottom: .8rem; border-bottom: 2px solid var(--tlg-pink); margin-bottom: 1rem; }
+  .brand img { width: 28mm; height: auto; }
+  .brand .school-name { font-size: 19pt; color: var(--tlg-pink); font-weight: 800; line-height: 1.05;
+                        letter-spacing: .5px; margin: 0; text-transform: uppercase; }
+  .brand .school-tag  { font-size: 9pt; color: var(--tlg-green); font-weight: 600; margin: .15rem 0 0; letter-spacing: .3px; }
+  .brand .form-label  { text-align: right; font-size: 11pt; color: var(--tlg-pink-dark); font-weight: 700;
+                        letter-spacing: 1px; text-transform: uppercase; border-left: 2px dashed #f3c1d5;
+                        padding-left: .8rem; }
+  .brand .form-label small { display: block; font-size: 8pt; font-weight: 500; color: #888; margin-top: .15rem; text-transform: none; letter-spacing: 0; }
 
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem 1.4rem; margin-bottom: .5rem; }
   .grid.three { grid-template-columns: 1fr 1fr 1fr; }
   .label { font-weight: 600; color: #444; font-size: 9.5pt; display: block; margin-bottom: .15rem; }
-  .v { border-bottom: 1px dotted #999; padding: .15rem .2rem; min-height: 1.3rem; }
-  .blank { color: #bbb; }
+  .v { border-bottom: 1px dotted #c98cab; padding: .15rem .2rem; min-height: 1.3rem; color: #1a1a1a; }
+  .blank { color: #d4b5c5; }
 
-  .section { border-top: 1px solid #999; padding-top: .55rem; margin-top: .75rem; }
-  .section .num { font-weight: 700; color: #6b4226; margin-right: .3rem; }
-  .section-title { font-weight: 700; font-size: 10.5pt; margin: 0 0 .4rem; }
+  .section { border-top: 1px solid #f3c1d5; padding-top: .55rem; margin-top: .75rem; }
+  .section .num { font-weight: 700; color: var(--tlg-pink); margin-right: .3rem; }
+  .section-title { font-weight: 700; font-size: 10.5pt; margin: 0 0 .4rem; color: #4a2138; }
 
-  .photo-box { width: 28mm; height: 36mm; border: 1px solid #999; border-radius: 2px;
+  .photo-box { width: 28mm; height: 36mm; border: 1px solid #c98cab; border-radius: 2px;
                display: flex; align-items: center; justify-content: center;
-               background: #fafafa center/cover no-repeat; font-size: 8pt; color: #999; text-align: center; }
+               background: #fff7fb center/cover no-repeat; font-size: 8pt; color: #b08099; text-align: center; }
   .row-with-photo { display: grid; grid-template-columns: 1fr 32mm; gap: 1.2rem; align-items: start; }
 
-  .checkbox-row { display: flex; gap: 1.2rem; font-size: 10.5pt; margin: .3rem 0 .6rem; }
+  .checkbox-row { display: flex; gap: 1.2rem; font-size: 10.5pt; margin: .3rem 0 .6rem; color: #4a2138; }
   .checkbox-row label { display: inline-flex; gap: .25rem; align-items: center; }
 
   table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin-top: .35rem; }
-  th, td { border: 1px solid #999; padding: .25rem .4rem; vertical-align: top; }
-  th { background: #f4ece0; font-weight: 600; text-align: left; }
+  th, td { border: 1px solid #d8a3bf; padding: .25rem .4rem; vertical-align: top; }
+  th { background: var(--tlg-pink-wash); color: var(--tlg-pink-dark); font-weight: 600; text-align: left; }
 
   .checklist { display: flex; gap: 1.5rem; padding-top: .4rem; font-size: 10pt; }
   .footer-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem;
-                 padding-top: .8rem; border-top: 1px solid #999; font-size: 10pt; }
+                 padding-top: .8rem; border-top: 2px solid var(--tlg-pink); font-size: 10pt; }
 
-  /* Print: hide tools + chrome, page-fit to A4 */
+  /* Print: hide tools + chrome, page-fit to A4. Preserve the brand colors. */
   @page { size: A4; margin: 12mm; }
   @media print {
     body { background: #fff; }
     .toolbar { display: none; }
-    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; border-top-width: 4px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
@@ -185,8 +211,21 @@ $appName      = function_exists('app_name') ? app_name() : 'Little Graduates';
 </div>
 
 <div class="sheet">
-    <h1 class="title">Admission Form</h1>
-    <p class="subtitle"><?= e($appName) ?> — Early Learning Centre</p>
+    <div class="brand">
+        <?php if ($logoUri): ?>
+            <img src="<?= e($logoUri) ?>" alt="">
+        <?php else: ?>
+            <div></div>
+        <?php endif; ?>
+        <div>
+            <p class="school-name"><?= e($appName) ?></p>
+            <p class="school-tag">Early Learning Centre</p>
+        </div>
+        <div class="form-label">
+            Admission Form
+            <small>Form date: <?= e(date('d M Y')) ?></small>
+        </div>
+    </div>
 
     <div class="section">
         <p class="section-title"><span class="num">1.</span> Admission For</p>
