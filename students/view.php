@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/student_form.php';
 
 $user = require_login();
 if (!user_has_module($user, 'students') && !user_has_module($user, 'montessori')) {
@@ -18,6 +19,29 @@ if (!user_has_module($user, 'students') && !user_has_module($user, 'montessori')
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) { redirect('/students/index.php'); }
+
+// Parent-form-link actions (admins only). Handled before any HTML output.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $op = $_POST['op'] ?? '';
+    if (in_array($op, ['generate_form_token', 'revoke_form_token'], true)) {
+        require_admin();
+        csrf_check();
+        try {
+            if ($op === 'generate_form_token') {
+                revoke_active_form_tokens($id);
+                generate_form_token($id, (int)$user['id']);
+                flash_set('ok', 'Parent form link generated.');
+            } else {
+                $tokId = (int)($_POST['token_id'] ?? 0);
+                if ($tokId > 0) revoke_form_token($tokId);
+                flash_set('ok', 'Parent form link revoked.');
+            }
+        } catch (Throwable $e) {
+            flash_set('error', 'Could not update link: ' . $e->getMessage());
+        }
+        redirect('/students/view.php?id=' . $id);
+    }
+}
 
 $stmt = db()->prepare("
     SELECT s.*, u.name AS teacher_name
@@ -42,7 +66,11 @@ if (!$canSeeAll && (int)$s['teacher_id'] !== (int)$user['id']) {
     exit;
 }
 
-$canEdit = $user['role'] === 'admin' || user_has_module($user, 'students');
+$canEdit  = $user['role'] === 'admin' || user_has_module($user, 'students');
+$isAdmin  = $user['role'] === 'admin';
+
+// Active parent-form token (admins only — non-admins shouldn't see the link).
+$activeFormToken = $isAdmin ? active_form_token_for_student($id) : null;
 
 // Parents/guardians
 $pstmt = db()->prepare("SELECT * FROM student_parents WHERE student_id = :id ORDER BY is_primary DESC, relation, id");
@@ -142,6 +170,47 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($isAdmin): ?>
+<section class="card">
+    <h2 style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+        <span>Parent form link</span>
+        <?php if ($activeFormToken): ?>
+            <form method="post" style="margin:0;" onsubmit="return confirm('Revoke this link? The parent will see \'Link not active\'.');">
+                <input type="hidden" name="_csrf"    value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op"       value="revoke_form_token">
+                <input type="hidden" name="token_id" value="<?= (int)$activeFormToken['id'] ?>">
+                <button class="btn btn-ghost" type="submit">Revoke</button>
+            </form>
+        <?php else: ?>
+            <form method="post" style="margin:0;">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op"    value="generate_form_token">
+                <button class="btn btn-primary" type="submit">Generate link</button>
+            </form>
+        <?php endif; ?>
+    </h2>
+    <?php if ($activeFormToken):
+        $url = parent_form_url((string)$activeFormToken['token']);
+    ?>
+        <p class="muted small" style="margin:0 0 .4rem;">Share this with the parent — no school login needed. They can edit child / parent details, address, emergency contact, and upload documents.</p>
+        <div style="display:flex; gap:.4rem; align-items:center; margin:.3rem 0;">
+            <input id="pf-url" type="text" readonly value="<?= e($url) ?>"
+                   style="flex:1; padding:.4rem; border:1px solid #d4c2a8; border-radius:5px; background:#f4ece0; font-family:monospace; font-size:.85rem;">
+            <button type="button" class="btn btn-ghost"
+                    onclick="navigator.clipboard.writeText(document.getElementById('pf-url').value).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500);});">Copy</button>
+            <a class="btn btn-ghost" target="_blank" rel="noopener" href="<?= e($url) ?>">Open</a>
+        </div>
+        <p class="muted small" style="margin:.3rem 0 0;">
+            Created <?= e(fmt_date(substr((string)$activeFormToken['created_at'], 0, 10))) ?>
+            <?php if (!empty($activeFormToken['last_saved_at'])): ?> · Last saved <?= e(fmt_date(substr((string)$activeFormToken['last_saved_at'], 0, 10))) ?><?php endif; ?>
+            <?php if (!empty($activeFormToken['last_accessed_at'])): ?> · Last opened <?= e(fmt_date(substr((string)$activeFormToken['last_accessed_at'], 0, 10))) ?><?php endif; ?>
+        </p>
+    <?php else: ?>
+        <p class="muted small">No active link. Generating one creates a unique URL the parent can use to edit this child's record without logging in. Revoke it anytime.</p>
+    <?php endif; ?>
+</section>
+<?php endif; ?>
 
 <?php if (in_array($enrStatus, ['withdrawn','graduated','on_break'], true)): ?>
 <section class="card enr-callout enr-callout-<?= e($enrStatus) ?>">
