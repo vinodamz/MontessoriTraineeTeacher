@@ -41,6 +41,15 @@ if ($yearIn !== '' && $yearIn !== 'all' && !in_array($yearIn, $availableYears, t
 $statusIn = $_GET['status'] ?? 'enrolled';   // 'enrolled' | 'left' | 'all' | specific code
 $STATUSES_LEFT = ['withdrawn', 'graduated', 'on_break'];
 
+// Intake-pending rows are created with is_active=0 (see students/intake_new.php)
+// so the default active filter would otherwise hide them. When the admin
+// explicitly asks for status=intake_pending, relax the active filter to
+// include inactive rows. The same applies to the "left" bucket (graduated /
+// withdrawn / on_break — those rows are typically inactive too).
+if ($statusIn === 'intake_pending' || $statusIn === 'left') {
+    $activeIn = 'all';
+}
+
 $where  = [];
 $params = [];
 
