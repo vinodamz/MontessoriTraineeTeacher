@@ -12,14 +12,28 @@
  *   first_name, grade, teacher
  *
  * Optional headers (any of):
- *   admission_number, last_name, gender, dob, joining_date, blood_group,
+ *   admission_number, last_name, gender, dob, place_of_birth,
+ *   joining_date, admission_type, section, blood_group,
  *   allergies, medical_notes, home_address, permanent_address,
  *   pickup_person, pickup_phone, emergency_contact_name, emergency_contact_phone,
- *   notes, academic_year, enrollment_status, is_active,
+ *   notes, consent_given, consent_date, transport,
+ *   academic_year, enrollment_status, is_active,
  *   withdrawal_date, withdrawal_reason, withdrawal_notes,
  *   father_name,   father_phone,   father_email,   father_occupation,
  *   mother_name,   mother_phone,   mother_email,   mother_occupation,
  *   guardian_name, guardian_phone, guardian_email, guardian_occupation
+ *
+ * Vocabularies:
+ *   grade           Playgroup / Nursery / LKG / UKG
+ *   section         A / B / C / D  (extend STUDENT_SECTIONS to add more)
+ *   admission_type  new / old
+ *   transport       own / cab / bus / walk
+ *   consent_given   Yes / No / (blank = unknown)
+ *
+ * application_form_received / photo_received / id_card_received are
+ * EXPORT-ONLY signals. The importer accepts the columns (no error)
+ * but does not write anything from them — actual files are uploaded
+ * via the per-student edit page.
  *
  * Upsert rule: when admission_number is present and matches an existing
  * student row, this is treated as an UPDATE — blank cells in the file
@@ -47,26 +61,41 @@ $user = require_admin();
 const IMPORT_MAX_BYTES = 4 * 1024 * 1024;   // 4 MB
 const IMPORT_MAX_ROWS  = 2000;              // sanity ceiling
 
-$VALID_GRADES   = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
-$VALID_GENDERS  = ['Male', 'Female', 'Other'];
-$VALID_STATUSES = ['enrolled', 'promoted', 'withdrawn', 'graduated', 'on_break'];
+$VALID_GRADES     = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GENDERS    = ['Male', 'Female', 'Other'];
+$VALID_STATUSES   = ['enrolled', 'promoted', 'withdrawn', 'graduated', 'on_break'];
+$VALID_ADMISSIONS = array_keys(STUDENT_ADMISSION_TYPES);   // ['new', 'old']
+$VALID_TRANSPORT  = array_keys(STUDENT_TRANSPORT_MODES);   // ['own', 'cab', 'bus', 'walk']
 
 $STUDENT_FIELDS = [
-    'admission_number', 'first_name', 'last_name', 'grade', 'teacher',
-    'gender', 'dob', 'joining_date', 'blood_group',
+    'admission_number', 'first_name', 'last_name',
+    'grade', 'section', 'teacher',
+    'gender', 'dob', 'place_of_birth',
+    'joining_date', 'admission_type',
+    'blood_group',
     'allergies', 'medical_notes', 'home_address', 'permanent_address',
     'pickup_person', 'pickup_phone',
     'emergency_contact_name', 'emergency_contact_phone',
-    'notes', 'academic_year', 'enrollment_status', 'is_active',
+    'notes',
+    'consent_given', 'consent_date',
+    'transport',
+    'academic_year', 'enrollment_status', 'is_active',
     'withdrawal_date', 'withdrawal_reason', 'withdrawal_notes',
 ];
 $PARENT_RELATIONS = ['father', 'mother', 'guardian'];
 $PARENT_FIELDS    = ['name', 'phone', 'email', 'occupation'];
 
+// Document Y/N columns are export-only signals — the importer recognises
+// them so users don't see "unknown column" warnings, but it doesn't write
+// anything based on them. Files are still uploaded via the per-student page.
+$DOC_FLAG_HEADERS = ['application_form_received', 'photo_received', 'id_card_received'];
+
 $ALLOWED_HEADERS = $STUDENT_FIELDS;
 foreach ($PARENT_RELATIONS as $r) {
     foreach ($PARENT_FIELDS as $f) $ALLOWED_HEADERS[] = "{$r}_{$f}";
 }
+foreach ($DOC_FLAG_HEADERS as $h) $ALLOWED_HEADERS[] = $h;
+
 $REQUIRED_HEADERS = ['first_name', 'grade', 'teacher'];
 
 /** Resolve a teacher reference (numeric id or exact name) to a users.id. */
@@ -266,13 +295,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'preview
             if ($rec['enrollment_status'] !== '' && !in_array($rec['enrollment_status'], $VALID_STATUSES, true)) {
                 $rec['errors'][] = 'enrollment_status invalid';
             }
-            foreach (['dob', 'joining_date', 'withdrawal_date'] as $df) {
+            if ($rec['section'] !== '' && !in_array($rec['section'], STUDENT_SECTIONS, true)) {
+                $rec['errors'][] = 'section invalid (' . implode('/', STUDENT_SECTIONS) . ')';
+            }
+            if ($rec['admission_type'] !== '' && !in_array($rec['admission_type'], $VALID_ADMISSIONS, true)) {
+                $rec['errors'][] = 'admission_type invalid (new/old)';
+            }
+            if ($rec['transport'] !== '' && !in_array($rec['transport'], $VALID_TRANSPORT, true)) {
+                $rec['errors'][] = 'transport invalid (own/cab/bus/walk)';
+            }
+            foreach (['dob', 'joining_date', 'withdrawal_date', 'consent_date'] as $df) {
                 if ($rec[$df] === '') { $rec[$df . '_parsed'] = null; continue; }
                 $p = parse_date($rec[$df]);
                 if ($p === null) $rec['errors'][] = "$df unparseable: " . $rec[$df];
                 $rec[$df . '_parsed'] = $p;
             }
-            $rec['is_active_parsed'] = parse_bool($rec['is_active']);
+            $rec['is_active_parsed']     = parse_bool($rec['is_active']);
+            $rec['consent_given_parsed'] = parse_bool($rec['consent_given']);
 
             $rec['ok'] = empty($rec['errors']);
             $rows[] = $rec;
@@ -300,19 +339,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'commit'
 
         $insStmt = $pdo->prepare("
             INSERT INTO students
-                (admission_number, first_name, last_name, grade, teacher_id,
-                 gender, dob, joining_date, blood_group,
+                (admission_number, first_name, last_name, grade, section, teacher_id,
+                 gender, dob, place_of_birth, joining_date, admission_type, blood_group,
                  allergies, medical_notes, home_address, permanent_address,
                  pickup_person, pickup_phone,
                  emergency_contact_name, emergency_contact_phone,
-                 notes, is_active, academic_year, enrollment_status,
+                 notes, consent_given, consent_date, transport,
+                 is_active, academic_year, enrollment_status,
                  withdrawal_date, withdrawal_reason, withdrawal_notes)
             VALUES
-                (:adm, :f, :l, :g, :tid,
-                 :gender, :dob, :join, :blood,
+                (:adm, :f, :l, :g, :sec, :tid,
+                 :gender, :dob, :pob, :join, :atype, :blood,
                  :allg, :med, :addr, :paddr,
                  :pickN, :pickP, :emN, :emP,
-                 :notes, :active, :ay, :es,
+                 :notes, :consent, :cdate, :transport,
+                 :active, :ay, :es,
                  :wd, :wr, :wn)
         ");
 
@@ -330,7 +371,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'commit'
                     'first_name'              => 'first_name',
                     'last_name'               => 'last_name',
                     'grade'                   => 'grade',
+                    'section'                 => 'section',
                     'gender'                  => 'gender',
+                    'place_of_birth'          => 'place_of_birth',
+                    'admission_type'          => 'admission_type',
                     'blood_group'             => 'blood_group',
                     'allergies'               => 'allergies',
                     'medical_notes'           => 'medical_notes',
@@ -341,6 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'commit'
                     'emergency_contact_name'  => 'emergency_contact_name',
                     'emergency_contact_phone' => 'emergency_contact_phone',
                     'notes'                   => 'notes',
+                    'transport'               => 'transport',
                     'academic_year'           => 'academic_year',
                     'enrollment_status'       => 'enrollment_status',
                     'withdrawal_reason'       => 'withdrawal_reason',
@@ -352,7 +397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'commit'
                         $params[":$col"] = $rec[$field];
                     }
                 }
-                foreach (['dob', 'joining_date', 'withdrawal_date'] as $df) {
+                foreach (['dob', 'joining_date', 'withdrawal_date', 'consent_date'] as $df) {
                     if ($rec[$df] !== '') {
                         $sets[] = "$df = :$df";
                         $params[":$df"] = $rec[$df . '_parsed'];
@@ -366,6 +411,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'commit'
                     $sets[] = "is_active = :active";
                     $params[':active'] = $rec['is_active_parsed'];
                 }
+                if ($rec['consent_given_parsed'] !== null) {
+                    $sets[] = "consent_given = :consent";
+                    $params[':consent'] = $rec['consent_given_parsed'];
+                }
                 if ($sets) {
                     $sql = "UPDATE students SET " . implode(', ', $sets) . " WHERE id = :id";
                     $pdo->prepare($sql)->execute($params);
@@ -373,30 +422,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'commit'
                 $updated++;
             } else {
                 $insStmt->execute([
-                    ':adm'    => $rec['admission_number'] !== '' ? $rec['admission_number'] : null,
-                    ':f'      => $rec['first_name'],
-                    ':l'      => $rec['last_name'],
-                    ':g'      => $rec['grade'],
-                    ':tid'    => $rec['teacher_id'],
-                    ':gender' => $rec['gender']      !== '' ? $rec['gender'] : null,
-                    ':dob'    => $rec['dob_parsed'],
-                    ':join'   => $rec['joining_date_parsed'],
-                    ':blood'  => $rec['blood_group']  !== '' ? $rec['blood_group']  : null,
-                    ':allg'   => $rec['allergies']    !== '' ? $rec['allergies']    : null,
-                    ':med'    => $rec['medical_notes']!== '' ? $rec['medical_notes']: null,
-                    ':addr'   => $rec['home_address'] !== '' ? $rec['home_address'] : null,
-                    ':paddr'  => $rec['permanent_address'] !== '' ? $rec['permanent_address'] : null,
-                    ':pickN'  => $rec['pickup_person']!== '' ? $rec['pickup_person']: null,
-                    ':pickP'  => $rec['pickup_phone'] !== '' ? $rec['pickup_phone'] : null,
-                    ':emN'    => $rec['emergency_contact_name']  !== '' ? $rec['emergency_contact_name']  : null,
-                    ':emP'    => $rec['emergency_contact_phone'] !== '' ? $rec['emergency_contact_phone'] : null,
-                    ':notes'  => $rec['notes']        !== '' ? $rec['notes']        : null,
-                    ':active' => $rec['is_active_parsed'] ?? 1,
-                    ':ay'     => $rec['academic_year'] !== '' ? $rec['academic_year'] : null,
-                    ':es'     => $rec['enrollment_status'] !== '' ? $rec['enrollment_status'] : 'enrolled',
-                    ':wd'     => $rec['withdrawal_date_parsed'],
-                    ':wr'     => $rec['withdrawal_reason'] !== '' ? $rec['withdrawal_reason'] : null,
-                    ':wn'     => $rec['withdrawal_notes']  !== '' ? $rec['withdrawal_notes']  : null,
+                    ':adm'      => $rec['admission_number'] !== '' ? $rec['admission_number'] : null,
+                    ':f'        => $rec['first_name'],
+                    ':l'        => $rec['last_name'],
+                    ':g'        => $rec['grade'],
+                    ':sec'      => $rec['section']         !== '' ? $rec['section']         : null,
+                    ':tid'      => $rec['teacher_id'],
+                    ':gender'   => $rec['gender']          !== '' ? $rec['gender']          : null,
+                    ':dob'      => $rec['dob_parsed'],
+                    ':pob'      => $rec['place_of_birth']  !== '' ? $rec['place_of_birth']  : null,
+                    ':join'     => $rec['joining_date_parsed'],
+                    ':atype'    => $rec['admission_type']  !== '' ? $rec['admission_type']  : null,
+                    ':blood'    => $rec['blood_group']     !== '' ? $rec['blood_group']     : null,
+                    ':allg'     => $rec['allergies']       !== '' ? $rec['allergies']       : null,
+                    ':med'      => $rec['medical_notes']   !== '' ? $rec['medical_notes']   : null,
+                    ':addr'     => $rec['home_address']    !== '' ? $rec['home_address']    : null,
+                    ':paddr'    => $rec['permanent_address'] !== '' ? $rec['permanent_address'] : null,
+                    ':pickN'    => $rec['pickup_person']   !== '' ? $rec['pickup_person']   : null,
+                    ':pickP'    => $rec['pickup_phone']    !== '' ? $rec['pickup_phone']    : null,
+                    ':emN'      => $rec['emergency_contact_name']  !== '' ? $rec['emergency_contact_name']  : null,
+                    ':emP'      => $rec['emergency_contact_phone'] !== '' ? $rec['emergency_contact_phone'] : null,
+                    ':notes'    => $rec['notes']           !== '' ? $rec['notes']           : null,
+                    ':consent'  => $rec['consent_given_parsed'],
+                    ':cdate'    => $rec['consent_date_parsed'],
+                    ':transport'=> $rec['transport']       !== '' ? $rec['transport']       : null,
+                    ':active'   => $rec['is_active_parsed'] ?? 1,
+                    ':ay'       => $rec['academic_year']   !== '' ? $rec['academic_year']   : null,
+                    ':es'       => $rec['enrollment_status'] !== '' ? $rec['enrollment_status'] : 'enrolled',
+                    ':wd'       => $rec['withdrawal_date_parsed'],
+                    ':wr'       => $rec['withdrawal_reason'] !== '' ? $rec['withdrawal_reason'] : null,
+                    ':wn'       => $rec['withdrawal_notes']  !== '' ? $rec['withdrawal_notes']  : null,
                 ]);
                 $sid = (int)$pdo->lastInsertId();
                 $inserted++;
@@ -494,10 +549,17 @@ require __DIR__ . '/../includes/header.php';
     <p class="muted small">
         <strong>Required:</strong> first_name, grade, teacher.
         <strong>Update vs insert:</strong> if admission_number matches an existing student, that row is updated and blank cells are left untouched. Otherwise a new student is inserted.<br>
-        <strong>Grade</strong> must be Playgroup / Nursery / LKG / UKG.
+        <strong>Vocabularies:</strong>
+            grade = Playgroup / Nursery / LKG / UKG.
+            section = <?= e(implode(' / ', STUDENT_SECTIONS)) ?>.
+            admission_type = new / old.
+            transport = own / cab / bus / walk.
+            consent_given = Yes / No.
+            gender = Male / Female / Other.<br>
         <strong>Teacher</strong> is the user's name (case-insensitive) or numeric id.
         <strong>Dates</strong> accept YYYY-MM-DD, DD/MM/YYYY, D-M-YYYY, or an Excel-style date cell.<br>
-        <strong>Parents:</strong> fill any of father_name / mother_name / guardian_name (plus optional _phone / _email / _occupation) and a matching student_parents row will be created or updated. Empty parent groups are ignored.
+        <strong>Parents:</strong> fill any of father_name / mother_name / guardian_name (plus optional _phone / _email / _occupation) and a matching student_parents row will be created or updated. Empty parent groups are ignored.<br>
+        <strong>Document columns</strong> (application_form_received / photo_received / id_card_received) are export-only — they reflect what's on file. The importer ignores them; upload actual files from the per-student page.
     </p>
 </details>
 

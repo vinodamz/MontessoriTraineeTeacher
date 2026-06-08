@@ -114,7 +114,9 @@ CREATE TABLE students (
     last_name                VARCHAR(80)  NOT NULL DEFAULT '',
     gender                   ENUM('Male','Female','Other') NULL,
     dob                      DATE         NULL,
+    place_of_birth           VARCHAR(120) NULL,
     joining_date             DATE         NULL,
+    admission_type           ENUM('new','old') NULL,
     blood_group              VARCHAR(5)   NULL,
     allergies                TEXT         NULL,
     medical_notes            TEXT         NULL,
@@ -127,8 +129,15 @@ CREATE TABLE students (
     emergency_contact_phone  VARCHAR(40)  NULL,
     photo_path               VARCHAR(255) NULL,
     notes                    TEXT         NULL,
+    -- Three-state media/data consent: 1=yes, 0=no, NULL=unknown.
+    consent_given            TINYINT(1)   NULL,
+    consent_date             DATE         NULL,
+    transport                ENUM('own','cab','bus','walk') NULL,
     is_active                TINYINT(1)   NOT NULL DEFAULT 1,
     grade                    ENUM('Playgroup','Nursery','LKG','UKG') NOT NULL,
+    -- Classroom section (A/B/C/...). Free-form so the list can grow by
+    -- editing STUDENT_SECTIONS in includes/functions.php.
+    section                  VARCHAR(20)  NULL,
     teacher_id               INT UNSIGNED NOT NULL,
     academic_year            VARCHAR(9)   NULL,
     enrollment_status        ENUM('enrolled','promoted','withdrawn','graduated','on_break')
@@ -141,6 +150,7 @@ CREATE TABLE students (
     UNIQUE KEY uq_students_admission (admission_number),
     KEY idx_students_teacher (teacher_id),
     KEY idx_students_grade   (grade),
+    KEY idx_students_section (section),
     KEY idx_students_active  (is_active),
     KEY idx_students_year    (academic_year),
     KEY idx_students_status  (enrollment_status),

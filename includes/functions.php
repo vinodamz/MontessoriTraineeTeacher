@@ -576,6 +576,31 @@ function next_grade(string $grade): ?string
 }
 
 /**
+ * Classroom sections. Free-form VARCHAR in the DB; this constant is the
+ * dropdown source on /students/edit.php and the validator on import.
+ * Add a new letter here and it's picked up everywhere — no schema change.
+ */
+const STUDENT_SECTIONS = ['A', 'B', 'C', 'D'];
+
+/**
+ * How a child gets to school. Backed by an ENUM column.
+ */
+const STUDENT_TRANSPORT_MODES = [
+    'own'  => 'Own (parent drop)',
+    'cab'  => 'School cab',
+    'bus'  => 'School bus',
+    'walk' => 'Walks',
+];
+
+/**
+ * Admission type — new admit vs returning child. ENUM column.
+ */
+const STUDENT_ADMISSION_TYPES = [
+    'new' => 'New admission',
+    'old' => 'Old child',
+];
+
+/**
  * Enrollment-status display + colour helpers.
  */
 const ENROLLMENT_STATUSES = [

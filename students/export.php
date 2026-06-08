@@ -6,11 +6,21 @@
  * (q, grade, teacher_id, year, status, active) so admins can export
  * a filtered slice instead of always pulling everything.
  *
- * Columns: every editable field on students + flattened father/mother/
- * guardian (name/phone/email/occupation). The file round-trips through
- * students/import.php — open it in Excel, edit, save, re-upload, done.
+ * Column set matches the front-office admission spreadsheet:
+ *   first/last name, DOB, place of birth, joining date, admission type,
+ *   gender, blood group, father (name/email/phone), mother (name/phone),
+ *   grade, section, emergency contact, consent, address, document
+ *   Y/N flags, transport, notes.
  *
- * Two button on /students/index.php points here. Admins only.
+ * `admission_number` is included as the first column so the file
+ * round-trips cleanly through students/import.php — that's the upsert key.
+ *
+ * Document Y/N flags (application_form_received / photo_received /
+ * id_card_received) are EXPORT-ONLY. They reflect whether at least
+ * one matching record exists; the import flow ignores them so nobody
+ * accidentally types "Y" without an actual file on disk.
+ *
+ * Admins only.
  */
 declare(strict_types=1);
 
@@ -21,18 +31,35 @@ require_once __DIR__ . '/../includes/xlsx.php';
 require_admin();
 
 const EXPORT_HEADERS = [
-    'admission_number', 'first_name', 'last_name',
-    'grade', 'teacher', 'academic_year', 'enrollment_status', 'is_active',
-    'gender', 'dob', 'joining_date',
-    'blood_group', 'allergies', 'medical_notes',
-    'home_address', 'permanent_address',
-    'pickup_person', 'pickup_phone',
-    'emergency_contact_name', 'emergency_contact_phone',
+    // Upsert key.
+    'admission_number',
+    // Child basics.
+    'first_name', 'last_name',
+    'dob', 'place_of_birth',
+    'joining_date', 'admission_type',
+    'gender', 'blood_group',
+    // Parents.
+    'father_name', 'father_email', 'father_phone',
+    'mother_name', 'mother_phone',
+    // Classroom.
+    'grade', 'section',
+    // Emergency + consent.
+    'emergency_contact_phone', 'emergency_contact_name',
+    'consent_given', 'consent_date',
+    // Address + docs + transport + notes.
+    'home_address',
+    'application_form_received', 'photo_received', 'id_card_received',
+    'transport',
     'notes',
-    'withdrawal_date', 'withdrawal_reason', 'withdrawal_notes',
-    'father_name',   'father_phone',   'father_email',   'father_occupation',
-    'mother_name',   'mother_phone',   'mother_email',   'mother_occupation',
+    // Less-used round-trip extras (kept at the end so non-tech users
+    // see the columns they asked for first).
+    'permanent_address',
+    'allergies', 'medical_notes',
+    'pickup_person', 'pickup_phone',
+    'mother_email', 'father_occupation', 'mother_occupation',
     'guardian_name', 'guardian_phone', 'guardian_email', 'guardian_occupation',
+    'teacher', 'academic_year', 'enrollment_status', 'is_active',
+    'withdrawal_date', 'withdrawal_reason', 'withdrawal_notes',
 ];
 
 // ---------- Mirror students/index.php filters ---------------------------------
@@ -81,19 +108,21 @@ if ($statusIn === 'enrolled') {
 
 $sql = "
     SELECT s.id, s.admission_number, s.first_name, s.last_name,
-           s.grade, u.name AS teacher_name, s.academic_year,
+           s.grade, s.section, u.name AS teacher_name, s.academic_year,
            s.enrollment_status, s.is_active,
-           s.gender, s.dob, s.joining_date,
+           s.gender, s.dob, s.place_of_birth,
+           s.joining_date, s.admission_type,
            s.blood_group, s.allergies, s.medical_notes,
            s.home_address, s.permanent_address,
            s.pickup_person, s.pickup_phone,
            s.emergency_contact_name, s.emergency_contact_phone,
-           s.notes,
-           s.withdrawal_date, s.withdrawal_reason, s.withdrawal_notes
+           s.notes, s.consent_given, s.consent_date, s.transport,
+           s.withdrawal_date, s.withdrawal_reason, s.withdrawal_notes,
+           s.photo_path
     FROM   students s
     JOIN   users u ON u.id = s.teacher_id
     " . ($where ? 'WHERE ' . implode(' AND ', $where) : '') . "
-    ORDER  BY s.grade, s.first_name, s.last_name, s.id
+    ORDER  BY s.grade, COALESCE(s.section, ''), s.first_name, s.last_name, s.id
 ";
 
 $stmt = db()->prepare($sql);
@@ -102,9 +131,13 @@ $students = $stmt->fetchAll();
 
 // Bulk-load parent rows for these students — one query, one trip.
 $parentsByStudent = [];
+// Bulk-load document categories per student so we can derive the Y/N flags
+// without N+1 queries.
+$docCatsByStudent = [];
 if ($students) {
-    $ids = array_column($students, 'id');
+    $ids   = array_column($students, 'id');
     $place = implode(',', array_fill(0, count($ids), '?'));
+
     $pstmt = db()->prepare(
         "SELECT student_id, relation, name, phone, email, occupation
          FROM   student_parents
@@ -115,43 +148,69 @@ if ($students) {
     foreach ($pstmt->fetchAll() as $p) {
         $sid = (int)$p['student_id'];
         $rel = $p['relation'];
-        // First occurrence of each relation per student wins (is_primary first).
         if (!isset($parentsByStudent[$sid][$rel])) {
             $parentsByStudent[$sid][$rel] = $p;
         }
+    }
+
+    $dstmt = db()->prepare(
+        "SELECT DISTINCT student_id, category
+         FROM   student_documents
+         WHERE  student_id IN ($place)"
+    );
+    $dstmt->execute($ids);
+    foreach ($dstmt->fetchAll() as $d) {
+        $docCatsByStudent[(int)$d['student_id']][$d['category']] = true;
     }
 }
 
 $rows = [];
 foreach ($students as $s) {
+    $sid = (int)$s['id'];
+    $cats = $docCatsByStudent[$sid] ?? [];
+
     $row = [
-        'admission_number'        => (string)($s['admission_number'] ?? ''),
-        'first_name'              => (string)$s['first_name'],
-        'last_name'               => (string)$s['last_name'],
-        'grade'                   => (string)$s['grade'],
-        'teacher'                 => (string)$s['teacher_name'],
-        'academic_year'           => (string)($s['academic_year'] ?? ''),
-        'enrollment_status'       => (string)($s['enrollment_status'] ?? ''),
-        'is_active'               => ((int)$s['is_active'] === 1) ? '1' : '0',
-        'gender'                  => (string)($s['gender'] ?? ''),
-        'dob'                     => (string)($s['dob'] ?? ''),
-        'joining_date'            => (string)($s['joining_date'] ?? ''),
-        'blood_group'             => (string)($s['blood_group'] ?? ''),
-        'allergies'               => (string)($s['allergies'] ?? ''),
-        'medical_notes'           => (string)($s['medical_notes'] ?? ''),
-        'home_address'            => (string)($s['home_address'] ?? ''),
-        'permanent_address'       => (string)($s['permanent_address'] ?? ''),
-        'pickup_person'           => (string)($s['pickup_person'] ?? ''),
-        'pickup_phone'            => (string)($s['pickup_phone'] ?? ''),
-        'emergency_contact_name'  => (string)($s['emergency_contact_name'] ?? ''),
-        'emergency_contact_phone' => (string)($s['emergency_contact_phone'] ?? ''),
-        'notes'                   => (string)($s['notes'] ?? ''),
-        'withdrawal_date'         => (string)($s['withdrawal_date'] ?? ''),
-        'withdrawal_reason'       => (string)($s['withdrawal_reason'] ?? ''),
-        'withdrawal_notes'        => (string)($s['withdrawal_notes'] ?? ''),
+        'admission_number'         => (string)($s['admission_number'] ?? ''),
+        'first_name'               => (string)$s['first_name'],
+        'last_name'                => (string)$s['last_name'],
+        'dob'                      => (string)($s['dob'] ?? ''),
+        'place_of_birth'           => (string)($s['place_of_birth'] ?? ''),
+        'joining_date'             => (string)($s['joining_date'] ?? ''),
+        'admission_type'           => (string)($s['admission_type'] ?? ''),
+        'gender'                   => (string)($s['gender'] ?? ''),
+        'blood_group'              => (string)($s['blood_group'] ?? ''),
+        'grade'                    => (string)$s['grade'],
+        'section'                  => (string)($s['section'] ?? ''),
+        'emergency_contact_phone'  => (string)($s['emergency_contact_phone'] ?? ''),
+        'emergency_contact_name'   => (string)($s['emergency_contact_name'] ?? ''),
+        // Consent rendered as Yes/No/blank for non-tech-user readability;
+        // the importer accepts the same vocabulary.
+        'consent_given'            => $s['consent_given'] === null ? '' : ((int)$s['consent_given'] === 1 ? 'Yes' : 'No'),
+        'consent_date'             => (string)($s['consent_date'] ?? ''),
+        'home_address'             => (string)($s['home_address'] ?? ''),
+        // Doc Y/N flags — derived. application_form lives under category
+        // 'school'; ID cards under 'id_proof'; child photo is on the
+        // students row itself (not in student_documents).
+        'application_form_received' => isset($cats['school'])    ? 'Yes' : 'No',
+        'photo_received'            => !empty($s['photo_path'])  ? 'Yes' : 'No',
+        'id_card_received'          => isset($cats['id_proof'])  ? 'Yes' : 'No',
+        'transport'                 => (string)($s['transport'] ?? ''),
+        'notes'                     => (string)($s['notes'] ?? ''),
+        'permanent_address'         => (string)($s['permanent_address'] ?? ''),
+        'allergies'                 => (string)($s['allergies'] ?? ''),
+        'medical_notes'             => (string)($s['medical_notes'] ?? ''),
+        'pickup_person'             => (string)($s['pickup_person'] ?? ''),
+        'pickup_phone'              => (string)($s['pickup_phone'] ?? ''),
+        'teacher'                   => (string)$s['teacher_name'],
+        'academic_year'             => (string)($s['academic_year'] ?? ''),
+        'enrollment_status'         => (string)($s['enrollment_status'] ?? ''),
+        'is_active'                 => ((int)$s['is_active'] === 1) ? '1' : '0',
+        'withdrawal_date'           => (string)($s['withdrawal_date'] ?? ''),
+        'withdrawal_reason'         => (string)($s['withdrawal_reason'] ?? ''),
+        'withdrawal_notes'          => (string)($s['withdrawal_notes'] ?? ''),
     ];
     foreach (['father', 'mother', 'guardian'] as $rel) {
-        $p = $parentsByStudent[(int)$s['id']][$rel] ?? null;
+        $p = $parentsByStudent[$sid][$rel] ?? null;
         $row["{$rel}_name"]       = $p ? (string)$p['name']       : '';
         $row["{$rel}_phone"]      = $p ? (string)($p['phone']      ?? '') : '';
         $row["{$rel}_email"]      = $p ? (string)($p['email']      ?? '') : '';
@@ -160,7 +219,6 @@ foreach ($students as $s) {
     $rows[] = $row;
 }
 
-// Write to a tmp file, then stream to the browser.
 $tmp = tempnam(sys_get_temp_dir(), 'students_export_');
 try {
     xlsx_write($tmp, EXPORT_HEADERS, $rows);
