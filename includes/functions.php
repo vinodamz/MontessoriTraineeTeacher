@@ -604,11 +604,12 @@ const STUDENT_ADMISSION_TYPES = [
  * Enrollment-status display + colour helpers.
  */
 const ENROLLMENT_STATUSES = [
-    'enrolled'   => 'Enrolled',
-    'promoted'   => 'Promoted',
-    'withdrawn'  => 'Withdrawn',
-    'graduated'  => 'Graduated',
-    'on_break'   => 'On break',
+    'enrolled'       => 'Enrolled',
+    'promoted'       => 'Promoted',
+    'withdrawn'      => 'Withdrawn',
+    'graduated'      => 'Graduated',
+    'on_break'       => 'On break',
+    'intake_pending' => 'Intake pending',
 ];
 
 function enrollment_status_label(string $s): string

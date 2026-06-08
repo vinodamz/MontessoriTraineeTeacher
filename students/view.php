@@ -20,10 +20,10 @@ if (!user_has_module($user, 'students') && !user_has_module($user, 'montessori')
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) { redirect('/students/index.php'); }
 
-// Parent-form-link actions (admins only). Handled before any HTML output.
+// Parent-form-link + intake actions (admins only). Handled before any HTML output.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $op = $_POST['op'] ?? '';
-    if (in_array($op, ['generate_form_token', 'revoke_form_token'], true)) {
+    if (in_array($op, ['generate_form_token', 'revoke_form_token', 'approve_intake'], true)) {
         require_admin();
         csrf_check();
         try {
@@ -31,13 +31,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 revoke_active_form_tokens($id);
                 generate_form_token($id, (int)$user['id']);
                 flash_set('ok', 'Parent form link generated.');
-            } else {
+            } elseif ($op === 'revoke_form_token') {
                 $tokId = (int)($_POST['token_id'] ?? 0);
                 if ($tokId > 0) revoke_form_token($tokId);
                 flash_set('ok', 'Parent form link revoked.');
+            } else {
+                // Approve an intake_pending row: flip it to enrolled and
+                // stamp the added date. The placeholder is_active=0 from
+                // intake_new.php is also flipped on so the child shows up
+                // in the default students list.
+                db()->prepare("
+                    UPDATE students
+                    SET    enrollment_status  = 'enrolled',
+                           is_active          = 1,
+                           intake_approved_at = NOW()
+                    WHERE  id = :id AND enrollment_status = 'intake_pending'
+                ")->execute([':id' => $id]);
+                // Once approved the parent link should no longer work —
+                // they can keep editing via the regular form, but only an
+                // admin can re-issue a fresh link from this same panel.
+                revoke_active_form_tokens($id);
+                flash_set('ok', 'Added to the student list.');
             }
         } catch (Throwable $e) {
-            flash_set('error', 'Could not update link: ' . $e->getMessage());
+            flash_set('error', 'Could not update: ' . $e->getMessage());
         }
         redirect('/students/view.php?id=' . $id);
     }
@@ -171,6 +188,31 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if ($enrStatus === 'intake_pending' && $isAdmin): ?>
+<section class="card" style="border-left: 4px solid #f5b342; background: #fff8e7;">
+    <h2 style="margin-top:0; display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+        <span>Intake pending — awaiting parent submission</span>
+        <form method="post" style="margin:0;"
+              onsubmit="return confirm('Add this child to the student list? The parent link will be revoked.');">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op"    value="approve_intake">
+            <button class="btn btn-primary" type="submit">Approve &amp; add to student list</button>
+        </form>
+    </h2>
+    <p class="muted" style="margin:.3rem 0 0;">
+        This is a draft record created from <code>/students/intake_new.php</code>.
+        Share the parent form link below with the family. Review their submission, then click <strong>Approve</strong> to add them to the student list — the added date will be stamped automatically.
+        <?php if ($activeFormToken && !empty($activeFormToken['last_saved_at'])): ?>
+            <br>Parent last saved: <strong><?= e(fmt_date(substr((string)$activeFormToken['last_saved_at'], 0, 10))) ?></strong>.
+        <?php elseif ($activeFormToken && !empty($activeFormToken['last_accessed_at'])): ?>
+            <br>Parent has opened the link but hasn't saved yet.
+        <?php else: ?>
+            <br>Parent hasn't opened the link yet.
+        <?php endif; ?>
+    </p>
+</section>
+<?php endif; ?>
+
 <?php if ($isAdmin): ?>
 <section class="card">
     <h2 style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
@@ -235,6 +277,9 @@ require __DIR__ . '/../includes/header.php';
         dl_row('Date of birth', fmt_date($s['dob']) . (age_from_dob($s['dob']) ? ' (' . age_from_dob($s['dob']) . ')' : ''));
         dl_row('Gender', $s['gender'] ?? null);
         dl_row('Joining date', fmt_date($s['joining_date']));
+        if (!empty($s['intake_approved_at'])) {
+            dl_row('Added on', fmt_date(substr((string)$s['intake_approved_at'], 0, 10)));
+        }
         dl_row('Blood group', $s['blood_group'] ?? null);
         dl_row('Allergies', $s['allergies'] ?? null, true);
         dl_row('Medical notes', $s['medical_notes'] ?? null, true);

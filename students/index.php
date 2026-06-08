@@ -133,6 +133,7 @@ require __DIR__ . '/../includes/header.php';
             <a class="btn" href="/students/import.php">Import</a>
             <a class="btn" href="/students/yearend.php">Year-end</a>
             <a class="btn" href="/students/withdrawals.php">Withdrawals</a>
+            <a class="btn" href="/students/intake_new.php" title="Send admission form to a new family">+ New admission (parent form)</a>
             <a class="btn btn-primary" href="/students/edit.php">+ New student</a>
         <?php endif; ?>
     </div>

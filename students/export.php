@@ -58,7 +58,7 @@ const EXPORT_HEADERS = [
     'pickup_person', 'pickup_phone',
     'mother_email', 'father_occupation', 'mother_occupation',
     'guardian_name', 'guardian_phone', 'guardian_email', 'guardian_occupation',
-    'teacher', 'academic_year', 'enrollment_status', 'is_active',
+    'teacher', 'academic_year', 'enrollment_status', 'is_active', 'added_on',
     'withdrawal_date', 'withdrawal_reason', 'withdrawal_notes',
 ];
 
@@ -109,7 +109,7 @@ if ($statusIn === 'enrolled') {
 $sql = "
     SELECT s.id, s.admission_number, s.first_name, s.last_name,
            s.grade, s.section, u.name AS teacher_name, s.academic_year,
-           s.enrollment_status, s.is_active,
+           s.enrollment_status, s.is_active, s.intake_approved_at,
            s.gender, s.dob, s.place_of_birth,
            s.joining_date, s.admission_type,
            s.blood_group, s.allergies, s.medical_notes,
@@ -204,6 +204,7 @@ foreach ($students as $s) {
         'teacher'                   => (string)$s['teacher_name'],
         'academic_year'             => (string)($s['academic_year'] ?? ''),
         'enrollment_status'         => (string)($s['enrollment_status'] ?? ''),
+        'added_on'                  => !empty($s['intake_approved_at']) ? substr((string)$s['intake_approved_at'], 0, 10) : '',
         'is_active'                 => ((int)$s['is_active'] === 1) ? '1' : '0',
         'withdrawal_date'           => (string)($s['withdrawal_date'] ?? ''),
         'withdrawal_reason'         => (string)($s['withdrawal_reason'] ?? ''),
