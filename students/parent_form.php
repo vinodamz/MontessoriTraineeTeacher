@@ -15,7 +15,9 @@
  */
 declare(strict_types=1);
 
-require_once __DIR__ . '/../includes/db.php';
+// auth.php pulls in db.php + defines app_config()/current_user() etc.
+// We never call require_login() here — public form by design.
+require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/student_form.php';
 
