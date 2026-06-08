@@ -147,8 +147,11 @@ CREATE TABLE students (
     section                  VARCHAR(20)  NULL,
     teacher_id               INT UNSIGNED NOT NULL,
     academic_year            VARCHAR(9)   NULL,
-    enrollment_status        ENUM('enrolled','promoted','withdrawn','graduated','on_break')
+    enrollment_status        ENUM('enrolled','promoted','withdrawn','graduated','on_break','intake_pending')
                              NOT NULL DEFAULT 'enrolled',
+    -- Stamped when an admin promotes an intake_pending row to enrolled.
+    -- Drives the "Added on …" display on the student profile.
+    intake_approved_at       DATETIME     NULL,
     withdrawal_date          DATE         NULL,
     withdrawal_reason        VARCHAR(40)  NULL,
     withdrawal_notes         TEXT         NULL,
