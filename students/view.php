@@ -176,6 +176,7 @@ require __DIR__ . '/../includes/header.php';
         <?php if ($canEdit): ?>
             <a class="btn btn-primary" href="/students/edit.php?id=<?= (int)$s['id'] ?>">Edit</a>
             <a class="btn" href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">Documents<?= $docCount ? ' · ' . $docCount : '' ?></a>
+            <a class="btn" href="/students/admission_pdf.php?id=<?= (int)$s['id'] ?>" target="_blank" rel="noopener" title="Open the printable admission form">Admission form (PDF)</a>
         <?php endif; ?>
         <a class="btn" href="/students/attendance_history.php?student_id=<?= (int)$s['id'] ?>">Attendance</a>
         <?php if ($canEdit): ?>

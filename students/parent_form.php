@@ -592,6 +592,10 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
 
         <div class="submit-row">
             <button class="btn btn-primary" type="submit">Save</button>
+            <a class="btn" style="background:transparent; color:#6b4226; border:1px solid #6b4226; margin-left:.5rem;"
+               href="/students/admission_pdf.php?token=<?= e($token) ?>" target="_blank" rel="noopener">
+                View / download as PDF
+            </a>
         </div>
     </form>
     <?php
