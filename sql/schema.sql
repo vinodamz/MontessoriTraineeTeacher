@@ -38,6 +38,7 @@ DROP TABLE IF EXISTS rating_config;
 DROP TABLE IF EXISTS fee_payments;
 DROP TABLE IF EXISTS fee_invoices;
 DROP TABLE IF EXISTS attendance;
+DROP TABLE IF EXISTS student_form_tokens;
 DROP TABLE IF EXISTS student_documents;
 DROP TABLE IF EXISTS student_parents;
 DROP TABLE IF EXISTS students;
@@ -115,6 +116,8 @@ CREATE TABLE students (
     gender                   ENUM('Male','Female','Other') NULL,
     dob                      DATE         NULL,
     place_of_birth           VARCHAR(120) NULL,
+    nationality              VARCHAR(60)  NULL,
+    mother_tongue            VARCHAR(60)  NULL,
     joining_date             DATE         NULL,
     admission_type           ENUM('new','old') NULL,
     blood_group              VARCHAR(5)   NULL,
@@ -127,8 +130,12 @@ CREATE TABLE students (
     pickup_phone             VARCHAR(40)  NULL,
     emergency_contact_name   VARCHAR(120) NULL,
     emergency_contact_phone  VARCHAR(40)  NULL,
+    emergency_contact_relation VARCHAR(60) NULL,
+    emergency_contact_address TEXT        NULL,
     photo_path               VARCHAR(255) NULL,
     notes                    TEXT         NULL,
+    -- Free-form, one line per sibling: "Name | Gender | Age | Class | School".
+    sibling_details          TEXT         NULL,
     -- Three-state media/data consent: 1=yes, 0=no, NULL=unknown.
     consent_given            TINYINT(1)   NULL,
     consent_date             DATE         NULL,
@@ -167,6 +174,7 @@ CREATE TABLE student_parents (
     phone       VARCHAR(40)  NULL,
     email       VARCHAR(120) NULL,
     occupation  VARCHAR(120) NULL,
+    workplace   VARCHAR(160) NULL,
     address     TEXT         NULL,
     photo_path  VARCHAR(255) NULL,
     is_primary  TINYINT(1)   NOT NULL DEFAULT 0,
@@ -174,6 +182,26 @@ CREATE TABLE student_parents (
     PRIMARY KEY (id),
     KEY idx_sp_student (student_id),
     CONSTRAINT fk_sp_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Public per-student form tokens. The token is the auth: anyone holding
+-- it can open /students/parent_form.php?token=… and update the child's
+-- record (no school login needed). Admin generates/revokes from
+-- /students/view.php.
+CREATE TABLE student_form_tokens (
+    id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    student_id          INT UNSIGNED NOT NULL,
+    token               CHAR(64)     NOT NULL,
+    created_by_user_id  INT UNSIGNED NOT NULL,
+    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_accessed_at    DATETIME     NULL,
+    last_saved_at       DATETIME     NULL,
+    revoked_at          DATETIME     NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_sft_token   (token),
+    KEY        idx_sft_student (student_id, revoked_at),
+    CONSTRAINT fk_sft_student FOREIGN KEY (student_id)         REFERENCES students(id) ON DELETE CASCADE,
+    CONSTRAINT fk_sft_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id)    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE student_documents (
