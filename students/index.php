@@ -129,7 +129,8 @@ require __DIR__ . '/../includes/header.php';
         <?php if ($canEdit): ?>
             <a class="btn" href="/students/grid.php">Grid editor</a>
             <a class="btn" href="/students/fees_report.php">Fees report</a>
-            <a class="btn" href="/students/import.php">Bulk import</a>
+            <a class="btn" href="/students/export.php<?= $_SERVER['QUERY_STRING'] !== '' ? '?' . e($_SERVER['QUERY_STRING']) : '' ?>" title="Download current view as Excel">Export</a>
+            <a class="btn" href="/students/import.php">Import</a>
             <a class="btn" href="/students/yearend.php">Year-end</a>
             <a class="btn" href="/students/withdrawals.php">Withdrawals</a>
             <a class="btn btn-primary" href="/students/edit.php">+ New student</a>
