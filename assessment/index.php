@@ -98,12 +98,12 @@ require __DIR__ . '/../includes/header.php';
             <div class="student-status">
                 <span class="status-dot status-<?= e($statusCls) ?>"></span>
                 <span><?= e($statusTxt) ?></span>
-                <?php if ($hasBl): ?><span class="pill">Baseline ✓</span><?php endif; ?>
+                <?php if ($hasBl): ?><span class="pill">First assessment ✓</span><?php endif; ?>
             </div>
             <div class="student-actions">
                 <a class="btn btn-primary" href="assess.php?student_id=<?= $sid ?>">Assess</a>
                 <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress</a>
-                <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>"><?= $hasBl ? 'Edit Baseline' : 'Add Baseline' ?></a>
+                <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>"><?= $hasBl ? 'Edit first assessment' : 'Add first assessment' ?></a>
                 <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $sid ?>" title="Manage custom indicators for this student">Custom</a>
             </div>
         </li>

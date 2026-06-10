@@ -216,14 +216,14 @@ if ($fYear !== '' && $fYear !== 'all' && !in_array($fYear, $availableYears, true
     array_unshift($availableYears, $fYear);
 }
 
-$pageTitle  = 'Students — grid editor';
+$pageTitle  = 'Students — edit all';
 $wideLayout = true;
 require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
     <div>
-        <h1>Grid editor</h1>
+        <h1>Edit all (grid)</h1>
         <p class="muted"><a href="/students/index.php">← Students</a> · <?= count($students) ?> row<?= count($students) === 1 ? '' : 's' ?> · edit inline, then Save all</p>
     </div>
 </div>

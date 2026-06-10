@@ -1262,3 +1262,31 @@ a.admin-tile:hover {
     border: 1px solid var(--line); border-radius: var(--radius-sm);
     background: #fff;
 }
+
+/* ---------- Phase 0: grouped home screen + More menu ---------------------- */
+.app-group { margin: 0 0 1.1rem; }
+.app-group > summary {
+    cursor: pointer; list-style: none; user-select: none;
+    font-weight: 700; font-size: 1rem; color: var(--ink, #2b2b2b);
+    padding: .35rem .15rem; margin-bottom: .35rem;
+    border-bottom: 2px solid var(--accent, #EC407A);
+    display: flex; align-items: center; gap: .4rem;
+}
+.app-group > summary::-webkit-details-marker { display: none; }
+.app-group > summary::after { content: "▾"; font-size: .8rem; margin-left: auto; opacity: .55; }
+.app-group:not([open]) > summary::after { content: "▸"; }
+
+.more-menu { position: relative; display: inline-block; }
+.more-menu > summary { list-style: none; cursor: pointer; }
+.more-menu > summary::-webkit-details-marker { display: none; }
+.more-menu .more-menu-list {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+    min-width: 200px; background: #fff; border: 1px solid var(--line, #e3d5c5);
+    border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12);
+    display: flex; flex-direction: column; padding: .3rem;
+}
+.more-menu .more-menu-list a {
+    padding: .55rem .8rem; border-radius: 6px; text-decoration: none;
+    color: var(--ink, #2b2b2b); font-size: .92rem;
+}
+.more-menu .more-menu-list a:hover { background: var(--wash, #f6efe6); }

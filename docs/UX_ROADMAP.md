@@ -34,19 +34,21 @@
 
 Low-risk cleanups that cut visual noise immediately.
 
-- [ ] **Group the home screen.** Replace the 12-tile wall with 4 sections:
+- [x] **Group the home screen.** Replace the 12-tile wall with 4 sections:
       **Children** (Students, Assessment, Logbook), **Admissions** (CRM),
       **Money** (Fees, Expenses), **School Ops** (Staff, Tasks, Inventory,
       Recruitment, WACRM, n8n). Same tiles, grouped + collapsible.
-- [ ] **Role-based landing.** Teachers land on Students/attendance (later: My
+- [x] **Role-based landing.** Teachers land on Students/attendance (later: My
       Day), not the module picker. Admin keeps the grouped picker.
-- [ ] **Trim the Students toolbar 9 → 4.** Keep: `Mark attendance`,
+      (`/index.php?all=1` shows the full picker for anyone.)
+- [x] **Trim the Students toolbar 9 → 4.** Keep: `Mark attendance`,
       `+ Add child` (single button), `Search`. Move Grid editor / Import /
-      Export / Year-end / Withdrawals / Fees report under one `⋯ More` menu.
-- [ ] **Merge the two "add a child" doors.** `+ New student` and `+ New
-      admission (parent form)` become one `+ Add child` page with two clearly
-      explained choices: "Office fills the details" / "Send form to parent".
-- [ ] **Rename jargon across nav/buttons.** Grid editor → Edit all ·
+      Export / Year-end / Withdrawals / Fees report under one `More ▾` menu.
+- [x] **Merge the two "add a child" doors.** `+ New student` and `+ New
+      admission (parent form)` become one `+ Add child` page
+      (`students/add.php`) with two clearly explained choices:
+      "Office fills the details" / "Parent fills the form".
+- [x] **Rename jargon across nav/buttons.** Grid editor → Edit all ·
       Year-end → Promote classes · Intake pending → Waiting for parent ·
       Baseline → First assessment.
 - [ ] **Module usage audit (decision, not code).** Owner confirms which of

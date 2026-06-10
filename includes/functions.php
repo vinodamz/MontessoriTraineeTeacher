@@ -609,7 +609,7 @@ const ENROLLMENT_STATUSES = [
     'withdrawn'      => 'Withdrawn',
     'graduated'      => 'Graduated',
     'on_break'       => 'On break',
-    'intake_pending' => 'Intake pending',
+    'intake_pending' => 'Waiting for parent',
 ];
 
 function enrollment_status_label(string $s): string
