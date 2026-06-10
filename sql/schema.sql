@@ -269,10 +269,14 @@ CREATE TABLE fee_payments (
     paid_on             DATE         NOT NULL,
     method              ENUM('cash','bank_transfer','upi','card','cheque','cofee','other') NOT NULL DEFAULT 'cash',
     reference_no        VARCHAR(80)  NULL,
+    -- Public receipt link: /receipt.php?t=<token>, no login. Same
+    -- link-only pattern as the parent admission form.
+    receipt_token       CHAR(32)     NULL,
     notes               TEXT         NULL,
     recorded_by_user_id INT UNSIGNED NOT NULL,
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_fp_receipt (receipt_token),
     KEY idx_fp_invoice (invoice_id, paid_on),
     CONSTRAINT fk_fp_invoice  FOREIGN KEY (invoice_id)          REFERENCES fee_invoices(id) ON DELETE CASCADE,
     CONSTRAINT fk_fp_recorder FOREIGN KEY (recorded_by_user_id) REFERENCES users(id)        ON DELETE RESTRICT

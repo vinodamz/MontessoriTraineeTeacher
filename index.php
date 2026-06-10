@@ -336,6 +336,9 @@ if ($hasStaff) {
     if ($staffStats['open_msgs']     > 0) $stats[] = ['label' => $staffStats['open_msgs'] . ' messages', 'tone' => ''];
     $apps[] = ['key' => 'staff', 'name' => 'Staff', 'subtitle' => 'Attendance · Leave · HR', 'href' => '/staff/index.php', 'stats' => $stats];
 }
+if ($hasFees || $hasExpenses) {
+    $apps[] = ['key' => 'money', 'name' => 'Money overview', 'subtitle' => 'Collections · Dues · Spend', 'href' => '/money.php', 'stats' => []];
+}
 if ($hasExpenses) {
     $stats = [['label' => '₹' . number_format((float)$expensesStats['total'], 0), 'tone' => '']];
     if ($expensesStats['pending'] > 0) $stats[] = ['label' => $expensesStats['pending'] . ' to review', 'tone' => 'warn'];
@@ -391,6 +394,7 @@ $icons = [
     'staff'       => '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><rect x="6" y="14" width="12" height="7" rx="2"/><path d="M10 17h4"/>',
     'expenses'    => '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5M8 17h4"/><path d="M16 17l2 2 3-3"/>',
     'fees'        => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h4"/><circle cx="16" cy="16" r="2"/>',
+    'money'       => '<circle cx="12" cy="12" r="9"/><path d="M9 8h6M9 12h6M10 8c3 0 4 1.5 4 3s-1 3-4 3l4 4"/>',
     'logbook'     => '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z"/><path d="M9 3v18M13 8h4M13 12h4"/>',
     'inventory'   => '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
 ];
@@ -403,7 +407,7 @@ foreach (external_apps_registry() as $extKey => $extMeta) {
 $GROUPS = [
     'children'   => ['label' => 'Children',   'keys' => ['students', 'assessment', 'logbook']],
     'admissions' => ['label' => 'Admissions', 'keys' => ['admissions']],
-    'money'      => ['label' => 'Money',      'keys' => ['fees', 'expenses']],
+    'money'      => ['label' => 'Money',      'keys' => ['money', 'fees', 'expenses']],
     'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'tasks', 'inventory', 'recruitment', 'wacrm', 'n8n']],
 ];
 $grouped = array_fill_keys(array_keys($GROUPS), []);

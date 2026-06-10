@@ -102,11 +102,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
             $pdo->prepare("
-                INSERT INTO fee_payments (invoice_id, amount, paid_on, method, reference_no, notes, recorded_by_user_id)
-                VALUES (:iid, :a, :p, :m, :r, :n, :u)
+                INSERT INTO fee_payments (invoice_id, amount, paid_on, method, reference_no, receipt_token, notes, recorded_by_user_id)
+                VALUES (:iid, :a, :p, :m, :r, :t, :n, :u)
             ")->execute([
                 ':iid' => $iid, ':a' => $amount, ':p' => $paid, ':m' => $method,
-                ':r' => $ref ?: null, ':n' => $notes ?: null, ':u' => $user['id'],
+                ':r' => $ref ?: null,
+                ':t' => bin2hex(random_bytes(16)),   // public /receipt.php link
+                ':n' => $notes ?: null, ':u' => $user['id'],
             ]);
             // Recompute invoice status from total paid.
             $sumStmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM fee_payments WHERE invoice_id = :iid");
@@ -296,7 +298,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php $payments = $paymentsByInv[$iid] ?? []; ?>
                 <?php if ($payments): ?>
                     <table class="att-summary">
-                        <thead><tr><th>Paid on</th><th>Amount</th><th>Method</th><th>Ref.</th><th>Recorded by</th><th></th></tr></thead>
+                        <thead><tr><th>Paid on</th><th>Amount</th><th>Method</th><th>Ref.</th><th>Recorded by</th><th>Receipt</th><th></th></tr></thead>
                         <tbody>
                             <?php foreach ($payments as $p): ?>
                                 <tr>
@@ -305,6 +307,12 @@ require __DIR__ . '/../includes/header.php';
                                     <td><?= e(ucfirst(str_replace('_', ' ', $p['method']))) ?></td>
                                     <td><?= e($p['reference_no'] ?? '') ?></td>
                                     <td><?= e($p['recorded_by_name'] ?? '') ?></td>
+                                    <td>
+                                        <?php if (!empty($p['receipt_token'])): ?>
+                                            <a href="/receipt.php?t=<?= e($p['receipt_token']) ?>" target="_blank" rel="noopener"
+                                               title="Public receipt link — share with the parent">Receipt ↗</a>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <form method="post" class="inline" onsubmit="return confirm('Delete this payment?')">
                                             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
