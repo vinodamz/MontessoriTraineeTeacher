@@ -1,6 +1,6 @@
 # UX Simplification Roadmap — Little Graduates
 
-> Status: **Phases 0, 1, 2, 3, 5 done · next: Phase 4 (money in one place)** · Last updated: 2026-06-10
+> Status: **All phases done** (open: module-usage decision + two manual mobile passes) · Last updated: 2026-06-10
 >
 > The app has grown to ~103 pages across 12 modules. For a playschool with a
 > handful of staff, that is ERP-scale surface area. This roadmap reorganizes
@@ -105,12 +105,18 @@ One page that covers 90% of a teacher's interactions.
 
 ## Phase 4 — Money in one place (1 PR)
 
-- [ ] **"Money" home** combining Fees (in) and Expenses (out): this month's
-      collections, dues list, pending expense approvals.
-- [ ] **Parent-facing receipt** via the token-link pattern (like the
-      admission PDF): payment confirmation the office can WhatsApp.
-- [ ] Retire `fees_calculator.php` at root if redundant with the Fees module
-      (redirect).
+- [x] **"Money" home** — new `/money.php` (admin / fees / expenses holders):
+      this month's collections, outstanding dues per family with deep links
+      into each child's Fees tab, this month's spend + pending expense
+      approvals. New "Money overview" tile leads the Money group on home.
+- [x] **Parent-facing receipt** — migration 030 adds
+      `fee_payments.receipt_token` (backfilled); `/receipt.php?t=…` renders
+      a branded, printable payment receipt with invoice balance, no login.
+      The office copies the "Receipt ↗" link from the child's Fees tab and
+      WhatsApps it.
+- [x] ~~Retire `fees_calculator.php`~~ — **kept deliberately**: it's the
+      public, no-login calculator the admissions team shares with parents
+      (the Fees module is the staff side). Not redundant.
 
 ## Phase 5 — Guardrails & polish (1 PR + ongoing)
 
