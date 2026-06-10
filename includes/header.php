@@ -26,6 +26,39 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
     </a>
     <?php if ($user): ?>
         <nav>
+            <?php if ($user['role'] === 'teacher'
+                      && (user_has_module($user, 'students') || user_has_module($user, 'montessori'))):
+                // Teacher nav (Phase 1): the daily loop up front, everything
+                // else folded into one More menu. Admins keep the full nav.
+                $teacherExtras = [];
+                foreach ([
+                    'tasks'       => ['Tasks',       '/tasks/index.php'],
+                    'montessori'  => ['Assessment',  '/assessment/index.php'],
+                    'crm'         => ['Admissions',  '/crm/index.php'],
+                    'recruitment' => ['Recruitment', '/recruitment/index.php'],
+                    'staff'       => ['Staff',       '/staff/index.php'],
+                    'expenses'    => ['Expenses',    '/expenses/index.php'],
+                    'fees'        => ['Fees',        '/fees/index.php'],
+                    'logbook'     => ['Logbook',     '/logbook/index.php'],
+                    'inventory'   => ['Inventory',   '/inventory/index.php'],
+                    'wacrm'       => ['WACRM',       '/wacrm/index.php'],
+                    'n8n'         => ['n8n',         '/n8n/index.php'],
+                ] as $mk => [$mLabel, $mHref]) {
+                    if (user_has_module($user, $mk)) $teacherExtras[] = [$mLabel, $mHref];
+                }
+            ?>
+                <a href="/today.php">My Day</a>
+                <a href="<?= user_has_module($user, 'students') ? '/students/index.php' : '/assessment/index.php' ?>">My Class</a>
+                <details class="more-menu">
+                    <summary>More ▾</summary>
+                    <div class="more-menu-list">
+                        <?php foreach ($teacherExtras as [$mLabel, $mHref]): ?>
+                            <a href="<?= e($mHref) ?>"><?= e($mLabel) ?></a>
+                        <?php endforeach; ?>
+                        <a href="/index.php?all=1">All apps</a>
+                    </div>
+                </details>
+            <?php else: ?>
             <a href="/index.php">Home</a>
             <?php if (user_has_module($user, 'tasks')): ?>
                 <a href="/tasks/index.php">Tasks</a>
@@ -66,6 +99,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="/admin.php">Admin</a>
             <?php endif; ?>
+            <?php endif; /* teacher vs full nav */ ?>
             <a href="/notifications.php" class="bell" title="Notifications" aria-label="Notifications<?= $unreadCount > 0 ? ' (' . $unreadCount . ' unread)' : '' ?>">
                 <span class="bell-icon" aria-hidden="true">🔔</span>
                 <?php if ($unreadCount > 0): ?>

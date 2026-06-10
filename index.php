@@ -98,13 +98,12 @@ if ($moduleCount === 1) {
 }
 // 0 or 2+ modules → render the picker below.
 
-// Role-based landing: teachers go straight to their daily job (class
-// attendance, or the assessment list for assessment-only teachers) instead
-// of the module picker. The header nav still links every module they hold,
-// and ?all=1 shows the full picker when they want it.
+// Role-based landing: teachers go straight to My Day (check-in, class
+// attendance, observations) instead of the module picker. The header nav
+// still links every module they hold, and ?all=1 shows the picker.
 if ($user['role'] === 'teacher' && !isset($_GET['all'])) {
     if ($hasStudents || $hasMontess) {
-        redirect($hasStudents ? '/students/attendance.php' : '/assessment/index.php');
+        redirect('/today.php');
     }
 }
 
