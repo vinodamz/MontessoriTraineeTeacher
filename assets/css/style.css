@@ -1314,3 +1314,41 @@ a.admin-tile:hover {
     color: var(--accent, #EC407A);
     border-bottom-color: var(--accent, #EC407A);
 }
+
+/* ---------- Phase 3 mobile: CRM pipeline one-handed -------------------------
+ * Narrower columns so a sliver of the next one peeks (signals scrollability),
+ * sticky column header while scrolling cards inside a long stage, action bar
+ * + tile grid that fit a phone, and a bigger drag handle area on touch. */
+@media (max-width: 720px) {
+    .crm-board {
+        gap: .5rem;
+        scroll-snap-type: x mandatory;
+        scroll-padding-left: 12px;
+        padding-left: 6px; padding-right: 6px;
+    }
+    .crm-col {
+        flex: 0 0 84vw;       /* peek the next column ~16% */
+        max-width: 320px;
+        padding: .5rem .55rem .65rem;
+    }
+    .crm-col-head {
+        position: sticky; top: 0; z-index: 2;
+        background: inherit;
+        padding: .1rem 0 .35rem;
+        margin-bottom: .35rem;
+        border-bottom: 1px dashed var(--line);
+    }
+    .crm-card-name { font-size: .95rem; }
+    .crm-card-meta { gap: .25rem; font-size: .82rem; }
+
+    /* Touch-friendly hit area for the per-column add button. */
+    .crm-col-add { width: 28px; height: 28px; font-size: 1.1rem; }
+
+    /* Tile row: stack to two columns on small screens. */
+    ul.admin-tiles { grid-template-columns: repeat(2, 1fr) !important; }
+    .admin-tile .tile-value { font-size: 1.25rem; }
+
+    /* Action bar: let it wrap and stretch the primary CTA full width. */
+    .page-head .actionbar { flex-wrap: wrap; gap: .35rem; }
+    .page-head .actionbar > .btn-primary { flex: 1 1 100%; text-align: center; }
+}

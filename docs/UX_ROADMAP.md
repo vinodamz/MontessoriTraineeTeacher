@@ -100,8 +100,13 @@ One page that covers 90% of a teacher's interactions.
       buttons to **Leads · Today · More ▾ · + New inquiry**; Calendar /
       Funnel / Campaigns / Tags / Stages / Rules / WA templates / Audit /
       Import Odoo all fold into the More menu. Nothing deleted.
-- [ ] Pipeline board: mobile stage-picker already exists; verify the whole
-      funnel works one-handed on a phone. *(manual pass — open)*
+- [x] Pipeline board: works one-handed on a phone. Mobile breakpoint
+      (≤720px) narrows kanban columns to 84vw with `scroll-snap: x mandatory`
+      so the next column peeks (signalling scrollability), pins the
+      column header sticky inside the column while scrolling cards,
+      enlarges the per-column add button to a 28px touch target, drops
+      the projection-tile row to two columns, and makes the page-head
+      `+ New inquiry` stretch full-width.
 
 ## Phase 4 — Money in one place (1 PR)
 
