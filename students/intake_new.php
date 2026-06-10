@@ -188,6 +188,11 @@ require __DIR__ . '/../includes/header.php';
 <form method="post" class="card card-form" style="max-width: 600px;">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
 
+    <?php
+    // Deep links from the CRM family view land here with the child
+    // pre-selected: /students/intake_new.php?inquiry_child_id=N
+    $preselect = isset($_GET['inquiry_child_id']) ? (int)$_GET['inquiry_child_id'] : 0;
+    ?>
     <?php if ($pipelineKids): ?>
         <div class="field">
             <label>Pre-fill from CRM pipeline <span class="muted small">(optional)</span></label>
@@ -199,7 +204,7 @@ require __DIR__ . '/../includes/header.php';
                     $statusBit  = $k['status'] ? ' (' . $k['status'] . ')' : '';
                     $familyBit  = $k['primary_name'] ? ' — ' . $k['primary_name'] : '';
                 ?>
-                    <option value="<?= (int)$k['id'] ?>"><?= e($childName . $gradeBit . $familyBit . $statusBit) ?></option>
+                    <option value="<?= (int)$k['id'] ?>" <?= $preselect === (int)$k['id'] ? 'selected' : '' ?>><?= e($childName . $gradeBit . $familyBit . $statusBit) ?></option>
                 <?php endforeach; ?>
             </select>
             <p class="muted small" style="margin:.3rem 0 0;">

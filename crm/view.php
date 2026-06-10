@@ -499,8 +499,8 @@ require __DIR__ . '/../includes/header.php';
             sync();
         })();
         </script>
-        <p class="muted small">Tip: when status is <em>Offered</em>, scroll down to the
-            <a href="#enroll">Enroll children</a> form to promote them into the students module.</p>
+        <p class="muted small">Tip: when the family is ready, use the
+            <a href="#enroll">Admission</a> card below to send them the admission form link.</p>
     </div>
 </div>
 
@@ -562,46 +562,65 @@ require __DIR__ . '/../includes/header.php';
 
 <?php if ($canEnroll && $unpromotedKids): ?>
 <div class="card" id="enroll">
-    <h3>Enroll children</h3>
-    <p class="muted small">Tick the children to enroll. Each needs a grade and a class teacher.
-       Saving creates real student records (with parents copied across) and moves
-       this inquiry to <em>Enrolled</em>.</p>
-    <form method="post">
-        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-        <input type="hidden" name="op" value="promote">
-        <table class="admin-table">
-            <thead><tr><th></th><th>Child</th><th>Grade</th><th>Teacher</th></tr></thead>
-            <tbody>
-            <?php foreach ($unpromotedKids as $i => $k): ?>
-                <tr>
-                    <td>
-                        <input type="hidden" name="kid_id[<?= $i ?>]" value="<?= (int)$k['id'] ?>">
-                        <input type="checkbox" name="kid_enroll[<?= $i ?>]" value="1" checked>
-                    </td>
-                    <td><?= e(trim($k['first_name'] . ' ' . ($k['last_name'] ?? ''))) ?></td>
-                    <td>
-                        <select name="kid_grade[<?= $i ?>]">
-                            <?php foreach (['Playgroup','Nursery','LKG','UKG'] as $g): ?>
-                                <option value="<?= $g ?>" <?= ($k['target_grade'] ?? '') === $g ? 'selected' : '' ?>><?= $g ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
-                    <td>
-                        <select name="kid_teacher[<?= $i ?>]">
-                            <option value="0">— pick a teacher —</option>
-                            <?php foreach ($teachers as $t): ?>
-                                <option value="<?= (int)$t['id'] ?>"><?= e($t['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
-                </tr>
+    <h3>Admission</h3>
+    <?php if (($user['role'] ?? '') === 'admin'): ?>
+        <p class="muted small">The standard flow: send the family the admission form link.
+           It creates a draft student (with these parents copied across), the parent fills
+           everything in — photos and IDs included — and you approve from the child's profile.</p>
+        <ul class="team-list">
+            <?php foreach ($unpromotedKids as $k):
+                $full = trim($k['first_name'] . ' ' . ($k['last_name'] ?? '')); ?>
+                <li class="team-row" style="--card: <?= e(user_color((int)$k['id'])) ?>;">
+                    <div class="team-dot"><?= e(user_initials($full)) ?></div>
+                    <div style="flex:1;">
+                        <div class="team-name"><?= e($full) ?></div>
+                        <div class="team-meta"><?= e((string)$k['target_grade']) ?: 'no grade set' ?></div>
+                    </div>
+                    <a class="btn btn-primary" href="/students/intake_new.php?inquiry_child_id=<?= (int)$k['id'] ?>">Send admission form</a>
+                </li>
             <?php endforeach; ?>
-            </tbody>
-        </table>
-        <div class="actions section-h-spaced">
-            <button class="btn btn-primary">Enroll selected</button>
-        </div>
-    </form>
+        </ul>
+    <?php endif; ?>
+
+    <details style="margin-top: .8rem;">
+        <summary class="muted small" style="cursor:pointer;">Enroll directly instead (office types everything — no parent form)</summary>
+        <form method="post" style="margin-top:.6rem;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="promote">
+            <table class="admin-table">
+                <thead><tr><th></th><th>Child</th><th>Grade</th><th>Teacher</th></tr></thead>
+                <tbody>
+                <?php foreach ($unpromotedKids as $i => $k): ?>
+                    <tr>
+                        <td>
+                            <input type="hidden" name="kid_id[<?= $i ?>]" value="<?= (int)$k['id'] ?>">
+                            <input type="checkbox" name="kid_enroll[<?= $i ?>]" value="1" checked>
+                        </td>
+                        <td><?= e(trim($k['first_name'] . ' ' . ($k['last_name'] ?? ''))) ?></td>
+                        <td>
+                            <select name="kid_grade[<?= $i ?>]">
+                                <?php foreach (['Playgroup','Nursery','LKG','UKG'] as $g): ?>
+                                    <option value="<?= $g ?>" <?= ($k['target_grade'] ?? '') === $g ? 'selected' : '' ?>><?= $g ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                        <td>
+                            <select name="kid_teacher[<?= $i ?>]">
+                                <option value="0">— pick a teacher —</option>
+                                <?php foreach ($teachers as $t): ?>
+                                    <option value="<?= (int)$t['id'] ?>"><?= e($t['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <div class="actions section-h-spaced">
+                <button class="btn">Enroll selected</button>
+            </div>
+        </form>
+    </details>
 </div>
 <?php endif; ?>
 
