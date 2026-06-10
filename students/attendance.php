@@ -63,6 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('error', 'Save failed: ' . $e->getMessage());
     }
     $qs = http_build_query(array_filter(['date' => $date, 'grade' => $grade]));
+    // Pages that embed this form (e.g. /today.php) pass return_to so the
+    // teacher lands back where they were. Same-site paths only.
+    $returnTo = (string)($_POST['return_to'] ?? '');
+    if ($returnTo !== '' && $returnTo[0] === '/' && !str_starts_with($returnTo, '//')) {
+        redirect($returnTo);
+    }
     redirect('/students/attendance.php' . ($qs ? '?' . $qs : ''));
 }
 

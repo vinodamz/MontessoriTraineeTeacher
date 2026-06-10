@@ -1,6 +1,6 @@
 # UX Simplification Roadmap — Little Graduates
 
-> Status: **Phase 0 in progress** · Last updated: 2026-06-10
+> Status: **Phases 0–1 done · next: Phase 5 (guardrails)** · Last updated: 2026-06-10
 >
 > The app has grown to ~103 pages across 12 modules. For a playschool with a
 > handful of staff, that is ERP-scale surface area. This roadmap reorganizes
@@ -60,12 +60,13 @@ Low-risk cleanups that cut visual noise immediately.
 
 One page that covers 90% of a teacher's interactions.
 
-- [ ] New `/today.php` (teacher landing): self check-in card (exists),
-      my-class attendance marking inline (reuse `students/attendance.php`
-      logic), pending-assessment count for the month, quick logbook entry
-      (incident/observation), today's birthdays.
-- [ ] Teachers' nav reduces to: **My Day · My Class · Menu**.
-- [ ] Mobile-first layout — this page will live on phones.
+- [x] New `/today.php` (teacher landing): self check-in card (exists),
+      my-class attendance marking inline (posts to `students/attendance.php`
+      with `return_to`), pending-assessment count for the month, quick
+      logbook shortcuts (observation / incident), today's birthdays.
+- [x] Teachers' nav reduces to: **My Day · My Class · More ▾** (with an
+      "All apps" escape hatch to `/index.php?all=1`).
+- [x] Mobile-first layout — reuses the responsive attendance grid + cards.
 
 ## Phase 2 — One child, one record (1–2 PRs)
 
