@@ -1297,3 +1297,20 @@ a.admin-tile:hover {
 }
 .topbar nav .more-menu > summary:hover { color: var(--accent); }
 .topbar nav .more-menu .more-menu-list a { color: var(--ink, #2b2b2b); }
+
+/* Phase 2: per-child record tab strip — one child, one record. */
+.student-tabs {
+    display: flex; gap: .15rem; margin: -0.35rem 0 1.1rem;
+    border-bottom: 2px solid var(--line, #e3d5c5);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.student-tabs a {
+    padding: .5rem .9rem; white-space: nowrap; text-decoration: none;
+    color: var(--ink-soft, #6b5a45); font-weight: 600; font-size: .92rem;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+}
+.student-tabs a:hover { color: var(--accent, #EC407A); }
+.student-tabs a.is-active {
+    color: var(--accent, #EC407A);
+    border-bottom-color: var(--accent, #EC407A);
+}

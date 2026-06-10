@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/student_tabs.php';
 
 $user = require_login();
 if ($user['role'] !== 'admin' && !user_has_module($user, 'students') && !user_has_module($user, 'montessori')) {
@@ -104,10 +105,12 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="actionbar">
-        <a class="btn btn-ghost" href="/students/view.php?id=<?= $studentId ?>">← Profile</a>
+        <a class="btn btn-ghost" href="/students/index.php">← Students</a>
         <a class="btn" href="/students/attendance.php">Mark today</a>
     </div>
 </div>
+
+<?php student_tab_strip($studentId, 'attendance', $user); ?>
 
 <section class="card">
     <h2>Monthly summary (this academic year)</h2>

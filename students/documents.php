@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/student_tabs.php';
 
 $user = require_login();
 if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
@@ -147,9 +148,11 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="actionbar">
-        <a class="btn btn-ghost" href="/students/view.php?id=<?= (int)$student['id'] ?>">← Profile</a>
+        <a class="btn btn-ghost" href="/students/index.php">← Students</a>
     </div>
 </div>
+
+<?php student_tab_strip((int)$student['id'], 'documents', $user); ?>
 
 <details class="card card-form" open>
     <summary>Upload a document</summary>
