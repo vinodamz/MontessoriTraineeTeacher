@@ -98,6 +98,16 @@ if ($moduleCount === 1) {
 }
 // 0 or 2+ modules → render the picker below.
 
+// Role-based landing: teachers go straight to their daily job (class
+// attendance, or the assessment list for assessment-only teachers) instead
+// of the module picker. The header nav still links every module they hold,
+// and ?all=1 shows the full picker when they want it.
+if ($user['role'] === 'teacher' && !isset($_GET['all'])) {
+    if ($hasStudents || $hasMontess) {
+        redirect($hasStudents ? '/students/attendance.php' : '/assessment/index.php');
+    }
+}
+
 // ---------- Stats for the picker tiles ------------------------------------
 $tasksStats = ['todo' => 0, 'today' => 0, 'overdue' => 0];
 if ($hasTasks) {
@@ -389,38 +399,57 @@ $icons = [
 foreach (external_apps_registry() as $extKey => $extMeta) {
     $icons[$extKey] = $extMeta['svg'];
 }
+// Group the tiles by what they're for, so the home screen reads as four
+// short shelves instead of one 12-tile wall. Keys not listed land in Ops.
+$GROUPS = [
+    'children'   => ['label' => 'Children',   'keys' => ['students', 'assessment', 'logbook']],
+    'admissions' => ['label' => 'Admissions', 'keys' => ['admissions']],
+    'money'      => ['label' => 'Money',      'keys' => ['fees', 'expenses']],
+    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'tasks', 'inventory', 'recruitment', 'wacrm', 'n8n']],
+];
+$grouped = array_fill_keys(array_keys($GROUPS), []);
+foreach ($apps as $app) {
+    foreach ($GROUPS as $gk => $g) {
+        if (in_array($app['key'], $g['keys'], true)) { $grouped[$gk][] = $app; continue 2; }
+    }
+    $grouped['ops'][] = $app;
+}
 ?>
 
-<ul class="app-grid" role="list">
-    <?php foreach ($apps as $app): ?>
-        <li>
-            <a class="app-card" href="<?= e($app['href']) ?>">
-                <div class="app-icon app-icon-<?= e($app['key']) ?>">
-                    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <?= $icons[$app['key']] ?? '' ?>
-                    </svg>
-                </div>
-                <div class="app-text">
-                    <div class="app-name"><?= e($app['name']) ?></div>
-                    <div class="app-subtitle"><?= e($app['subtitle']) ?></div>
-                    <?php if (!empty($app['stats'])): ?>
-                        <div class="app-stats">
-                            <?php foreach ($app['stats'] as $s): ?>
-                                <span class="pill <?= $s['tone'] === 'warn' ? 'pill-warn' : '' ?>"><?= e($s['label']) ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </a>
-        </li>
-    <?php endforeach; ?>
-    <?php if (!$apps): ?>
-        <li class="app-empty">
-            <div class="empty">
-                <p>No apps assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
-            </div>
-        </li>
-    <?php endif; ?>
-</ul>
+<?php foreach ($GROUPS as $gk => $g): if (!$grouped[$gk]) continue; ?>
+<details class="app-group" open>
+    <summary><?= e($g['label']) ?> <span class="muted small">(<?= count($grouped[$gk]) ?>)</span></summary>
+    <ul class="app-grid" role="list">
+        <?php foreach ($grouped[$gk] as $app): ?>
+            <li>
+                <a class="app-card" href="<?= e($app['href']) ?>">
+                    <div class="app-icon app-icon-<?= e($app['key']) ?>">
+                        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <?= $icons[$app['key']] ?? '' ?>
+                        </svg>
+                    </div>
+                    <div class="app-text">
+                        <div class="app-name"><?= e($app['name']) ?></div>
+                        <div class="app-subtitle"><?= e($app['subtitle']) ?></div>
+                        <?php if (!empty($app['stats'])): ?>
+                            <div class="app-stats">
+                                <?php foreach ($app['stats'] as $s): ?>
+                                    <span class="pill <?= $s['tone'] === 'warn' ? 'pill-warn' : '' ?>"><?= e($s['label']) ?></span>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </a>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+</details>
+<?php endforeach; ?>
+
+<?php if (!$apps): ?>
+    <div class="empty">
+        <p>No apps assigned yet. Ask an admin to grant you access from <a href="/admin.php">Admin → Users</a>.</p>
+    </div>
+<?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

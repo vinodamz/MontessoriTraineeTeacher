@@ -136,14 +136,18 @@ require __DIR__ . '/../includes/header.php';
     <div class="actionbar">
         <a class="btn" href="/students/attendance.php">Mark attendance</a>
         <?php if ($canEdit): ?>
-            <a class="btn" href="/students/grid.php">Grid editor</a>
-            <a class="btn" href="/students/fees_report.php">Fees report</a>
-            <a class="btn" href="/students/export.php<?= $_SERVER['QUERY_STRING'] !== '' ? '?' . e($_SERVER['QUERY_STRING']) : '' ?>" title="Download current view as Excel">Export</a>
-            <a class="btn" href="/students/import.php">Import</a>
-            <a class="btn" href="/students/yearend.php">Year-end</a>
-            <a class="btn" href="/students/withdrawals.php">Withdrawals</a>
-            <a class="btn" href="/students/intake_new.php" title="Send admission form to a new family">+ New admission (parent form)</a>
-            <a class="btn btn-primary" href="/students/edit.php">+ New student</a>
+            <a class="btn btn-primary" href="/students/add.php">+ Add child</a>
+            <details class="more-menu">
+                <summary class="btn">More ▾</summary>
+                <div class="more-menu-list">
+                    <a href="/students/grid.php">Edit all (grid)</a>
+                    <a href="/students/export.php<?= $_SERVER['QUERY_STRING'] !== '' ? '?' . e($_SERVER['QUERY_STRING']) : '' ?>" title="Download current view as Excel">Export to Excel</a>
+                    <a href="/students/import.php">Import from Excel</a>
+                    <a href="/students/fees_report.php">Fees report</a>
+                    <a href="/students/withdrawals.php">Withdrawals</a>
+                    <a href="/students/yearend.php">Promote classes</a>
+                </div>
+            </details>
         <?php endif; ?>
     </div>
 </div>

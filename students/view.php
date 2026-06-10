@@ -184,7 +184,7 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
         <?php if (user_has_module($user, 'montessori')): ?>
             <a class="btn" href="/assessment/progress.php?student_id=<?= (int)$s['id'] ?>">Progress</a>
-            <a class="btn btn-ghost" href="/assessment/baseline.php?student_id=<?= (int)$s['id'] ?>">Baseline</a>
+            <a class="btn btn-ghost" href="/assessment/baseline.php?student_id=<?= (int)$s['id'] ?>">First assessment</a>
         <?php endif; ?>
     </div>
 </div>
@@ -192,7 +192,7 @@ require __DIR__ . '/../includes/header.php';
 <?php if ($enrStatus === 'intake_pending' && $isAdmin): ?>
 <section class="card" style="border-left: 4px solid #f5b342; background: #fff8e7;">
     <h2 style="margin-top:0; display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-        <span>Intake pending — awaiting parent submission</span>
+        <span>Waiting for parent — form not yet approved</span>
         <form method="post" style="margin:0;"
               onsubmit="return confirm('Add this child to the student list? The parent link will be revoked.');">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">

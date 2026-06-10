@@ -79,13 +79,13 @@ $stmt->execute([':s' => $studentId]);
 $bl = $stmt->fetch() ?: [];
 
 $fullName  = trim($student['first_name'] . ' ' . $student['last_name']);
-$pageTitle = "Baseline · $fullName";
+$pageTitle = "First assessment · $fullName";
 require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
     <div>
-        <h1>Baseline for <?= e($fullName) ?></h1>
+        <h1>First assessment — <?= e($fullName) ?></h1>
         <p class="muted"><?= e($student['grade']) ?> · <?= $bl ? 'Last edit: ' . e($bl['recorded_at']) : 'No baseline recorded yet' ?></p>
     </div>
     <a class="btn btn-ghost" href="index.php">Back</a>

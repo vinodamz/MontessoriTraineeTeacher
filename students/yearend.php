@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($onBreak)   $summary[] = "$onBreak on break";
         if ($skipped)   $summary[] = "$skipped skipped";
         if ($errs)      $summary[] = "$errs error" . ($errs === 1 ? '' : 's');
-        flash_set('ok', 'Year-end committed: ' . ($summary ? implode(' · ', $summary) : 'no changes'));
+        flash_set('ok', 'Class promotion committed: ' . ($summary ? implode(' · ', $summary) : 'no changes'));
 
         // Notify other admins about the bulk transition (skip self).
         if ($promoted + $repeated + $graduated + $withdrawn + $onBreak > 0) {
@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($admIds) {
                 notify(
                     $admIds, 'students', 'yearend_committed',
-                    "Year-end $fromYear → $toYear committed",
+                    "Classes promoted: $fromYear → $toYear",
                     implode(' · ', $summary) . "\nBy " . $user['name'],
                     '/students/yearend.php?from=' . $fromYear
                 );
@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         $pdo->rollBack();
-        flash_set('error', 'Year-end commit failed: ' . $e->getMessage());
+        flash_set('error', 'Class promotion failed: ' . $e->getMessage());
     }
     redirect('/students/yearend.php?from=' . $fromYear);
 }
@@ -178,13 +178,13 @@ foreach ($students as $s) {
 
 $years = academic_years_in_use();
 
-$pageTitle = "Year-end · $fromYear → $toYear";
+$pageTitle = "Promote classes · $fromYear → $toYear";
 require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
     <div>
-        <h1>Year-end transition</h1>
+        <h1>Promote classes</h1>
         <p class="muted">
             <strong><?= e($fromYear) ?></strong> → <strong><?= e($toYear) ?></strong>
             · <?= count($students) ?> currently-enrolled student<?= count($students) === 1 ? '' : 's' ?>
