@@ -321,6 +321,7 @@ require __DIR__ . '/../includes/header.php';
             · <?= $projection['count'] ?> open in funnel</p>
     </div>
     <div class="actionbar">
+        <a class="btn" href="/crm/dashboard.php" title="Charts: funnel, trends, sources, lost reasons">Dashboard</a>
         <a class="btn" href="/crm/leads.php">
             Leads
             <?php if ($leadCount > 0): ?>
@@ -473,7 +474,7 @@ $followupScope = $ownerFilter === 'mine'       ? 'Mine'
             $cards = $byStatus[$code];
             $colCount = count($cards);
         ?>
-            <section class="crm-col crm-col-<?= e($code) ?>" data-status="<?= e($code) ?>">
+            <section class="crm-col crm-col-<?= e($code) ?>" id="col-<?= e($code) ?>" data-status="<?= e($code) ?>">
                 <header class="crm-col-head">
                     <h3><?= e($meta['label']) ?></h3>
                     <span class="pill"><?= $colCount ?></span>

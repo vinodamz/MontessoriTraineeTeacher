@@ -140,6 +140,7 @@ require __DIR__ . '/../includes/header.php';
             <details class="more-menu">
                 <summary class="btn">More ▾</summary>
                 <div class="more-menu-list">
+                    <a href="/students/dashboard.php">Dashboard</a>
                     <a href="/students/grid.php">Edit all (grid)</a>
                     <a href="/students/export.php<?= $_SERVER['QUERY_STRING'] !== '' ? '?' . e($_SERVER['QUERY_STRING']) : '' ?>" title="Download current view as Excel">Export to Excel</a>
                     <a href="/students/import.php">Import from Excel</a>
