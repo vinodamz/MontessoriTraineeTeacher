@@ -1,6 +1,7 @@
 <?php
 // Session + PIN authentication helpers — unified across modules.
 
+require_once __DIR__ . '/errors.php';   // friendly 500s — must load first
 require_once __DIR__ . '/db.php';
 
 function app_config(): array
