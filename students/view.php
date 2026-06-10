@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/student_form.php';
+require_once __DIR__ . '/../includes/student_tabs.php';
 
 $user = require_login();
 if (!user_has_module($user, 'students') && !user_has_module($user, 'montessori')) {
@@ -175,19 +176,12 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn btn-ghost" href="/students/index.php">← Back</a>
         <?php if ($canEdit): ?>
             <a class="btn btn-primary" href="/students/edit.php?id=<?= (int)$s['id'] ?>">Edit</a>
-            <a class="btn" href="/students/documents.php?student_id=<?= (int)$s['id'] ?>">Documents<?= $docCount ? ' · ' . $docCount : '' ?></a>
             <a class="btn" href="/students/admission_pdf.php?id=<?= (int)$s['id'] ?>" target="_blank" rel="noopener" title="Open the printable admission form">Admission form (PDF)</a>
-        <?php endif; ?>
-        <a class="btn" href="/students/attendance_history.php?student_id=<?= (int)$s['id'] ?>">Attendance</a>
-        <?php if ($canEdit): ?>
-            <a class="btn" href="/students/fees.php?student_id=<?= (int)$s['id'] ?>">Fees</a>
-        <?php endif; ?>
-        <?php if (user_has_module($user, 'montessori')): ?>
-            <a class="btn" href="/assessment/progress.php?student_id=<?= (int)$s['id'] ?>">Progress</a>
-            <a class="btn btn-ghost" href="/assessment/baseline.php?student_id=<?= (int)$s['id'] ?>">First assessment</a>
         <?php endif; ?>
     </div>
 </div>
+
+<?php student_tab_strip((int)$s['id'], 'profile', $user); ?>
 
 <?php if ($enrStatus === 'intake_pending' && $isAdmin): ?>
 <section class="card" style="border-left: 4px solid #f5b342; background: #fff8e7;">

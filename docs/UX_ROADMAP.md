@@ -1,6 +1,6 @@
 # UX Simplification Roadmap — Little Graduates
 
-> Status: **Phases 0, 1, 5 done · next: Phase 2 (one child, one record)** · Last updated: 2026-06-10
+> Status: **Phases 0, 1, 2, 5 done · next: Phase 3 (one admissions funnel)** · Last updated: 2026-06-10
 >
 > The app has grown to ~103 pages across 12 modules. For a playschool with a
 > handful of staff, that is ERP-scale surface area. This roadmap reorganizes
@@ -70,16 +70,22 @@ One page that covers 90% of a teacher's interactions.
 
 ## Phase 2 — One child, one record (1–2 PRs)
 
-- [ ] **Tabbed student profile.** `students/view.php` becomes the hub:
-      Profile / Family / Documents / Attendance / Fees / Learning.
-      The tabs reuse the existing pages' queries — this is reorganization,
-      not a rewrite.
-- [ ] **Learning tab absorbs Assessment** for per-child views (progress,
-      baseline, monthly cards). The Assessment module stays for bulk teacher
-      workflows; per-child entry points move to the profile.
-- [ ] **Fees tab unifies** `students/fees.php` + relevant Fees-module data
-      for that child. One place to answer "has this family paid?"
-- [ ] Kill orphan entry points after the move (redirects, not deletions).
+- [x] **Tabbed student profile.** A shared tab strip
+      (`includes/student_tabs.php`) renders on every per-child page, so
+      Profile / Documents / Attendance / Fees / Learning read as tabs of
+      one record. The pages keep their own URLs + queries — reorganization,
+      not a rewrite. (Family stayed on the Profile tab — view.php already
+      shows parents inline, a separate tab would have been a click tax.)
+- [x] **Learning tab absorbs Assessment** for per-child views: new
+      `students/learning.php` shows first-assessment status, this-month
+      assessed-or-not, and a recent month × category score table, with
+      deep links into assess / baseline / full progress. The Assessment
+      module keeps the bulk teacher workflow.
+- [x] **Fees tab** = `students/fees.php` (invoices + payments + dues per
+      child — already the unified per-child money view; the Fees module
+      holds the fee *structure*, not per-child ledgers).
+- [x] Orphan entry points removed: view.php's six-button row (Documents /
+      Attendance / Fees / Progress / Baseline) replaced by the tab strip.
 
 ## Phase 3 — One admissions funnel (1–2 PRs)
 
