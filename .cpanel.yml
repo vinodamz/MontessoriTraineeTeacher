@@ -1,7 +1,7 @@
 ---
 # cPanel deployment recipe.
 #
-# Three concerns:
+# Four concerns:
 #   1. Rsync the working copy into the subdomain docroot.
 #   2. Set directory/file permissions to what cPanel + LiteSpeed expect (755/644).
 #      rsync runs with --no-perms, so dirs auto-created by rsync inherit the
@@ -9,6 +9,10 @@
 #      traverse — that exact bug ate our first deploy and surfaced as a
 #      mysterious 404 on every URL.
 #   3. Touch the .php files so the opcode cache picks up the new versions.
+#   4. Run the idempotent migrations (php migrate.php in CLI mode) so schema
+#      changes ship with the code — no more manual /migrate.php browser step,
+#      which twice left the site 500ing between deploy and migration.
+#      Output lands in last-migrate.log next to last-deploy.log.
 #
 # IMPORTANT: each command stays on ONE PHYSICAL LINE — YAML's folded scalar
 # preserves newlines on more-indented continuations and silently corrupts
@@ -20,4 +24,6 @@ deployment:
     - /usr/bin/find $HOME/thelittlegraduates.in/mtt -type d -exec /bin/chmod 755 {} +
     - /usr/bin/find $HOME/thelittlegraduates.in/mtt -type f -exec /bin/chmod 644 {} +
     - /usr/bin/find $HOME/thelittlegraduates.in/mtt -name '*.php' -exec /usr/bin/touch {} +
+    - cd $HOME/thelittlegraduates.in/mtt && php migrate.php > $HOME/last-migrate.log 2>&1 || echo "MIGRATE FAILED exit=$?" >> $HOME/last-migrate.log
+    - /bin/cp $HOME/last-migrate.log $HOME/thelittlegraduates.in/mtt/last-migrate.log
     - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log

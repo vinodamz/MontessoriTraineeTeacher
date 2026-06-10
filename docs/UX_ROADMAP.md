@@ -1,6 +1,6 @@
 # UX Simplification Roadmap — Little Graduates
 
-> Status: **Phases 0–1 done · next: Phase 5 (guardrails)** · Last updated: 2026-06-10
+> Status: **Phases 0, 1, 5 done · next: Phase 2 (one child, one record)** · Last updated: 2026-06-10
 >
 > The app has grown to ~103 pages across 12 modules. For a playschool with a
 > handful of staff, that is ERP-scale surface area. This roadmap reorganizes
@@ -105,15 +105,17 @@ One page that covers 90% of a teacher's interactions.
 
 ## Phase 5 — Guardrails & polish (1 PR + ongoing)
 
-- [ ] **Auto-migrate on deploy.** `.cpanel.yml` runs the idempotent
-      migrations after rsync — no more manual `/migrate.php` step (we hit
-      two production 500s in one week from this).
-- [ ] **Friendly error page.** Catch fatals → branded "Something went wrong,
-      the school has been notified" instead of raw HTTP 500, especially on
-      parent-facing pages.
-- [ ] **Mobile audit** of the surviving staff pages.
-- [ ] **Per-deploy smoke test** extended to hit the parent form + admission
-      PDF with a known test token.
+- [x] **Auto-migrate on deploy.** `.cpanel.yml` runs `php migrate.php`
+      (CLI mode, idempotent) after rsync — no more manual `/migrate.php`
+      step. Output is published at `/last-migrate.log` next to
+      `/last-deploy.log`.
+- [x] **Friendly error page.** `includes/errors.php` (loaded by auth.php,
+      so every entry point gets it) catches uncaught exceptions + fatals →
+      branded "Something went wrong" page; full error still goes to
+      error_log.
+- [ ] **Mobile audit** of the surviving staff pages. *(manual pass — open)*
+- [x] **Per-deploy smoke test** extended: a malformed parent-form token must
+      return the 404 "Link not active" page — a 500 fails the deploy.
 
 ---
 

@@ -18,11 +18,19 @@ require_once __DIR__ . '/includes/functions.php';
 $state     = users_table_state();
 $bootstrap = $state !== 'unified';
 
-if (!$bootstrap) {
+// CLI mode: the deploy pipeline runs `php migrate.php` after every rsync
+// (see .cpanel.yml) so schema changes land without the manual browser
+// step. Shell access on the cPanel account is the auth — skip the admin
+// login gate that protects the web entry point.
+$isCli = PHP_SAPI === 'cli';
+
+if (!$bootstrap && !$isCli) {
     require_admin();
 }
 
-header('Content-Type: text/plain; charset=utf-8');
+if (!$isCli) {
+    header('Content-Type: text/plain; charset=utf-8');
+}
 
 // ---------- Diagnostic header --------------------------------------------
 echo "Database diagnostic\n";
@@ -78,7 +86,8 @@ try {
 
 // ---------- Decide what to do --------------------------------------------
 if ($state === 'legacy') {
-    $confirm = ($_GET['confirm'] ?? '') === 'drop-legacy-lg';
+    $confirm = ($_GET['confirm'] ?? '') === 'drop-legacy-lg'
+            || ($isCli && in_array('--confirm=drop-legacy-lg', $argv ?? [], true));
     if (!$confirm) {
         echo "═══════════════════════════════════════════════════════════════════\n";
         echo "Legacy LGTaskManager tables detected.\n\n";

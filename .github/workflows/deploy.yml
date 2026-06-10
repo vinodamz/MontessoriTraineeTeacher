@@ -98,4 +98,20 @@ jobs:
             echo "::error::Check ~/last-mtt-deploy.log on the server and verify file permissions (dirs 755, files 644)."
             exit 1
           fi
-          echo "::notice::Site is live."
+
+          # Boot-check the public parent form: a malformed token must render
+          # the "Link not active" page (HTTP 404). A 500 here means the page
+          # can't even bootstrap (missing include, unapplied migration — both
+          # have happened) and parents holding real links would see errors.
+          PF_URL="https://mtt.thelittlegraduates.in/students/parent_form.php?token=deploy-smoke"
+          PF_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --connect-timeout 10 --max-time 30 \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            "${PF_URL}&_=$(date +%s)")
+          echo "GET /students/parent_form.php (bad token) → HTTP $PF_STATUS"
+          if [ "$PF_STATUS" != "404" ]; then
+            echo "::error::Parent form returned $PF_STATUS (expected 404 'Link not active')."
+            echo "::error::A 500 usually means a missing include or an unapplied migration — check /last-migrate.log on the site."
+            exit 1
+          fi
+          echo "::notice::Site is live (login + parent form boot OK)."
