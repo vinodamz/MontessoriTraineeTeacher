@@ -328,19 +328,24 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </a>
         <a class="btn" href="/crm/today.php"    title="Today's calls + stagnant leads">Today</a>
-        <a class="btn" href="/crm/calendar.php" title="Monthly calendar view">Calendar</a>
-        <a class="btn" href="/crm/funnel.php"   title="Conversion funnel report">Funnel</a>
-        <a class="btn" href="/crm/campaigns.php">Campaigns</a>
-        <a class="btn" href="/crm/tags.php" title="Add or edit inquiry tags">Tags</a>
-        <?php if ($user['role'] === 'admin'): ?>
-            <a class="btn" href="/crm/stages.php"       title="Manage pipeline stages">Stages</a>
-            <a class="btn" href="/crm/probability_rules.php" title="Auto-set probability based on tags">Rules</a>
-            <a class="btn" href="/crm/wa_templates.php" title="Manage WhatsApp message templates">WA templates</a>
-            <a class="btn" href="/crm/audit.php"        title="Admin: full activity log">Audit</a>
-        <?php endif; ?>
-        <?php if ($user['role'] === 'admin' && is_readable(__DIR__ . '/../sql/odoo_dump/leads.csv')): ?>
-            <a class="btn" href="/crm/import_odoo.php" title="One-shot importer for the Odoo 2026 Admission dump">Import Odoo</a>
-        <?php endif; ?>
+        <details class="more-menu">
+            <summary class="btn">More ▾</summary>
+            <div class="more-menu-list">
+                <a href="/crm/calendar.php">Calendar</a>
+                <a href="/crm/funnel.php">Funnel report</a>
+                <a href="/crm/campaigns.php">Campaigns</a>
+                <a href="/crm/tags.php">Tags</a>
+                <?php if ($user['role'] === 'admin'): ?>
+                    <a href="/crm/stages.php">Stages</a>
+                    <a href="/crm/probability_rules.php">Probability rules</a>
+                    <a href="/crm/wa_templates.php">WA templates</a>
+                    <a href="/crm/audit.php">Audit log</a>
+                    <?php if (is_readable(__DIR__ . '/../sql/odoo_dump/leads.csv')): ?>
+                        <a href="/crm/import_odoo.php">Import Odoo</a>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </div>
+        </details>
         <a class="btn btn-primary" href="/crm/edit.php">+ New inquiry</a>
     </div>
 </div>

@@ -1,6 +1,6 @@
 # UX Simplification Roadmap — Little Graduates
 
-> Status: **Phases 0, 1, 2, 5 done · next: Phase 3 (one admissions funnel)** · Last updated: 2026-06-10
+> Status: **Phases 0, 1, 2, 3, 5 done · next: Phase 4 (money in one place)** · Last updated: 2026-06-10
 >
 > The app has grown to ~103 pages across 12 modules. For a playschool with a
 > handful of staff, that is ERP-scale surface area. This roadmap reorganizes
@@ -89,16 +89,19 @@ One page that covers 90% of a teacher's interactions.
 
 ## Phase 3 — One admissions funnel (1–2 PRs)
 
-- [ ] **Single flow:** Inquiry (CRM card) → Tour → `Send admission form`
-      (button on the CRM family view that calls the existing intake +
-      token machinery) → Parent fills → `Approve` → Enrolled with
-      added-date. The intake dropdown (PR #69) was the bridge; this makes
-      it the only path and retires CRM's separate promote-to-student form.
-- [ ] **CRM page diet: 26 → ~8 core.** Keep pipeline, family view, leads,
-      calendar/today, WA templates, stages admin. Fold funnel/attention/
-      audit into tabs or admin-only links. Nothing deleted — de-emphasized.
+- [x] **Single flow:** the CRM family view's "Enroll children" card became
+      an **Admission** card with a per-child `Send admission form` button
+      that deep-links into `students/intake_new.php?inquiry_child_id=N`
+      (pre-selected) — draft student + parents copied + token issued in
+      one step, approve from the child's profile. Direct enroll survives
+      as a collapsed "office types everything" fallback inside the same
+      card, no longer the headline path.
+- [x] **CRM toolbar diet.** The pipeline header drops from up to 12
+      buttons to **Leads · Today · More ▾ · + New inquiry**; Calendar /
+      Funnel / Campaigns / Tags / Stages / Rules / WA templates / Audit /
+      Import Odoo all fold into the More menu. Nothing deleted.
 - [ ] Pipeline board: mobile stage-picker already exists; verify the whole
-      funnel works one-handed on a phone.
+      funnel works one-handed on a phone. *(manual pass — open)*
 
 ## Phase 4 — Money in one place (1 PR)
 
