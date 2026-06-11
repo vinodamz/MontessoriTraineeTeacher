@@ -104,6 +104,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILES)
             $params[":$f"] = $val === '' ? null : $val;
         }
 
+        // Emergency contact phone — same +91 default as the parent phones.
+        $params[':emergency_contact_phone'] =
+            parent_form_phone((string)($params[':emergency_contact_phone'] ?? '')) ?: null;
+
         // Gender — validate against the allowed enum.
         if ($params[':gender'] !== null && !in_array($params[':gender'], ['Male','Female','Other'], true)) {
             $params[':gender'] = null;
@@ -126,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILES)
                 // record — the admin manages cleanup. Just skip.
                 continue;
             }
-            $phone   = trim((string)($_POST["{$rel}_phone"]      ?? ''));
+            $phone   = parent_form_phone((string)($_POST["{$rel}_phone"] ?? ''));
             $email   = trim((string)($_POST["{$rel}_email"]      ?? ''));
             $occ     = trim((string)($_POST["{$rel}_occupation"] ?? ''));
             $work    = trim((string)($_POST["{$rel}_workplace"]  ?? ''));
@@ -265,6 +269,23 @@ function parent_form_docs_on_file(int $studentId): array
         $set[(string)$r['category'] . '|' . (string)$r['title']] = true;
     }
     return $set;
+}
+
+/**
+ * Normalise a phone field to +91 by default: bare 10-digit Indian numbers get
+ * the country code, 0/91-prefixed variants are unified, and a field left as
+ * just the prefilled "+91" counts as empty. Numbers already carrying another
+ * country code are kept as typed.
+ */
+function parent_form_phone(string $s): string
+{
+    $s = trim($s);
+    $digits = preg_replace('/\D/', '', $s);
+    if ($digits === '' || $digits === '91') return '';
+    if (strlen($digits) === 10) return '+91 ' . $digits;
+    if (strlen($digits) === 11 && $digits[0] === '0') return '+91 ' . substr($digits, 1);
+    if (strlen($digits) === 12 && str_starts_with($digits, '91')) return '+91 ' . substr($digits, 2);
+    return str_starts_with($s, '+') ? $s : '+' . $digits;
 }
 
 function parent_form_parse_date(string $s): ?string
@@ -521,7 +542,7 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
                 <div class="row2">
                     <div class="field">
                         <label>Contact number</label>
-                        <input type="tel" name="<?= e($rel) ?>_phone" value="<?= e((string)($p['phone'] ?? '')) ?>">
+                        <input type="tel" name="<?= e($rel) ?>_phone" value="<?= e((string)($p['phone'] ?? '') ?: '+91 ') ?>" placeholder="+91 98765 43210">
                     </div>
                     <div class="field">
                         <label>Email</label>
@@ -570,7 +591,7 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
             </div>
             <div class="field">
                 <label>Contact number</label>
-                <input type="tel" name="emergency_contact_phone" value="<?= e((string)($s['emergency_contact_phone'] ?? '')) ?>">
+                <input type="tel" name="emergency_contact_phone" value="<?= e((string)($s['emergency_contact_phone'] ?? '') ?: '+91 ') ?>" placeholder="+91 98765 43210">
             </div>
             <div class="field">
                 <label>Address</label>
