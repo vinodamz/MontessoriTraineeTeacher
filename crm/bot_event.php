@@ -151,14 +151,14 @@ try {
             $moved  = true;
             $target = 'lost';
             $replyText = crm_wa_substitute(
-                'Thank you for letting us know, {parent_name}. We wish {child_name} all the best — '
-                . 'and we are always here if you change your mind. 🌸', $vars);
+                'Thanks for telling us, {parent_name}. All the best to {child_name}, '
+                . 'and if you ever want to look again, just message here 🌸', $vars);
         } elseif (!in_array($current, $TERMINAL, true)) {
             // Step 1: ask why before closing the lead.
             $askReason = true;
             $replyText = crm_wa_substitute(
-                'No problem at all, {parent_name}. So we can keep improving — may I ask what '
-                . 'made you decide not to proceed?', $vars);
+                'No worries at all, {parent_name}. Just so we can do better, '
+                . 'may I ask what held you back? Fees, distance, or something else?', $vars);
         }
     } elseif (isset($STAGE_FOR[$intent]) && !in_array($current, $TERMINAL, true)) {
         $dest = $STAGE_FOR[$intent];
