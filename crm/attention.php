@@ -105,7 +105,7 @@ try {
     $gq = $pdo->prepare("
         SELECT id, primary_name, primary_phone, status, last_inbound_at
         FROM inquiry_families
-        WHERE status NOT IN ('enrolled', 'lost', 'waitlisted')
+        WHERE status NOT IN ('enrolled', 'lost', 'waitlisted', 'future_intake')
           AND last_inbound_at IS NOT NULL
           AND last_inbound_at <= NOW() - INTERVAL :d DAY
           AND quiet_reminded_at IS NULL

@@ -60,6 +60,7 @@ if ($phone === '') {
 $STAGE_FOR = [
     'interested'     => 'new',
     'asked_details'  => 'details_shared',        // asked about fees/programmes/timings
+    'wants_call'     => 'call_requested',         // tapped "Talk to us" / asked for a call
     'wants_visit'    => 'tour_scheduled',
     'ready'          => 'application_submitted',  // ready to admit / enrol
     'not_interested' => 'lost',
@@ -143,16 +144,29 @@ try {
         }
     } elseif ($intent === 'not_interested') {
         if ($reason !== '') {
-            // Step 2: capture the reason and mark Lost.
+            // Step 2: capture the reason. "Not this year" parents are a future
+            // intake, not a lost lead — park them for next admissions season.
             $lr = crm_map_lost_reason($reason);
-            $pdo->prepare("UPDATE inquiry_families SET status='lost', lost_reason=:lr, probability=0 WHERE id=:id")
-                ->execute([':lr' => $lr, ':id' => $leadId]);
-            crm_audit_log('bot_marked_lost', $leadId, ['from' => $current, 'reason' => $lr, 'note' => mb_substr($reason, 0, 200)]);
-            $moved  = true;
-            $target = 'lost';
-            $replyText = crm_wa_substitute(
-                'Thanks for telling us, {parent_name}. All the best to {child_name}, '
-                . 'and if you ever want to look again, just message here 🌸', $vars);
+            if ($lr === 'timing') {
+                $pdo->prepare("UPDATE inquiry_families SET status='future_intake', lost_reason=NULL, probability=:p WHERE id=:id")
+                    ->execute([':p' => crm_default_probability('future_intake'), ':id' => $leadId]);
+                crm_audit_log('bot_future_intake', $leadId, ['from' => $current, 'note' => mb_substr($reason, 0, 200)]);
+                $moved  = true;
+                $target = 'future_intake';
+                $wa = crm_stage_wa('future_intake');
+                $replyText = $wa['wa_text'] !== ''
+                    ? crm_wa_substitute($wa['wa_text'], $vars)
+                    : crm_wa_substitute('That\'s completely fine, {parent_name}. We\'ll reach out before next admissions open 😊', $vars);
+            } else {
+                $pdo->prepare("UPDATE inquiry_families SET status='lost', lost_reason=:lr, probability=0 WHERE id=:id")
+                    ->execute([':lr' => $lr, ':id' => $leadId]);
+                crm_audit_log('bot_marked_lost', $leadId, ['from' => $current, 'reason' => $lr, 'note' => mb_substr($reason, 0, 200)]);
+                $moved  = true;
+                $target = 'lost';
+                $replyText = crm_wa_substitute(
+                    'Thanks for telling us, {parent_name}. All the best to {child_name}, '
+                    . 'and if you ever want to look again, just message here 🌸', $vars);
+            }
         } elseif (!in_array($current, $TERMINAL, true)) {
             // Step 1: ask why before closing the lead.
             $askReason = true;
