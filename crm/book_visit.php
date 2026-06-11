@@ -29,6 +29,14 @@ $submitted = false;
 $errors    = [];
 $when      = null;
 
+// Post/Redirect/Get: success renders from ?booked=<ts> so a refresh can never
+// re-submit the form (that's how duplicate appointments were born).
+if (isset($_GET['booked'])) {
+    $t = strtotime((string)$_GET['booked']);
+    $submitted = true;
+    $when = $t ? date('Y-m-d H:i:s', $t) : null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Honeypot — bots fill hidden fields, humans don't. Pretend success.
     if (trim($_POST['website_url'] ?? '') !== '') {
@@ -90,22 +98,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute([':id' => $leadId]);
             }
 
-            // The appointment itself (+ touchpoint so the timeline tells the story).
-            $pdo->prepare("INSERT INTO crm_appointments
-                    (family_id, scheduled_at, child_name, programme, status, source)
-                 VALUES (:f, :w, :c, :pr, 'booked', CONCAT('web:', :ip))")
-                ->execute([':f' => $leadId, ':w' => $when,
-                           ':c' => $child !== '' ? substr($child, 0, 120) : null,
-                           ':pr' => $prog !== '' ? substr($prog, 0, 60) : null,
-                           ':ip' => substr($ipHash, 0, 16)]);
-            $pdo->prepare("INSERT INTO inquiry_touchpoints (family_id, kind, occurred_at, body, created_by)
-                           VALUES (:f, 'tour', NOW(), :b, NULL)")
-                ->execute([':f' => $leadId,
-                           ':b' => 'Visit booked online for ' . date('D, M j \a\t g:i a', strtotime($when))
-                                 . ($prog !== '' ? " · programme: $prog" : '')]);
+            // One upcoming visit per family: a second booking RESCHEDULES the
+            // existing one instead of stacking a new row. Re-submitting the
+            // same slot is a clean no-op (idempotent against double-taps).
+            $ex = $pdo->prepare("SELECT id, scheduled_at FROM crm_appointments
+                                 WHERE family_id = :f AND status = 'booked' AND scheduled_at >= NOW()
+                                 ORDER BY scheduled_at ASC LIMIT 1");
+            $ex->execute([':f' => $leadId]);
+            $existing  = $ex->fetch();
+            $sameSlot  = $existing && (string)$existing['scheduled_at'] === $when;
+
+            if ($sameSlot) {
+                // Nothing to do — already booked for exactly this time.
+            } elseif ($existing) {
+                $pdo->prepare("UPDATE crm_appointments
+                               SET scheduled_at = :w,
+                                   child_name = COALESCE(NULLIF(:c, ''), child_name),
+                                   programme  = COALESCE(NULLIF(:pr, ''), programme)
+                               WHERE id = :id")
+                    ->execute([':w' => $when, ':c' => substr($child, 0, 120),
+                               ':pr' => substr($prog, 0, 60), ':id' => (int)$existing['id']]);
+                $pdo->prepare("INSERT INTO inquiry_touchpoints (family_id, kind, occurred_at, body, created_by)
+                               VALUES (:f, 'tour', NOW(), :b, NULL)")
+                    ->execute([':f' => $leadId,
+                               ':b' => 'Visit rescheduled online to ' . date('D, M j \a\t g:i a', strtotime($when))]);
+            } else {
+                $pdo->prepare("INSERT INTO crm_appointments
+                        (family_id, scheduled_at, child_name, programme, status, source)
+                     VALUES (:f, :w, :c, :pr, 'booked', CONCAT('web:', :ip))")
+                    ->execute([':f' => $leadId, ':w' => $when,
+                               ':c' => $child !== '' ? substr($child, 0, 120) : null,
+                               ':pr' => $prog !== '' ? substr($prog, 0, 60) : null,
+                               ':ip' => substr($ipHash, 0, 16)]);
+                $pdo->prepare("INSERT INTO inquiry_touchpoints (family_id, kind, occurred_at, body, created_by)
+                               VALUES (:f, 'tour', NOW(), :b, NULL)")
+                    ->execute([':f' => $leadId,
+                               ':b' => 'Visit booked online for ' . date('D, M j \a\t g:i a', strtotime($when))
+                                     . ($prog !== '' ? " · programme: $prog" : '')]);
+            }
 
             // Best-effort WhatsApp confirmation (in-window text or template).
             try {
+                if ($sameSlot) throw new RuntimeException('already-confirmed');
                 $vars = crm_wa_vars_for_families([$leadId])[$leadId] ?? [];
                 if (($vars['parent_name'] ?? '') === '') $vars['parent_name'] = $name;
                 if ($child !== '') $vars['child_name'] = $child;
@@ -119,7 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Booking still stands even if the confirmation can't send.
             }
 
-            $submitted = true;
+            // Redirect so refresh/back can never re-submit (PRG).
+            redirect('/crm/book_visit.php?booked=' . urlencode($when));
         }
     }
 }

@@ -222,6 +222,15 @@ require __DIR__ . '/../includes/header.php';
                 <td><a href="/crm/view.php?id=<?= (int)$a['family_id'] ?>"><?= e((string)$a['primary_name']) ?></a>
                     <small class="muted"> · <?= e((string)$a['primary_phone']) ?></small></td>
                 <td><?= e((string)($a['child_name'] ?: '—')) ?><?= $a['programme'] ? ' <small class="muted">(' . e((string)$a['programme']) . ')</small>' : '' ?></td>
+                <td style="white-space:nowrap;">
+                    <form method="post" style="display:inline;"
+                          onsubmit="return confirm('Cancel this visit?');">
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="appointment_id" value="<?= (int)$a['id'] ?>">
+                        <input type="hidden" name="set_status" value="cancelled">
+                        <button class="btn btn-small btn-ghost">Cancel</button>
+                    </form>
+                </td>
             </tr>
         <?php endforeach; ?>
         </tbody>
