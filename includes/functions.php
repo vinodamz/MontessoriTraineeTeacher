@@ -173,7 +173,8 @@ function wacrm_send_to_lead(
     string $text = '',
     string $template = '',
     string $lang = 'en_US',
-    array $vars = []
+    array $vars = [],
+    array $documents = []
 ): array {
     $base   = external_app_url('wacrm');
     $secret = (string)app_setting('wacrm_sso_secret', '');
@@ -184,7 +185,7 @@ function wacrm_send_to_lead(
     if (trim($phone) === '') {
         return ['ok' => false, 'status' => 0, 'sent' => null, 'error' => 'No phone number on this lead.'];
     }
-    if ($text === '' && $template === '') {
+    if ($text === '' && $template === '' && !$documents) {
         return ['ok' => false, 'status' => 0, 'sent' => null,
                 'error' => 'This stage has no WhatsApp text or template configured.'];
     }
@@ -197,6 +198,11 @@ function wacrm_send_to_lead(
         $body['template_name']     = $template;
         $body['template_language'] = $lang !== '' ? $lang : 'en_US';
         $body['template_params']   = wacrm_template_params($template, $vars);
+    }
+    if ($documents) {
+        // [{link, filename, caption}] — WACRM sends each as a WhatsApp document
+        // (delivered only inside the 24h session window, like free text).
+        $body['documents'] = array_values($documents);
     }
 
     $ch = curl_init(rtrim($base, '/') . '/api/whatsapp/send-to-lead');

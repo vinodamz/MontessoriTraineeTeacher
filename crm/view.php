@@ -75,12 +75,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $parentName = $vars['parent_name'];
         $text = $wa['wa_text'] !== '' ? crm_wa_substitute($wa['wa_text'], $vars) : '';
 
+        // Stage PDFs (wa_docs) ride along — prospectus, joining guide, etc.
+        $docs = [];
+        foreach (crm_stage_docs((string)$f['status']) as $doc) {
+            $doc['caption'] = crm_wa_substitute($doc['caption'], $vars);
+            $docs[] = $doc;
+        }
+
         $res = wacrm_send_to_lead(
             $phone,
             $text,
             $wa['wa_template'],
             $wa['wa_template_lang'],
-            $vars
+            $vars,
+            $docs
         );
         if ($res['ok']) {
             crm_audit_log('wa_sent', $id, ['stage' => $f['status'], 'mode' => $res['sent']]);
