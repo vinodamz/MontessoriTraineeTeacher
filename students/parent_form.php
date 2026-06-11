@@ -69,7 +69,14 @@ $flash = ['ok' => '', 'err' => ''];
 // ---------------------------------------------------------------------------
 // POST: save.
 // ---------------------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILES)
+    && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    // The browser sent more than PHP's post_max_size — PHP silently dropped
+    // the whole request body. Without this guard the save below would read
+    // every field as empty and wipe the child's record.
+    $flash['err'] = 'The photos were too large to upload in one go. Please try again — '
+                  . 'photos are now compressed automatically, or upload them one at a time.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $pdo = db();
         $pdo->beginTransaction();
@@ -398,6 +405,7 @@ function parent_form_render_shell(string $title, callable $body): void
 <main>
 <?php $body(); ?>
 </main>
+<script src="/assets/js/image-shrink.js"></script>
 </body>
 </html>
     <?php
@@ -486,7 +494,7 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
                     <span class="photo-thumb" style="background-image:url('<?= e(student_photo_url((string)$s['photo_path'])) ?>');"></span>
                     <span class="small">A photo is on file. Upload a new one to replace it.</span>
                 <?php endif; ?>
-                <input type="file" name="child_photo" accept="image/jpeg,image/png,image/webp">
+                <input type="file" name="child_photo" data-shrink accept="image/jpeg,image/png,image/webp">
             </div>
         </div>
 
@@ -526,7 +534,7 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
                         <span class="photo-thumb" style="background-image:url('<?= e(student_photo_url((string)$p['photo_path'])) ?>');"></span>
                         <span class="small">A photo is on file. Upload a new one to replace it.</span>
                     <?php endif; ?>
-                    <input type="file" name="<?= e($rel) ?>_photo" accept="image/jpeg,image/png,image/webp">
+                    <input type="file" name="<?= e($rel) ?>_photo" data-shrink accept="image/jpeg,image/png,image/webp">
                 </div>
             </div>
         <?php endforeach; ?>
@@ -590,7 +598,7 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
                             <span class="pill" style="background:#d8efd8; color:#2c5f2c; font-size:.7rem;">✓ on file</span>
                         <?php endif; ?>
                     </label>
-                    <input type="file" name="<?= e($field) ?>" accept="application/pdf,image/jpeg,image/png">
+                    <input type="file" name="<?= e($field) ?>" data-shrink accept="application/pdf,image/jpeg,image/png">
                 </div>
             <?php endforeach; ?>
         </div>
