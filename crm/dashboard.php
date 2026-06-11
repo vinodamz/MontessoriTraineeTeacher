@@ -75,9 +75,11 @@ try {
     foreach (db()->query("SELECT status, COUNT(*) AS n FROM inquiry_families GROUP BY status") as $r) {
         $byStatus[$r['status']] = (int)$r['n'];
     }
-    foreach (crm_pipeline_statuses() as $code => $label) {
+    foreach (crm_pipeline_statuses() as $code => $meta) {
         $funnelCodes[]  = $code;
-        $funnelLabels[] = $label;
+        // crm_statuses() values are arrays (label, probability, is_open) —
+        // pushing the raw value charted as "[object Object]".
+        $funnelLabels[] = is_array($meta) ? (string)($meta['label'] ?? $code) : (string)$meta;
         $funnelCounts[] = $byStatus[$code] ?? 0;
     }
 } catch (Throwable $e) {}
