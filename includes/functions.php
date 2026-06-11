@@ -154,10 +154,15 @@ function wacrm_launch_url(): string
 function wacrm_template_params(string $template, array $vars): array
 {
     $orders = [
-        'welcome_admissions'   => ['parent_name', 'school_name'],
-        'visit_invitation'     => ['parent_name', 'school_name'],
-        'post_visit_followup'  => ['parent_name', 'school_name', 'child_name'],
-        'admission_next_steps' => ['parent_name', 'child_name', 'school_name'],
+        'welcome_admissions'      => ['parent_name', 'school_name'],
+        'visit_invitation'        => ['parent_name', 'school_name'],
+        'post_visit_followup'     => ['parent_name', 'school_name', 'child_name'],
+        'admission_next_steps'    => ['parent_name', 'child_name', 'school_name'],
+        // v2 — humanized bodies + URL/call buttons; same variable order as v1.
+        'welcome_admissions_v2'   => ['parent_name', 'school_name'],
+        'visit_invitation_v2'     => ['parent_name', 'school_name'],
+        'post_visit_followup_v2'  => ['parent_name', 'school_name', 'child_name'],
+        'admission_next_steps_v2' => ['parent_name', 'child_name', 'school_name'],
     ];
     $order = $orders[$template] ?? ['parent_name'];
     return array_map(static fn($k) => (string) ($vars[$k] ?? ''), $order);
