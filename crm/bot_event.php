@@ -47,6 +47,9 @@ $name    = trim((string) ($in['name'] ?? ''));
 $intent  = strtolower(trim((string) ($in['intent'] ?? 'unclear')));
 $summary = trim((string) ($in['summary'] ?? ($in['message'] ?? '')));
 $reason  = trim((string) ($in['reason'] ?? ''));
+// 'whatsapp' (default) or 'web' — web events (e.g. fees-page views) move the
+// pipeline but never trigger the WhatsApp intro and log as notes, not chats.
+$channel = strtolower(trim((string) ($in['channel'] ?? 'whatsapp')));
 
 if ($phone === '') {
     http_response_code(400);
@@ -108,11 +111,12 @@ try {
                    SET last_inbound_at = NOW(), quiet_reminded_at = NULL
                    WHERE id = :id")->execute([':id' => $leadId]);
 
-    // 3. Log the message as a touchpoint (kind 'sms' = SMS / WhatsApp).
+    // 3. Log the message as a touchpoint ('sms' = WhatsApp chat; web events are notes).
     if ($summary !== '') {
         $pdo->prepare("INSERT INTO inquiry_touchpoints (family_id, kind, occurred_at, body, created_by)
-                       VALUES (:f, 'sms', NOW(), :b, NULL)")
-            ->execute([':f' => $leadId, ':b' => mb_substr($summary, 0, 2000)]);
+                       VALUES (:f, :k, NOW(), :b, NULL)")
+            ->execute([':f' => $leadId, ':k' => $channel === 'web' ? 'note' : 'sms',
+                       ':b' => mb_substr($summary, 0, 2000)]);
     }
 
     // 4. Resolve substitution vars for any outbound message.
@@ -128,9 +132,11 @@ try {
     $intro     = false;
 
     // 5. Decide the move.
-    if ($current === 'lead') {
-        // First interaction with this lead — send the intro + buttons and mark
-        // 'Intro sent'. n8n turns $intro into an interactive list menu.
+    if ($current === 'lead' && $channel !== 'web') {
+        // First WhatsApp interaction with this lead — send the intro + buttons
+        // and mark 'Intro sent'. n8n turns $intro into an interactive list menu.
+        // Web events skip this: a fees-page view should never fake an intro;
+        // their intent (asked_details) moves the lead directly instead.
         $dest = 'intro_sent';
         $pdo->prepare("UPDATE inquiry_families SET status=:s, probability=:p WHERE id=:id")
             ->execute([':s' => $dest, ':p' => crm_default_probability($dest), ':id' => $leadId]);
