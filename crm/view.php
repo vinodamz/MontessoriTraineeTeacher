@@ -452,6 +452,37 @@ require __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
+<?php
+// School-visit appointments for this family (migrate_031; guarded pre-migration).
+$appointments = [];
+try {
+    $ap = db()->prepare("SELECT * FROM crm_appointments WHERE family_id = :id ORDER BY scheduled_at DESC LIMIT 10");
+    $ap->execute([':id' => $id]);
+    $appointments = $ap->fetchAll();
+} catch (Throwable $e) { /* table not migrated yet */ }
+if ($appointments): ?>
+    <div class="card" style="border-left: 4px solid #2c6ecb;">
+        <h3 style="margin-top:0;">🗓️ School visits</h3>
+        <table class="table">
+            <tbody>
+            <?php foreach ($appointments as $a):
+                $aSt = (string)$a['status'];
+                $cMap = ['booked' => '#2c6ecb', 'done' => '#1da851', 'cancelled' => '#999', 'no_show' => '#c0392b'];
+                $cLbl = ['booked' => 'Booked', 'done' => 'Done ✓', 'cancelled' => 'Cancelled', 'no_show' => 'No-show'];
+                $c = $cMap[$aSt] ?? '#666';
+            ?>
+                <tr>
+                    <td style="white-space:nowrap;"><?= e(date('D, M j · g:i a', strtotime((string)$a['scheduled_at']))) ?></td>
+                    <td><?= e((string)($a['child_name'] ?: '')) ?><?= $a['programme'] ? ' <small class="muted">(' . e((string)$a['programme']) . ')</small>' : '' ?></td>
+                    <td><span style="background:<?= $c ?>1a; color:<?= $c ?>; border:1px solid <?= $c ?>55; border-radius:99px; padding:.1rem .6rem; font-size:.8em;"><?= e($cLbl[$aSt] ?? $aSt) ?></span></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="muted" style="font-size:.85em; margin:0;">Manage today's visits on the <a href="/crm/today.php">Today view</a>.</p>
+    </div>
+<?php endif; ?>
+
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 1 1 320px;">
         <h3>Contact</h3>

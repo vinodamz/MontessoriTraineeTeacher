@@ -23,6 +23,43 @@ require_once __DIR__ . '/../includes/crm.php';
 $user = require_module('crm');
 
 $pdo      = db();
+
+// ---- school-visit appointment actions (Done / No-show / Cancel) ------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['appointment_id'])) {
+    csrf_check();
+    $aid    = (int)$_POST['appointment_id'];
+    $status = (string)($_POST['set_status'] ?? '');
+    if ($aid > 0 && in_array($status, ['done', 'cancelled', 'no_show'], true)) {
+        $row = $pdo->prepare("SELECT family_id FROM crm_appointments WHERE id = :id");
+        $row->execute([':id' => $aid]);
+        $famId = (int)$row->fetchColumn();
+        if ($famId) {
+            $pdo->prepare("UPDATE crm_appointments SET status = :s WHERE id = :id")
+                ->execute([':s' => $status, ':id' => $aid]);
+            crm_audit_log('appointment_' . $status, $famId, null, 'appointment', $aid);
+            if ($status === 'done') {
+                // Visit happened — move forward + start the 3-day follow-up clock.
+                $cur = $pdo->prepare("SELECT status FROM inquiry_families WHERE id = :id");
+                $cur->execute([':id' => $famId]);
+                $st = (string)$cur->fetchColumn();
+                if (!in_array($st, ['enrolled', 'lost'], true)
+                    && crm_stage_rank('school_visited') > crm_stage_rank($st)) {
+                    $pdo->prepare("UPDATE inquiry_families
+                                   SET status='school_visited', visited_at=NOW(),
+                                       post_visit_reminded_at=NULL, probability=:p
+                                   WHERE id=:id")
+                        ->execute([':p' => crm_default_probability('school_visited'), ':id' => $famId]);
+                    crm_audit_log('visit_marked', $famId, ['via' => 'today_view']);
+                } else {
+                    $pdo->prepare("UPDATE inquiry_families SET visited_at=NOW(), post_visit_reminded_at=NULL WHERE id=:id")
+                        ->execute([':id' => $famId]);
+                }
+            }
+            flash_set('ok', 'Appointment updated.');
+        }
+    }
+    redirect('/crm/today.php');
+}
 $openCsv  = "'" . implode("','", crm_open_statuses()) . "'";
 
 // Common SELECT — touchpoint rows joined to the family.
@@ -102,6 +139,21 @@ function stagnant_age(?string $ts): string
     return $d . ' days ago';
 }
 
+// ---- school-visit appointments (booked via /crm/book_visit.php) ------------
+// try/catch so the page still loads if migrate_031 hasn't run yet.
+$apptToday = $apptUpcoming = [];
+try {
+    $apptSelect = "
+        SELECT a.*, f.primary_name, f.primary_phone, f.status AS lead_status
+        FROM crm_appointments a
+        JOIN inquiry_families f ON f.id = a.family_id";
+    $apptToday = $pdo->query("$apptSelect WHERE DATE(a.scheduled_at) = CURDATE()
+        ORDER BY a.scheduled_at ASC")->fetchAll();
+    $apptUpcoming = $pdo->query("$apptSelect WHERE DATE(a.scheduled_at) > CURDATE()
+        AND DATE(a.scheduled_at) <= CURDATE() + INTERVAL 7 DAY AND a.status = 'booked'
+        ORDER BY a.scheduled_at ASC")->fetchAll();
+} catch (Throwable $e) { /* table not migrated yet */ }
+
 $pageTitle = "Today — Admissions";
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -110,14 +162,72 @@ require __DIR__ . '/../includes/header.php';
     <div>
         <h1>Today</h1>
         <p class="muted">
+            <?= count($apptToday) ?> visit<?= count($apptToday) === 1 ? '' : 's' ?> today ·
             <?= count($overdue) ?> overdue · <?= count($today) ?> due today ·
             <?= count($week) ?> this week · <?= count($stagnant) ?> stagnant
         </p>
     </div>
     <div class="actionbar">
+        <a class="btn" href="/crm/book_visit.php" target="_blank" title="The public booking page — open it to book on a parent's behalf">+ Book a visit</a>
         <a class="btn" href="/crm/index.php">Pipeline →</a>
     </div>
 </div>
+
+<section class="card">
+    <h3>🗓️ School visits today <span class="muted small">(<?= count($apptToday) ?>)</span></h3>
+    <?php if (!$apptToday): ?>
+        <p class="muted">No visits booked for today.</p>
+    <?php else: ?>
+        <table class="table">
+            <thead><tr><th>Time</th><th>Family</th><th>Child / programme</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <?php foreach ($apptToday as $a):
+                $aSt = (string)$a['status'];
+                $cMap = ['booked' => '#2c6ecb', 'done' => '#1da851', 'cancelled' => '#999', 'no_show' => '#c0392b'];
+                $cLbl = ['booked' => 'Booked', 'done' => 'Done ✓', 'cancelled' => 'Cancelled', 'no_show' => 'No-show'];
+                $c = $cMap[$aSt] ?? '#666';
+            ?>
+                <tr>
+                    <td style="white-space:nowrap; font-weight:600;"><?= e(date('g:i a', strtotime((string)$a['scheduled_at']))) ?></td>
+                    <td><a href="/crm/view.php?id=<?= (int)$a['family_id'] ?>"><?= e((string)$a['primary_name']) ?></a><br>
+                        <small class="muted"><?= e((string)$a['primary_phone']) ?> · <?= e(crm_status_label((string)$a['lead_status'])) ?></small></td>
+                    <td><?= e((string)($a['child_name'] ?: '—')) ?><?= $a['programme'] ? '<br><small class="muted">' . e((string)$a['programme']) . '</small>' : '' ?></td>
+                    <td><span style="background:<?= $c ?>1a; color:<?= $c ?>; border:1px solid <?= $c ?>55; border-radius:99px; padding:.1rem .6rem; font-size:.8em;"><?= e($cLbl[$aSt] ?? $aSt) ?></span></td>
+                    <td style="white-space:nowrap;">
+                        <?php if ($aSt === 'booked'): foreach ([['done', 'Done ✓', 'btn-primary'], ['no_show', 'No-show', ''], ['cancelled', 'Cancel', 'btn-ghost']] as [$s, $lbl, $cls]): ?>
+                            <form method="post" style="display:inline;">
+                                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="appointment_id" value="<?= (int)$a['id'] ?>">
+                                <input type="hidden" name="set_status" value="<?= e($s) ?>">
+                                <button class="btn btn-small <?= e($cls) ?>"><?= e($lbl) ?></button>
+                            </form>
+                        <?php endforeach; endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="muted" style="font-size:.85em;">Marking <strong>Done ✓</strong> moves the lead to School visited and starts the 3-day follow-up reminder.</p>
+    <?php endif; ?>
+</section>
+
+<?php if ($apptUpcoming): ?>
+<section class="card">
+    <h3>📅 Visits in the next 7 days <span class="muted small">(<?= count($apptUpcoming) ?>)</span></h3>
+    <table class="table">
+        <tbody>
+        <?php foreach ($apptUpcoming as $a): ?>
+            <tr>
+                <td style="white-space:nowrap;"><?= e(date('D, M j · g:i a', strtotime((string)$a['scheduled_at']))) ?></td>
+                <td><a href="/crm/view.php?id=<?= (int)$a['family_id'] ?>"><?= e((string)$a['primary_name']) ?></a>
+                    <small class="muted"> · <?= e((string)$a['primary_phone']) ?></small></td>
+                <td><?= e((string)($a['child_name'] ?: '—')) ?><?= $a['programme'] ? ' <small class="muted">(' . e((string)$a['programme']) . ')</small>' : '' ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+</section>
+<?php endif; ?>
 
 <?php
 function render_followup_card(string $heading, array $rows, string $emptyText, array $waVarsByFam, ?array $statusLabels = null): void
