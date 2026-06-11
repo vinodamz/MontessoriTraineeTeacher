@@ -178,7 +178,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="card">
     <h3 style="margin-top:0;">Pipeline right now <span class="muted small">· click a bar to open that stage on the board</span></h3>
-    <canvas id="chart-funnel" height="110"></canvas>
+    <div class="chart-box-tall"><canvas id="chart-funnel"></canvas></div>
 </div>
 
 <div class="card">
@@ -191,14 +191,14 @@ require __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
         </span>
     </h3>
-    <canvas id="chart-trend" height="110"></canvas>
+    <div class="chart-box"><canvas id="chart-trend"></canvas></div>
 </div>
 
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 1 1 320px;">
         <h3 style="margin-top:0;">Where families come from</h3>
         <?php if ($srcCounts): ?>
-            <canvas id="chart-sources" height="220"></canvas>
+            <div class="chart-box"><canvas id="chart-sources"></canvas></div>
         <?php else: ?>
             <p class="muted">No source data yet.</p>
         <?php endif; ?>
@@ -206,7 +206,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="card" style="flex: 1 1 320px;">
         <h3 style="margin-top:0;">Why we lose inquiries</h3>
         <?php if ($lostCounts): ?>
-            <canvas id="chart-lost" height="220"></canvas>
+            <div class="chart-box"><canvas id="chart-lost"></canvas></div>
         <?php else: ?>
             <p class="muted">No lost inquiries — nothing to chart. 🎉</p>
         <?php endif; ?>
@@ -216,6 +216,7 @@ require __DIR__ . '/../includes/header.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 (() => {
+    if (typeof Chart === 'undefined') return;   // CDN failed — leave the page usable
     const PINK = '#e91e63', PINK_SOFT = 'rgba(233,30,99,.18)', GREEN = '#66bb6a',
           PALETTE = ['#e91e63','#66bb6a','#42a5f5','#f5b342','#ab47bc','#26a69a','#ef5350','#8d6e63'];
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
@@ -231,6 +232,7 @@ require __DIR__ . '/../includes/header.php';
                 datasets: [{ data: <?= json_encode($funnelCounts) ?>, backgroundColor: PALETTE, borderRadius: 5 }]
             },
             options: {
+                maintainAspectRatio: false,
                 indexAxis: 'y',
                 plugins: { legend: { display: false } },
                 scales: { x: { ticks: { precision: 0 } } },
@@ -255,7 +257,7 @@ require __DIR__ . '/../includes/header.php';
                       borderColor: GREEN, backgroundColor: GREEN, tension: .3, pointRadius: 4 }
                 ]
             },
-            options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+            options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
         });
     }
 

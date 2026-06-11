@@ -191,12 +191,12 @@ require __DIR__ . '/../includes/header.php';
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 2 1 360px;">
         <h3 style="margin-top:0;">Children per class <span class="muted small">· click a bar to open that class</span></h3>
-        <canvas id="chart-grades" height="140"></canvas>
+        <div class="chart-box"><canvas id="chart-grades"></canvas></div>
     </div>
     <div class="card" style="flex: 1 1 280px;">
         <h3 style="margin-top:0;">Why children leave</h3>
         <?php if ($wdCounts): ?>
-            <canvas id="chart-withdrawals" height="200"></canvas>
+            <div class="chart-box"><canvas id="chart-withdrawals"></canvas></div>
         <?php else: ?>
             <p class="muted">No withdrawals recorded. 🎉</p>
         <?php endif; ?>
@@ -206,7 +206,7 @@ require __DIR__ . '/../includes/header.php';
 <div class="card">
     <h3 style="margin-top:0;">Attendance rate — last 30 school days</h3>
     <?php if ($attRates): ?>
-        <canvas id="chart-attendance" height="100"></canvas>
+        <div class="chart-box"><canvas id="chart-attendance"></canvas></div>
     <?php else: ?>
         <p class="muted">No attendance marked in the last 30 days.</p>
     <?php endif; ?>
@@ -222,7 +222,7 @@ require __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
         </span>
     </h3>
-    <canvas id="chart-joiners" height="100"></canvas>
+    <div class="chart-box"><canvas id="chart-joiners"></canvas></div>
 </div>
 
 <?php if ($birthdaysThisMonth): ?>
@@ -240,6 +240,7 @@ require __DIR__ . '/../includes/header.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 (() => {
+    if (typeof Chart === 'undefined') return;   // CDN failed — leave the page usable
     const PINK = '#e91e63', GREEN = '#66bb6a',
           PALETTE = ['#e91e63','#66bb6a','#42a5f5','#f5b342','#ab47bc','#26a69a','#ef5350','#8d6e63'];
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
@@ -256,6 +257,7 @@ require __DIR__ . '/../includes/header.php';
                              backgroundColor: ['#f5b342','#66bb6a','#42a5f5','#e91e63'], borderRadius: 6 }]
             },
             options: {
+                maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
                 onClick: (evt, els) => {
@@ -278,6 +280,7 @@ require __DIR__ . '/../includes/header.php';
                              fill: true, tension: .3, pointRadius: 3 }]
             },
             options: {
+                maintainAspectRatio: false,
                 plugins: { legend: { display: false },
                            tooltip: { callbacks: { label: c => c.parsed.y + '% present' } } },
                 scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }
@@ -296,7 +299,8 @@ require __DIR__ . '/../includes/header.php';
                              backgroundColor: 'rgba(233,30,99,.18)', borderColor: PINK,
                              borderWidth: 1.5, borderRadius: 5 }]
             },
-            options: { plugins: { legend: { display: false } },
+            options: { maintainAspectRatio: false,
+                       plugins: { legend: { display: false } },
                        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
         });
     }

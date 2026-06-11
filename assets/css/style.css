@@ -1352,3 +1352,14 @@ a.admin-tile:hover {
     .page-head .actionbar { flex-wrap: wrap; gap: .35rem; }
     .page-head .actionbar > .btn-primary { flex: 1 1 100%; text-align: center; }
 }
+
+/* Dashboards: fixed-height chart wrappers. Chart.js with
+ * maintainAspectRatio:false REQUIRES a height-constrained parent —
+ * a bare canvas in a flex card creates a grow-on-every-frame resize
+ * loop that pegs the CPU and "hangs" the page. */
+.chart-box      { position: relative; height: 240px; }
+.chart-box-tall { position: relative; height: 320px; }
+@media (max-width: 640px) {
+    .chart-box      { height: 200px; }
+    .chart-box-tall { height: 260px; }
+}
