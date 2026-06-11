@@ -61,21 +61,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            db()->prepare("
-                INSERT INTO inquiry_families
-                    (primary_name, primary_phone, primary_email,
-                     status, priority, probability, campaign_id, source, notes, ip_hash)
-                VALUES (:n, :p, :e, 'lead', 'normal', :prob, :c, :s, :msg, :ip)
-            ")->execute([
-                ':n'    => $name,
-                ':p'    => $phone ?: null,
-                ':e'    => $email ?: null,
-                ':prob' => crm_default_probability('lead'),
-                ':c'    => $campaign['id'] ?? null,
-                ':s'    => $campaign ? null : 'public_form',
-                ':msg'  => $msg ?: null,
-                ':ip'   => $ipHash,
-            ]);
+            // Upsert: a returning parent (same phone, any format) updates their
+            // existing lead instead of creating a duplicate.
+            $existing = $phone !== '' ? crm_find_lead_by_phone($phone) : null;
+            if ($existing) {
+                db()->prepare("
+                    UPDATE inquiry_families
+                    SET notes = CONCAT(COALESCE(notes, ''), '\n', :m),
+                        primary_email = COALESCE(primary_email, :e)
+                    WHERE id = :id
+                ")->execute([
+                    ':m'  => '[' . date('Y-m-d H:i') . '] Enquiry form: ' . ($msg !== '' ? $msg : 're-submitted'),
+                    ':e'  => $email ?: null,
+                    ':id' => $existing,
+                ]);
+            } else {
+                db()->prepare("
+                    INSERT INTO inquiry_families
+                        (primary_name, primary_phone, primary_email,
+                         status, priority, probability, campaign_id, source, notes, ip_hash)
+                    VALUES (:n, :p, :e, 'lead', 'normal', :prob, :c, :s, :msg, :ip)
+                ")->execute([
+                    ':n'    => $name,
+                    ':p'    => $phone ?: null,
+                    ':e'    => $email ?: null,
+                    ':prob' => crm_default_probability('lead'),
+                    ':c'    => $campaign['id'] ?? null,
+                    ':s'    => $campaign ? null : 'public_form',
+                    ':msg'  => $msg ?: null,
+                    ':ip'   => $ipHash,
+                ]);
+            }
             $submitted = true;
         }
     }

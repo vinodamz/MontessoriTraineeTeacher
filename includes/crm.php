@@ -330,6 +330,31 @@ function crm_wa_substitute(string $body, array $vars): string
 }
 
 /**
+ * Find an existing lead by phone — format-proof (matches on the last 10
+ * digits, so "+91 70289…", "9170289…" and "70289…" all resolve to the same
+ * family). Prefers an open lead, then the most recent. The single source of
+ * truth for "does this parent already exist?" — every ingest path must use it
+ * so no entry point creates duplicates.
+ */
+function crm_find_lead_by_phone(string $phone): ?int
+{
+    $last10 = substr(preg_replace('/\D/', '', $phone), -10);
+    if ($last10 === '') return null;
+    try {
+        $st = db()->prepare("
+            SELECT id FROM inquiry_families
+            WHERE RIGHT(REGEXP_REPLACE(COALESCE(primary_phone,''), '[^0-9]', ''), 10) = :d
+            ORDER BY (status NOT IN ('lost','enrolled')) DESC, created_at DESC
+            LIMIT 1");
+        $st->execute([':d' => $last10]);
+        $id = $st->fetchColumn();
+        return $id ? (int) $id : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
  * Per-stage WhatsApp message config (migrate_027). Drives the "Send via
  * WhatsApp CRM" button on each lead: the lead's current stage decides which
  * text/template gets sent. Returns blanks if unset or the columns are missing

@@ -46,27 +46,22 @@ if ($name === '' && $phone === '') {
 if ($name === '') $name = $phone;
 
 try {
-    // Dedupe: same phone seen in the last 14 days -> append, don't duplicate.
-    if ($phone !== '') {
-        $dup = db()->prepare("
-            SELECT id FROM inquiry_families
-            WHERE primary_phone = :p AND created_at > NOW() - INTERVAL 14 DAY
-            ORDER BY created_at DESC LIMIT 1
-        ");
-        $dup->execute([':p' => $phone]);
-        $existing = $dup->fetchColumn();
-        if ($existing) {
-            db()->prepare("
-                UPDATE inquiry_families
-                SET notes = CONCAT(COALESCE(notes, ''), '\n', :m)
-                WHERE id = :id
-            ")->execute([
-                ':m'  => '[' . date('Y-m-d H:i') . '] ' . ($msg !== '' ? $msg : $source),
-                ':id' => $existing,
-            ]);
-            echo json_encode(['ok' => true, 'deduped' => true, 'id' => (int) $existing]);
-            exit;
-        }
+    // Dedupe: any existing lead for this phone (format-proof, no time window)
+    // gets updated — never duplicated.
+    $existing = $phone !== '' ? crm_find_lead_by_phone($phone) : null;
+    if ($existing) {
+        db()->prepare("
+            UPDATE inquiry_families
+            SET notes = CONCAT(COALESCE(notes, ''), '\n', :m),
+                primary_email = COALESCE(primary_email, :e)
+            WHERE id = :id
+        ")->execute([
+            ':m'  => '[' . date('Y-m-d H:i') . '] ' . ($msg !== '' ? $msg : $source),
+            ':e'  => ($email !== '' ? $email : null),
+            ':id' => $existing,
+        ]);
+        echo json_encode(['ok' => true, 'deduped' => true, 'id' => (int) $existing]);
+        exit;
     }
 
     db()->prepare("
