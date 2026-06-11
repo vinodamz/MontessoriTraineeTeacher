@@ -355,26 +355,20 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn" href="/crm/edit.php?id=<?= $id ?>">Edit</a>
         <a class="btn" href="/fees/guide.php?inquiry_id=<?= $id ?>" title="Generate personalised fee guide for this family">Fee Guide</a>
         <?php
-            // "Send via WhatsApp CRM" — show on any lead with a phone once the
-            // CRM is configured and migrate_027 has run. If this stage has no
-            // message yet, the op=wa_send handler points to Pipeline → Stages.
+            // "Send via WhatsApp CRM" — preview-first: the button reveals a
+            // panel showing exactly what will go out (resolved text, attached
+            // PDFs, template fallback); the real send lives inside the panel.
             $waConfigured = external_app_url('wacrm') !== '' && (string)app_setting('wacrm_sso_secret', '') !== '';
-            if ($family['primary_phone'] && $waConfigured && crm_stage_wa_ready()):
+            $waCanSend = $family['primary_phone'] && $waConfigured && crm_stage_wa_ready();
+            if ($waCanSend):
                 $waStageMsg = crm_stage_wa((string)$family['status']);
                 $waHasMsg   = $waStageMsg['wa_text'] !== '' || $waStageMsg['wa_template'] !== '';
-                $waConfirm  = $waHasMsg
-                    ? 'Send the &quot;' . e(crm_status_label((string)$family['status'])) . '&quot; WhatsApp message to ' . e($family['primary_phone']) . ' via the WhatsApp CRM?'
-                    : 'This stage has no WhatsApp message yet — you can set one in Pipeline → Stages. Continue anyway?';
         ?>
-            <form method="post" style="display:inline;"
-                  onsubmit="return confirm('<?= $waConfirm ?>');">
-                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-                <input type="hidden" name="op" value="wa_send">
-                <button class="btn" style="background:#25d366; border-color:#1da851; color:#fff;"
-                        title="Send this stage's WhatsApp message — free text within 24h, approved template otherwise">
-                    Send via WhatsApp CRM<?= $waHasMsg ? '' : ' *' ?>
-                </button>
-            </form>
+            <button type="button" class="btn" style="background:#25d366; border-color:#1da851; color:#fff;"
+                    title="Preview this stage's WhatsApp message before sending"
+                    onclick="document.getElementById('wa-preview').style.display='block'; document.getElementById('wa-preview').scrollIntoView({behavior:'smooth', block:'nearest'});">
+                Send via WhatsApp CRM<?= $waHasMsg ? '' : ' *' ?>
+            </button>
         <?php endif; ?>
         <?php
             // "Mark visit done" — you conduct the visit, then tap this to start
@@ -398,6 +392,47 @@ require __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+
+<?php if (!empty($waCanSend)):
+    // Resolve the preview exactly like the op=wa_send handler will.
+    $pv = $waVars;
+    if (($pv['parent_name'] ?? '') === '') $pv['parent_name'] = (string)$family['primary_name'];
+    $pv['stage'] = crm_status_label((string)$family['status']);
+    $pv = crm_wa_defaults($pv);
+    $waPreviewText = $waStageMsg['wa_text'] !== '' ? crm_wa_substitute($waStageMsg['wa_text'], $pv) : '';
+    $waPreviewDocs = crm_stage_docs((string)$family['status']);
+?>
+    <div id="wa-preview" class="card" style="display:none; border-left:4px solid #25d366;">
+        <h3 style="margin-top:0;">Preview — WhatsApp to <?= e($family['primary_phone']) ?>
+            <small class="muted" style="font-weight:normal;">· "<?= e(crm_status_label((string)$family['status'])) ?>" stage</small></h3>
+        <?php if ($waPreviewText !== ''): ?>
+            <div style="background:#e7ffe9; border:1px solid #bfe8c5; border-radius:10px; padding:.7rem .9rem; max-width:34rem; white-space:pre-wrap;"><?= e($waPreviewText) ?></div>
+        <?php else: ?>
+            <p class="muted">This stage has no in-window text yet — set one in <a href="/crm/stages.php">Pipeline → Stages</a>.</p>
+        <?php endif; ?>
+        <?php if ($waPreviewDocs): ?>
+            <p style="margin:.6rem 0 0;">📎 Attached:
+                <?php foreach ($waPreviewDocs as $i => $d): ?><?= $i ? ' · ' : '' ?><?= e($d['filename'] !== '' ? $d['filename'] : basename($d['link'])) ?><?php endforeach; ?>
+            </p>
+        <?php endif; ?>
+        <p class="muted" style="margin:.6rem 0 0; font-size:.85em;">
+            <?php if ($waStageMsg['wa_template'] !== ''): ?>
+                If the parent hasn't messaged within 24h, the approved template
+                <code><?= e($waStageMsg['wa_template']) ?></code> goes out instead<?= $waPreviewDocs ? ' (attachments deliver only inside the 24h window)' : '' ?>.
+            <?php else: ?>
+                Delivers only if the parent messaged within the last 24h — this stage has no fallback template.
+            <?php endif; ?>
+        </p>
+        <div style="margin-top:.8rem; display:flex; gap:.5rem;">
+            <form method="post" style="display:inline;">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op" value="wa_send">
+                <button class="btn" style="background:#25d366; border-color:#1da851; color:#fff;">Send now</button>
+            </form>
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('wa-preview').style.display='none';">Cancel</button>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php if ($isLead): ?>
     <div class="flash flash-ok" style="background:#fdf0d3; border-color:#f0c98a; color:#78420a;">
