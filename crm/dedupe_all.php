@@ -41,7 +41,6 @@ try {
         FROM inquiry_families
         WHERE COALESCE(primary_phone,'') <> ''
           AND NOT (status = 'lost' AND lost_reason = 'duplicate')
-        ORDER BY (status NOT IN ('lost','enrolled')) DESC, created_at DESC
     ")->fetchAll();
 
     $groups = [];
@@ -50,6 +49,21 @@ try {
         $groups[$r['p10']][] = $r;
     }
     $groups = array_filter($groups, fn($g) => count($g) > 1);
+
+    // Keeper = the most advanced record: not-lost first, then furthest along
+    // the pipeline (an 'offered' lead beats a fresh 'intro_sent' duplicate),
+    // then most recent. The keeper keeps its stage — merging never downgrades.
+    foreach ($groups as &$g) {
+        usort($g, function ($a, $b) {
+            $aLost = (int) ($a['status'] === 'lost');
+            $bLost = (int) ($b['status'] === 'lost');
+            if ($aLost !== $bLost) return $aLost <=> $bLost;
+            $rank = crm_stage_rank($b['status']) <=> crm_stage_rank($a['status']);
+            if ($rank !== 0) return $rank;
+            return strcmp((string) $b['created_at'], (string) $a['created_at']);
+        });
+    }
+    unset($g);
 
     $apply = false;
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
