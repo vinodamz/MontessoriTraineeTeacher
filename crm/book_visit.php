@@ -25,6 +25,22 @@ function visit_slots(): array
     return ['10:00', '10:30', '11:00', '11:30', '12:00', '15:30', '16:00', '16:30', '17:00'];
 }
 
+/** JSON mode — used by the marketing-site proxy (server-to-server). */
+function visit_wants_json(): bool
+{
+    return (($_POST['format'] ?? '') === 'json')
+        || stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
+}
+
+/** Emit a JSON response and stop. */
+function visit_json(array $payload, int $code = 200): void
+{
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($payload);
+    exit;
+}
+
 $submitted = false;
 $errors    = [];
 $when      = null;
@@ -40,6 +56,7 @@ if (isset($_GET['booked'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Honeypot — bots fill hidden fields, humans don't. Pretend success.
     if (trim($_POST['website_url'] ?? '') !== '') {
+        if (visit_wants_json()) visit_json(['ok' => true]);
         $submitted = true;
     } else {
         $name  = trim($_POST['name']  ?? '');
@@ -57,7 +74,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (!in_array($slot, visit_slots(), true)) $errors[] = 'Pick a time slot.';
 
-        $ipHash = hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        // A trusted proxy (the marketing site) forwards the real client IP plus
+        // the shared secret, so per-parent rate limiting still holds for proxied
+        // bookings instead of collapsing onto the proxy server's single IP.
+        $clientIp = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        $secret   = (string) app_setting('wacrm_sso_secret', '');
+        $provided = (string) ($_SERVER['HTTP_X_LEAD_SECRET'] ?? '');
+        if ($secret !== '' && hash_equals($secret, $provided)) {
+            $xff = trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''))[0]);
+            if ($xff !== '') $clientIp = $xff;
+        }
+        $ipHash = hash('sha256', $clientIp);
         if (!$errors) {
             $recent = db()->prepare("
                 SELECT COUNT(*) FROM crm_appointments
@@ -153,10 +180,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Booking still stands even if the confirmation can't send.
             }
 
-            // Redirect so refresh/back can never re-submit (PRG).
+            // JSON for the proxy; PRG redirect for the standalone HTML page.
+            if (visit_wants_json()) visit_json(['ok' => true, 'booked_at' => $when]);
             redirect('/crm/book_visit.php?booked=' . urlencode($when));
         }
     }
+}
+
+// JSON callers (the marketing-site proxy) get validation/rate-limit failures as
+// JSON, never the HTML page.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors && visit_wants_json()) {
+    visit_json(['ok' => false, 'error' => implode(' ', $errors)], 422);
 }
 
 $pageTitle = 'Book a school visit — ' . app_name();

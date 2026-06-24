@@ -50,6 +50,9 @@ $reason  = trim((string) ($in['reason'] ?? ''));
 // 'whatsapp' (default) or 'web' — web events (e.g. fees-page views) move the
 // pipeline but never trigger the WhatsApp intro and log as notes, not chats.
 $channel = strtolower(trim((string) ($in['channel'] ?? 'whatsapp')));
+// Lead attribution — website forms pass source='website'; default keeps bot intake.
+$source  = strtolower(trim((string) ($in['source'] ?? 'whatsapp_bot')));
+if (!in_array($source, ['whatsapp_bot', 'website'], true)) $source = 'whatsapp_bot';
 
 if ($phone === '') {
     http_response_code(400);
@@ -92,11 +95,12 @@ try {
     if (!$lead) {
         $pdo->prepare("INSERT INTO inquiry_families
                 (primary_name, primary_phone, status, priority, probability, source, last_inbound_at)
-             VALUES (:n, :p, 'lead', 'normal', :prob, 'whatsapp_bot', NOW())")
+             VALUES (:n, :p, 'lead', 'normal', :prob, :src, NOW())")
             ->execute([
                 ':n'    => substr($name !== '' ? $name : $phone, 0, 160),
                 ':p'    => $phone,
                 ':prob' => crm_default_probability('lead'),
+                ':src'  => $source,
             ]);
         $leadId  = (int) $pdo->lastInsertId();
         $current = 'lead';
