@@ -15,6 +15,9 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
     <meta name="theme-color" content="#FFF8F0">
     <meta name="csrf-token" content="<?= e(function_exists('csrf_token') ? csrf_token() : '') ?>">
     <title><?= e($pageTitle ?? app_name()) ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap">
     <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e($v) ?>">
     <link rel="stylesheet" href="/assets/css/style.css?v=<?= e($v) ?>">
 </head>

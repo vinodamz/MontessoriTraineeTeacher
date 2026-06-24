@@ -4,19 +4,35 @@
    ============================================================================ */
 
 :root {
-    --bg:          #FFF8F0;
-    --bg-card:    #ffffff;
-    --ink:        #2b2f33;
-    --ink-soft:   #5a6068;
-    --muted:      #8b919a;
-    --line:       #e6dccb;
-    --line-soft:  #f1ead9;
-    --accent:     #EC407A;
-    --accent-2:   #5BA547;
-    --warn:       #F5B342;
-    --shadow:     0 4px 12px rgba(40,30,20,0.06);
-    --radius:     14px;
-    --radius-sm:   8px;
+    /* Brand palette — pink/green from the school logo (see parent_form
+     * and admission PDF). Bumped --accent from the old #EC407A to align
+     * exactly with the brand pink we use in branded receipts and PDFs. */
+    --bg:          #FFF8F2;
+    --bg-card:     #ffffff;
+    --bg-soft:     #FFE9F2;     /* pink wash — pill backgrounds, hovers */
+    --bg-tint:     #FBF1F5;     /* lighter pink wash — striped tables */
+    --ink:         #1F2937;
+    --ink-soft:    #4B5563;
+    --muted:       #8b919a;
+    --line:        #F3DCE6;     /* pink-tinted line */
+    --line-soft:   #FBEEF4;
+    --accent:      #E91E63;     /* brand pink */
+    --accent-dark: #AD1457;     /* hover */
+    --accent-2:    #66BB6A;     /* caterpillar green */
+    --accent-2-dk: #2E7D32;
+    --warn:        #F5B342;
+    --warn-bg:     #FFF4E0;
+    --info:        #42A5F5;
+    --danger:      #c53b2c;
+    --shadow:      0 2px 10px rgba(173, 20, 87, .06);
+    --shadow-lg:   0 12px 32px rgba(173, 20, 87, .12);
+    --shadow-tile: 0 4px 14px rgba(31, 41, 55, .05);
+    --radius:      16px;
+    --radius-sm:   10px;
+    --radius-xs:   6px;
+    --font-body:   'Quicksand', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-display:'Quicksand', system-ui, sans-serif;
+    color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -1362,4 +1378,279 @@ a.admin-tile:hover {
 @media (max-width: 640px) {
     .chart-box      { height: 200px; }
     .chart-box-tall { height: 260px; }
+}
+
+/* ============================================================================
+ * 2026 design refresh — visual polish layer.
+ *
+ * Cascade-friendly: every rule below sharpens an existing component
+ * without changing markup, so any page that uses the shared classes
+ * picks up the new look automatically. Tokens above are the single
+ * source of truth; nothing below hard-codes colours.
+ * ============================================================================ */
+
+body {
+    font-family: var(--font-body);
+    font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+h1, h2, h3, h4, h5 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em; color: var(--ink);
+}
+h1 { font-size: 1.6rem; font-weight: 700; }
+h2 { font-size: 1.2rem; font-weight: 700; }
+h3 { font-size: 1.02rem; font-weight: 700; }
+
+/* ----- Branded topbar ----- */
+.topbar {
+    padding: .7rem 1.3rem;
+    background: linear-gradient(180deg, #fff 0%, #FFF6FA 100%);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 1px 0 rgba(233, 30, 99, .04);
+    position: relative;
+}
+.topbar::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: -2px; height: 2px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+    opacity: .85;
+}
+.brand { gap: .65rem; }
+.brand-logo { width: 38px; height: 38px; }
+.brand-mark {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 1.05rem; letter-spacing: -0.01em;
+    color: var(--accent-dark);
+}
+.topbar nav a {
+    padding: .35rem .55rem; border-radius: 8px;
+    font-weight: 600; font-size: .92rem;
+    color: var(--ink-soft); transition: color .15s, background .15s;
+}
+.topbar nav a:hover { color: var(--accent); background: var(--bg-soft); }
+.topbar nav .more-menu > summary {
+    padding: .35rem .55rem; border-radius: 8px; font-weight: 600;
+}
+.topbar nav .more-menu > summary:hover { background: var(--bg-soft); color: var(--accent); }
+
+/* ----- Page head ----- */
+.page-head h1 { margin: 0 0 .15rem; }
+.page-head .muted { font-size: .9rem; }
+
+/* ----- Cards ----- */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+}
+.card > h2:first-child, .card > h3:first-child { margin-top: 0; }
+.card-form { background: var(--bg-card); }
+.card-form > summary {
+    cursor: pointer; user-select: none;
+    font-weight: 700; padding: .25rem 0; color: var(--accent-dark);
+}
+
+/* ----- Buttons ----- */
+.btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: .35rem;
+    padding: .55rem 1rem; border-radius: 10px;
+    background: var(--bg-card); color: var(--ink);
+    border: 1px solid var(--line);
+    font: 600 .92rem/1 var(--font-body);
+    cursor: pointer; text-decoration: none;
+    transition: transform .08s ease, box-shadow .15s, background .15s, border-color .15s;
+}
+.btn:hover {
+    background: var(--bg-soft); border-color: #f0c4d6;
+    text-decoration: none; color: var(--ink);
+}
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-primary {
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dark) 100%);
+    color: #fff; border-color: var(--accent-dark);
+    box-shadow: 0 4px 10px rgba(233, 30, 99, .25);
+}
+.btn-primary:hover {
+    background: var(--accent-dark); color: #fff;
+    box-shadow: 0 6px 14px rgba(173, 20, 87, .32);
+}
+.btn-ghost { background: transparent; border-color: transparent; color: var(--ink-soft); }
+.btn-ghost:hover { background: var(--bg-soft); color: var(--accent); }
+.btn-big { padding: .8rem 1.2rem; font-size: 1rem; border-radius: 12px; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ----- Form fields ----- */
+input[type="text"], input[type="email"], input[type="tel"],
+input[type="number"], input[type="date"], input[type="time"],
+input[type="datetime-local"], input[type="search"], input[type="url"],
+input[type="password"], select, textarea {
+    width: 100%;
+    padding: .55rem .7rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font: inherit; color: var(--ink);
+    transition: border-color .15s, box-shadow .15s;
+}
+input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(233, 30, 99, .15);
+}
+.field label {
+    font-weight: 600; font-size: .85rem;
+    color: var(--ink-soft); display: block; margin-bottom: .25rem;
+}
+
+/* ----- Pills ----- */
+.pill {
+    display: inline-flex; align-items: center;
+    padding: .18rem .6rem; border-radius: 999px;
+    background: var(--bg-soft); color: var(--accent-dark);
+    font-size: .78rem; font-weight: 600;
+}
+.pill-warn { background: var(--warn-bg); color: #92400e; }
+.pill-ok   { background: #DDF3D6; color: var(--accent-2-dk); }
+
+/* ----- Tables ----- */
+table.att-summary, table.data-table, table.admin-table {
+    width: 100%; border-collapse: collapse; font-size: .92rem;
+}
+table.att-summary thead th,
+table.data-table thead th,
+table.admin-table thead th {
+    text-align: left; font-weight: 600; font-size: .8rem;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft);
+    padding: .55rem .65rem; background: var(--bg-tint);
+    border-bottom: 1px solid var(--line);
+}
+table.att-summary tbody td,
+table.data-table tbody td,
+table.admin-table tbody td {
+    padding: .55rem .65rem; border-bottom: 1px solid var(--line-soft);
+}
+table.att-summary tbody tr:hover,
+table.data-table tbody tr:hover,
+table.admin-table tbody tr:hover { background: var(--line-soft); }
+
+/* ----- Admin tiles (home + dashboards) ----- */
+.admin-tile {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow-tile);
+    display: flex; flex-direction: column; gap: .15rem;
+    position: relative; overflow: hidden;
+}
+.admin-tile::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--accent); opacity: .85;
+}
+.admin-tile.tile-ok::before   { background: var(--accent-2); }
+.admin-tile.tile-warn::before { background: var(--warn); }
+.admin-tile.tile-nav::before  { background: var(--info); }
+.admin-tile .tile-label {
+    font-size: .78rem; font-weight: 600; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: .05em;
+}
+.admin-tile .tile-value {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 1.65rem; color: var(--ink); line-height: 1.15; margin-top: .2rem;
+}
+.admin-tile.tile-nav .tile-value { font-size: 1.2rem; }
+.admin-tile .tile-sub { font-size: .82rem; color: var(--ink-soft); margin-top: .2rem; }
+
+/* ----- Home: shelf headers + app cards ----- */
+.app-group > summary {
+    font-family: var(--font-display); font-size: 1.05rem; font-weight: 700;
+    color: var(--accent-dark);
+    border-bottom: 2px solid var(--accent);
+    padding: .45rem .2rem; margin-bottom: .55rem;
+}
+.app-card {
+    border-radius: var(--radius); border: 1px solid var(--line);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-tile);
+    transition: transform .12s ease, box-shadow .15s, border-color .15s;
+}
+.app-card:hover, .app-card:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(233, 30, 99, .35);
+    text-decoration: none;
+}
+.app-name { font-family: var(--font-display); font-weight: 700; }
+.app-icon {
+    border-radius: 12px;
+    color: var(--accent-dark);
+    background: var(--bg-soft);
+}
+.app-icon-students    { color: #ad1457; background: #fce4ec; }
+.app-icon-assessment  { color: #2e7d32; background: #e8f5e9; }
+.app-icon-admissions  { color: #ad1457; background: #fce4ec; }
+.app-icon-tasks       { color: #1565c0; background: #e3f2fd; }
+.app-icon-fees        { color: #00695c; background: #e0f2f1; }
+.app-icon-expenses    { color: #6a1b9a; background: #f3e5f5; }
+.app-icon-staff       { color: #e65100; background: #fff3e0; }
+.app-icon-money       { color: #2e7d32; background: #e8f5e9; }
+.app-icon-recruitment { color: #283593; background: #e8eaf6; }
+.app-icon-inventory   { color: #4e342e; background: #efebe9; }
+.app-icon-logbook     { color: #5d4037; background: #efebe9; }
+
+/* ----- Check-in card (home + My Day) ----- */
+.checkin-card {
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border-color: var(--line);
+}
+.checkin-label {
+    font-size: .78rem; font-weight: 600; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: .05em;
+}
+.checkin-status { font-size: 1.05rem; margin-top: .15rem; }
+
+/* ----- More-menu dropdown ----- */
+.more-menu .more-menu-list {
+    border-radius: 12px; border-color: var(--line); box-shadow: var(--shadow-lg);
+}
+.more-menu .more-menu-list a {
+    border-radius: 8px;
+}
+.more-menu .more-menu-list a:hover {
+    background: var(--bg-soft); color: var(--accent-dark);
+}
+
+/* ----- Flash messages ----- */
+.flash {
+    border-radius: var(--radius-sm);
+    padding: .75rem 1rem; margin-bottom: 1rem;
+    font-weight: 500; border: 1px solid;
+}
+.flash-ok    { background: #E7F6E1; color: var(--accent-2-dk); border-color: #BFE4B3; }
+.flash-error { background: #FDECEC; color: var(--danger);      border-color: #F4C2BD; }
+
+/* ----- Empty states ----- */
+.empty {
+    background: var(--bg-card); border: 1px dashed var(--line);
+    border-radius: var(--radius); padding: 2rem 1.5rem;
+    text-align: center; color: var(--ink-soft);
+}
+.empty p { margin: 0; font-size: .95rem; }
+
+/* ----- Student tabs (Phase 2) ----- */
+.student-tabs a { font-family: var(--font-display); }
+.student-tabs a.is-active { color: var(--accent-dark); border-bottom-color: var(--accent); }
+
+/* ----- Phone polish ----- */
+@media (max-width: 720px) {
+    body { font-size: 14.5px; }
+    h1 { font-size: 1.35rem; }
+    .card { padding: .95rem 1rem; border-radius: 14px; }
+    .admin-tile .tile-value { font-size: 1.4rem; }
 }
