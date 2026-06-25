@@ -662,25 +662,34 @@ CREATE TABLE logbook_entries (
 -- Inventory module — stock items + an append-only movement ledger.
 -- See includes/inventory.php.
 CREATE TABLE inventory_items (
-    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    name          VARCHAR(160) NOT NULL,
-    category      VARCHAR(40)  NOT NULL DEFAULT 'other',
-    sku           VARCHAR(60)  NULL,
-    unit          VARCHAR(20)  NOT NULL DEFAULT 'pcs',
-    quantity      DECIMAL(10,2) NOT NULL DEFAULT 0,
-    reorder_level DECIMAL(10,2) NOT NULL DEFAULT 0,
-    location      VARCHAR(80)  NULL,
-    unit_cost     DECIMAL(10,2) NULL,
-    supplier      VARCHAR(120) NULL,
-    notes         TEXT         NULL,
-    is_active     TINYINT(1)   NOT NULL DEFAULT 1,
-    created_by    INT UNSIGNED NULL,
-    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    sku              VARCHAR(60)  NULL,                  -- Item ID (master spec)
+    name             VARCHAR(160) NOT NULL,
+    category         VARCHAR(60)  NOT NULL DEFAULT 'Other',
+    sub_category     VARCHAR(60)  NULL,                  -- validated app-side per category
+    quantity         DECIMAL(10,2) NOT NULL DEFAULT 0,
+    unit             VARCHAR(20)  NOT NULL DEFAULT 'Nos',
+    reorder_level    DECIMAL(10,2) NOT NULL DEFAULT 0,
+    purchase_date    DATE         NULL,
+    unit_cost        DECIMAL(10,2) NULL,                 -- per unit
+    supplier         VARCHAR(120) NULL,
+    location         VARCHAR(80)  NULL,
+    `condition`      ENUM('new','good','repair_needed','damaged') NOT NULL DEFAULT 'good',
+    assigned_to      VARCHAR(120) NULL,
+    last_stock_check DATE         NULL,
+    status           ENUM('active','issued','lost','damaged','disposed') NOT NULL DEFAULT 'active',
+    notes            TEXT         NULL,
+    is_active        TINYINT(1)   NOT NULL DEFAULT 1,    -- shadowed by status; kept for legacy queries
+    created_by       INT UNSIGNED NULL,
+    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_inv_sku    (sku),
     KEY idx_inv_category (category),
-    KEY idx_inv_active (is_active),
-    KEY idx_inv_name (name),
+    KEY idx_inv_active   (is_active),
+    KEY idx_inv_name     (name),
+    KEY idx_inv_status   (status),
+    KEY idx_inv_check    (last_stock_check),
     CONSTRAINT fk_inv_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

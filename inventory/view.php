@@ -1,7 +1,12 @@
 <?php
 /**
- * inventory/view.php — item detail + stock movement (in / out / adjust)
- * + the full movement ledger.
+ * inventory/view.php — read-only profile of one inventory item.
+ *
+ *   GET ?id=N                       → show item details + movement history
+ *   POST op=mark_checked            → set last_stock_check to today
+ *   POST op=set_status, status=…    → retire (lost/damaged/disposed) or reinstate
+ *
+ * Movement history is the same ledger used by inventory_move().
  */
 declare(strict_types=1);
 
@@ -10,158 +15,158 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/inventory.php';
 
 $user = require_module('inventory');
-$pdo  = db();
 
-$id = (int)($_GET['id'] ?? 0);
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($id <= 0) { redirect('/inventory/index.php'); }
 
+// Quick actions for fast stock checks on the phone.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    $id   = (int)($_POST['id'] ?? 0);
-    $kind = $_POST['kind'] ?? '';
-    $qty  = (float)($_POST['quantity'] ?? 0);
-    $reason = $_POST['reason'] ?? '';
-    $note   = trim($_POST['note'] ?? '');
-    if ($reason !== '' && !array_key_exists($reason, inventory_reasons($kind === 'adjust' ? 'adjust' : $kind))) {
-        $reason = '';
-    }
+    $op = $_POST['op'] ?? '';
     try {
-        inventory_move($id, $kind, $qty, $reason ?: null, $note ?: null, (int)$user['id']);
-        $verb = $kind === 'in' ? 'Stock added' : ($kind === 'out' ? 'Stock removed' : 'Stock adjusted');
-        flash_set('ok', "$verb.");
+        if ($op === 'mark_checked') {
+            db()->prepare("UPDATE inventory_items SET last_stock_check = CURDATE() WHERE id = :id")
+                ->execute([':id' => $id]);
+            flash_set('ok', 'Marked as verified today.');
+        } elseif ($op === 'set_status') {
+            $st = (string)($_POST['status'] ?? '');
+            if (!array_key_exists($st, inventory_statuses())) throw new RuntimeException('Bad status');
+            db()->prepare("UPDATE inventory_items SET status = :s, is_active = IF(:s2='active',1,0) WHERE id = :id")
+                ->execute([':s' => $st, ':s2' => $st, ':id' => $id]);
+            flash_set('ok', 'Status updated to ' . inventory_status_label($st) . '.');
+        }
     } catch (Throwable $e) {
-        flash_set('error', 'Could not record movement: ' . $e->getMessage());
+        flash_set('error', $e->getMessage());
     }
     redirect('/inventory/view.php?id=' . $id);
 }
 
-$stmt = $pdo->prepare("SELECT i.*, u.name AS by_name FROM inventory_items i LEFT JOIN users u ON u.id = i.created_by WHERE i.id = :id");
-$stmt->execute([':id' => $id]);
-$it = $stmt->fetch();
-if (!$it) { http_response_code(404); echo 'Item not found.'; exit; }
+$s = db()->prepare("SELECT * FROM inventory_items WHERE id = :id");
+$s->execute([':id' => $id]);
+$item = $s->fetch();
+if (!$item) { http_response_code(404); echo 'Item not found.'; exit; }
 
-$mv = $pdo->prepare("
-    SELECT m.*, u.name AS by_name
-    FROM inventory_movements m LEFT JOIN users u ON u.id = m.moved_by
-    WHERE m.item_id = :id ORDER BY m.created_at DESC, m.id DESC LIMIT 100
+$ms = db()->prepare("
+    SELECT m.*, u.name AS moved_by_name
+    FROM   inventory_movements m
+    LEFT JOIN users u ON u.id = m.moved_by
+    WHERE  m.item_id = :id
+    ORDER  BY m.created_at DESC, m.id DESC
+    LIMIT  50
 ");
-$mv->execute([':id' => $id]);
-$moves = $mv->fetchAll();
+$ms->execute([':id' => $id]);
+$moves = $ms->fetchAll();
 
-$low = $it['reorder_level'] > 0 && $it['quantity'] <= $it['reorder_level'];
-$pageTitle = $it['name'] . ' — Inventory';
+$isLow = $item['status'] === 'active' && (float)$item['reorder_level'] > 0
+      && (float)$item['quantity'] <= (float)$item['reorder_level'];
+$check = $item['last_stock_check'];
+$isDue = $item['status'] === 'active'
+      && ($check === null || $check < (new DateTime('-90 days'))->format('Y-m-d'));
+
+$pageTitle = (string)$item['name'];
 require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
     <div>
-        <h1><?= e($it['name']) ?></h1>
+        <h1><?= e($item['name']) ?>
+            <?php if ($isLow): ?> <span class="pill pill-warn">Reorder</span><?php endif; ?>
+            <?php if ($isDue): ?> <span class="pill pill-warn">Due for check</span><?php endif; ?>
+        </h1>
         <p class="muted">
-            <a href="/inventory/index.php">← Inventory</a> ·
-            <?= e(inventory_category_label($it['category'])) ?>
-            <?php if ($it['sku']): ?> · <?= e($it['sku']) ?><?php endif; ?>
+            <?php if (!empty($item['sku'])): ?>#<?= e($item['sku']) ?> · <?php endif; ?>
+            <?= e($item['category']) ?>
+            <?php if (!empty($item['sub_category'])): ?> · <?= e($item['sub_category']) ?><?php endif; ?>
+            · <span class="pill"><?= e(inventory_status_label((string)$item['status'])) ?></span>
         </p>
     </div>
     <div class="actionbar">
-        <a class="btn" href="/inventory/edit.php?id=<?= $id ?>">Edit item</a>
+        <a class="btn btn-ghost" href="/inventory/index.php">← Inventory</a>
+        <a class="btn btn-primary" href="/inventory/edit.php?id=<?= (int)$item['id'] ?>">Edit</a>
     </div>
 </div>
 
-<div class="row" style="align-items:stretch;">
-    <div class="card" style="flex:1 1 240px;">
-        <h3>Current stock</h3>
-        <p style="font-size:2rem; font-weight:700; margin:.2rem 0;">
-            <?= e(inventory_qty((float)$it['quantity'])) ?> <span style="font-size:1rem; font-weight:400; color:var(--muted);"><?= e($it['unit']) ?></span>
-            <?php if ($low): ?><span class="pill pill-warn">low</span><?php endif; ?>
+<div class="row" style="align-items: stretch;">
+    <div class="card" style="flex: 1 1 280px;">
+        <h2 style="margin-top:0;">Stock</h2>
+        <p style="font-size:2rem; font-weight:800; margin:.1rem 0;">
+            <?= e(inventory_qty((float)$item['quantity'])) ?>
+            <span class="muted" style="font-size:1rem; font-weight:600;"><?= e($item['unit']) ?></span>
         </p>
-        <dl class="dl-grid">
-            <dt>Reorder at</dt><dd><?= $it['reorder_level'] > 0 ? e(inventory_qty((float)$it['reorder_level'])) . ' ' . e($it['unit']) : '—' ?></dd>
-            <dt>Unit cost</dt><dd><?= $it['unit_cost'] !== null ? e(inventory_money((float)$it['unit_cost'])) : '—' ?></dd>
-            <dt>Stock value</dt><dd><?= $it['unit_cost'] !== null ? e(inventory_money((float)$it['quantity'] * (float)$it['unit_cost'])) : '—' ?></dd>
-            <dt>Location</dt><dd><?= e($it['location'] ?? '') ?: '—' ?></dd>
-            <dt>Supplier</dt><dd><?= e($it['supplier'] ?? '') ?: '—' ?></dd>
-        </dl>
-        <?php if ($it['notes']): ?><p class="muted small" style="white-space:pre-wrap;"><?= e($it['notes']) ?></p><?php endif; ?>
+        <p class="muted small" style="margin:0;">Minimum: <?= e(inventory_qty((float)$item['reorder_level'])) ?> <?= e($item['unit']) ?></p>
+        <?php if ($item['unit_cost'] !== null): ?>
+            <p class="muted small" style="margin:.35rem 0 0;">
+                Value on hand: <strong><?= e(inventory_money((float)$item['quantity'] * (float)$item['unit_cost'])) ?></strong>
+                <span class="muted">(<?= e(inventory_money((float)$item['unit_cost'])) ?>/unit)</span>
+            </p>
+        <?php endif; ?>
     </div>
 
-    <div class="card" style="flex:1 1 320px;">
-        <h3>Record stock movement</h3>
-        <form method="post">
+    <div class="card" style="flex: 1 1 320px;">
+        <h2 style="margin-top:0;">Verification</h2>
+        <p style="margin:.2rem 0;">Last checked: <strong><?= e($check ?: 'Never') ?></strong></p>
+        <form method="post" style="display:inline-flex; gap:.4rem; margin-top:.6rem;">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-            <input type="hidden" name="id" value="<?= $id ?>">
-            <div class="row">
-                <div class="field">
-                    <label>Type</label>
-                    <select name="kind" id="mvKind">
-                        <option value="in">Stock in (+)</option>
-                        <option value="out">Stock out (−)</option>
-                        <option value="adjust">Set exact (stock-take)</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Quantity (<?= e($it['unit']) ?>)</label>
-                    <input type="number" name="quantity" min="0" step="any" required>
-                </div>
-            </div>
-            <div class="row">
-                <div class="field">
-                    <label>Reason</label>
-                    <select name="reason" id="mvReason"></select>
-                </div>
-                <div class="field" style="flex:2 1 240px;">
-                    <label>Note</label>
-                    <input type="text" name="note" maxlength="255" placeholder="optional">
-                </div>
-            </div>
-            <div class="actions"><button class="btn btn-primary" type="submit">Record</button></div>
+            <input type="hidden" name="op" value="mark_checked">
+            <button class="btn btn-primary" type="submit">I checked this today</button>
+        </form>
+        <p class="muted small" style="margin-top:.5rem;">Or set the exact date via <a href="/inventory/edit.php?id=<?= (int)$item['id'] ?>">Edit</a>.</p>
+    </div>
+
+    <div class="card" style="flex: 1 1 280px;">
+        <h2 style="margin-top:0;">Retire / reinstate</h2>
+        <p class="muted small" style="margin:.2rem 0 .6rem;">Items are never deleted — change the status instead.</p>
+        <form method="post" style="display:flex; gap:.4rem; flex-wrap:wrap;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="set_status">
+            <select name="status" style="flex:1 1 160px;">
+                <?php foreach (inventory_statuses() as $code => $label): ?>
+                    <option value="<?= e($code) ?>" <?= $item['status'] === $code ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <button class="btn" type="submit">Update status</button>
         </form>
     </div>
 </div>
 
 <div class="card">
-    <h3>Movement history</h3>
-    <?php if (!$moves): ?>
-        <p class="muted">No movements yet.</p>
-    <?php else: ?>
-        <table class="admin-table">
-            <thead><tr><th>When</th><th>Type</th><th>Qty</th><th>Balance</th><th>Reason</th><th>Note</th><th>By</th></tr></thead>
-            <tbody>
-                <?php foreach ($moves as $m):
-                    $sign = $m['kind'] === 'in' ? '+' : ($m['kind'] === 'out' ? '−' : '=');
-                    $kindLabel = ['in' => 'In', 'out' => 'Out', 'adjust' => 'Set'][$m['kind']] ?? $m['kind'];
-                ?>
-                    <tr>
-                        <td class="muted small"><?= e(date('j M Y · H:i', strtotime($m['created_at']))) ?></td>
-                        <td><span class="pill <?= $m['kind'] === 'out' ? 'pill-warn' : ($m['kind'] === 'in' ? 'pill-ok' : '') ?>"><?= e($kindLabel) ?></span></td>
-                        <td><?= e($sign) ?><?= e(inventory_qty((float)$m['quantity'])) ?></td>
-                        <td><strong><?= e(inventory_qty((float)$m['balance_after'])) ?></strong></td>
-                        <td class="muted small"><?= $m['reason'] ? e(inventory_reason_label($m['kind'] === 'adjust' ? 'adjust' : $m['kind'], $m['reason'])) : '—' ?></td>
-                        <td class="muted small"><?= e($m['note'] ?? '') ?></td>
-                        <td class="muted small"><?= e($m['by_name'] ?: '—') ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php endif; ?>
+    <h2 style="margin-top:0;">Details</h2>
+    <dl class="dl-grid">
+        <div class="dl-row"><dt>Item ID</dt><dd><?= e($item['sku'] ?? '—') ?></dd></div>
+        <div class="dl-row"><dt>Category</dt><dd><?= e($item['category']) ?><?= !empty($item['sub_category']) ? ' · ' . e($item['sub_category']) : '' ?></dd></div>
+        <div class="dl-row"><dt>Storage location</dt><dd><?= e($item['location'] ?? '—') ?></dd></div>
+        <div class="dl-row"><dt>Condition</dt><dd><?= e(inventory_condition_label((string)$item['condition'])) ?></dd></div>
+        <div class="dl-row"><dt>Purchase date</dt><dd><?= e($item['purchase_date'] ?? '—') ?></dd></div>
+        <div class="dl-row"><dt>Purchase cost</dt><dd><?= $item['unit_cost'] === null ? '—' : e(inventory_money((float)$item['unit_cost'])) . '/unit' ?></dd></div>
+        <div class="dl-row"><dt>Supplier / vendor</dt><dd><?= e($item['supplier'] ?? '—') ?></dd></div>
+        <div class="dl-row"><dt>Assigned to</dt><dd><?= e($item['assigned_to'] ?? '—') ?></dd></div>
+        <?php if (!empty($item['notes'])): ?>
+            <div class="dl-row"><dt>Remarks</dt><dd><pre class="pre-wrap"><?= e($item['notes']) ?></pre></dd></div>
+        <?php endif; ?>
+    </dl>
 </div>
 
-<script>
-// Populate the reason dropdown based on the movement type.
-(() => {
-    const reasons = {
-        in:     <?= json_encode(inventory_reasons('in'), JSON_UNESCAPED_UNICODE) ?>,
-        out:    <?= json_encode(inventory_reasons('out'), JSON_UNESCAPED_UNICODE) ?>,
-        adjust: <?= json_encode(inventory_reasons('adjust'), JSON_UNESCAPED_UNICODE) ?>,
-    };
-    const kind = document.getElementById('mvKind');
-    const rsel = document.getElementById('mvReason');
-    function fill() {
-        const map = reasons[kind.value] || {};
-        rsel.innerHTML = '<option value="">— optional —</option>' +
-            Object.entries(map).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-    }
-    kind.addEventListener('change', fill);
-    fill();
-})();
-</script>
+<?php if ($moves): ?>
+<div class="card">
+    <h2 style="margin-top:0;">Movement history</h2>
+    <table class="data-table">
+        <thead><tr><th>When</th><th>Kind</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Balance after</th><th>Reason</th><th>By</th></tr></thead>
+        <tbody>
+            <?php foreach ($moves as $m): ?>
+                <tr>
+                    <td><?= e(date('j M Y · H:i', strtotime($m['created_at']))) ?></td>
+                    <td><?= e($m['kind']) ?></td>
+                    <td style="text-align:right;"><?= e(inventory_qty((float)$m['quantity'])) ?></td>
+                    <td style="text-align:right;"><?= e(inventory_qty((float)$m['balance_after'])) ?></td>
+                    <td><?= e(inventory_reason_label((string)$m['kind'], (string)($m['reason'] ?? ''))) ?>
+                        <?php if (!empty($m['note'])): ?> <span class="muted small"><?= e($m['note']) ?></span><?php endif; ?>
+                    </td>
+                    <td><?= e($m['moved_by_name'] ?? '—') ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
