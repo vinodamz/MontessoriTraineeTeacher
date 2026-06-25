@@ -114,4 +114,48 @@ jobs:
             echo "::error::A 500 usually means a missing include or an unapplied migration — check /last-migrate.log on the site."
             exit 1
           fi
-          echo "::notice::Site is live (login + parent form boot OK)."
+
+          # ----- Inventory boot check + migration confirmation ----------------
+          # Pulls the published migration log + walks every inventory route
+          # the master-spec UI exposes. A 5xx (or the friendly-error marker)
+          # fails the deploy with a pointer at /last-migrate.log.
+          BASE="https://mtt.thelittlegraduates.in"
+          echo "--- /last-migrate.log tail ---"
+          MIG=$(curl -sS --fail-with-body --max-time 30 "$BASE/last-migrate.log?_=$(date +%s)") \
+              || { echo "::error::could not fetch /last-migrate.log"; exit 1; }
+          echo "$MIG" | tail -80
+          if ! echo "$MIG" | grep -q "migrate_031_inventory_extras.sql"; then
+            echo "::error::migrate_031 not mentioned in /last-migrate.log"
+            exit 1
+          fi
+          if ! echo "$MIG" | awk '/migrate_031_inventory_extras\.sql/{f=1; next} f && /applied/{ok=1; exit} f && /───/{exit} END{exit !ok}'; then
+            echo "::error::migrate_031 line not followed by 'applied'"
+            exit 1
+          fi
+          echo "::notice::Migration 031 ✓ applied on the live DB."
+
+          INV_FAIL=0
+          for path in \
+              "/inventory/index.php" \
+              "/inventory/index.php?view=low" \
+              "/inventory/index.php?view=due" \
+              "/inventory/index.php?view=attention" \
+              "/inventory/index.php?format=csv" \
+              "/inventory/edit.php" \
+              "/inventory/reports.php"; do
+            S=$(curl -sS -o /tmp/inv_body -w "%{http_code}" --max-time 20 "$BASE$path&_=$(date +%s)" 2>/dev/null \
+                || curl -sS -o /tmp/inv_body -w "%{http_code}" --max-time 20 "$BASE$path?_=$(date +%s)")
+            echo "  $S  $path"
+            if [ "$S" = "500" ] || [ "$S" = "502" ] || [ "$S" = "503" ]; then
+              echo "::error::$path returned $S"
+              head -c 800 /tmp/inv_body
+              INV_FAIL=1
+            fi
+            if grep -q "Something went wrong" /tmp/inv_body 2>/dev/null; then
+              echo "::error::$path rendered the friendly error page"
+              INV_FAIL=1
+            fi
+          done
+          [ $INV_FAIL -eq 0 ] || exit 1
+
+          echo "::notice::Site is live (login + parent form + inventory boot OK; migration 031 applied)."
