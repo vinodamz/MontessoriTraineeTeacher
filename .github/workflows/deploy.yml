@@ -163,3 +163,11 @@ jobs:
           [ $INV_FAIL -eq 0 ] || exit 1
 
           echo "::notice::Site is live (login + parent form + inventory boot OK; migration 031 applied)."
+
+      - name: 4/4 — Authed inventory integration test (skips without credentials)
+        env:
+          BASE: https://mtt.thelittlegraduates.in
+          SMOKE_TEST_USER_ID: ${{ secrets.SMOKE_TEST_USER_ID }}
+          SMOKE_TEST_PIN:     ${{ secrets.SMOKE_TEST_PIN }}
+        run: |
+          bash .github/scripts/smoke-inventory.sh
