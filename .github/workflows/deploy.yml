@@ -162,7 +162,20 @@ jobs:
           done
           [ $INV_FAIL -eq 0 ] || exit 1
 
-          echo "::notice::Site is live (login + parent form + inventory boot OK; migration 031 applied)."
+          # ----- Inventory master-spec assertions (runs on the cPanel host) ---
+          # .cpanel.yml curls inventory/_smoke.php from 127.0.0.1 after the
+          # rsync + migrate. The endpoint is IP-gated so only the host
+          # itself can hit it. We read the captured output here and fail
+          # the deploy if any assertion failed.
+          SMOKE=$(curl -sS --max-time 30 "$BASE/last-smoke.log?_=$(date +%s)") \
+              || { echo "::error::could not fetch /last-smoke.log"; exit 1; }
+          echo "--- /last-smoke.log ---"
+          printf '%s\n' "$SMOKE"
+          if ! printf '%s' "$SMOKE" | head -1 | grep -q '^PASS'; then
+              echo "::error::inventory master-spec smoke did NOT pass"
+              exit 1
+          fi
+          echo "::notice::Site is live (login + parent form + inventory boot OK; migration 031 applied; master-spec smoke ✓)."
 
       - name: 4/4 — Authed inventory integration test (skips without credentials)
         env:
