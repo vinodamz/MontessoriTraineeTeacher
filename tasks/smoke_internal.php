@@ -34,7 +34,31 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/tasks.php';
 
-header('Content-Type: text/plain; charset=utf-8');
+// Override the global friendly-error handler so CLI / loopback runs surface
+// fatals as FAIL lines instead of exiting silently (errors.php's handler
+// returns early in CLI mode, which earlier deploys swallowed mid-smoke).
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+set_exception_handler(function (Throwable $e): void {
+    echo "FAIL — uncaught " . get_class($e) . "\n";
+    echo "  - " . $e->getMessage() . "\n";
+    echo "  - " . $e->getFile() . ':' . $e->getLine() . "\n";
+    exit(1);
+});
+register_shutdown_function(function (): void {
+    $err = error_get_last();
+    if ($err !== null
+        && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        echo "FAIL — fatal\n";
+        echo "  - " . $err['message'] . "\n";
+        echo "  - " . ($err['file'] ?? '?') . ':' . ($err['line'] ?? '?') . "\n";
+    }
+});
+
+if (PHP_SAPI !== 'cli') {
+    header('Content-Type: text/plain; charset=utf-8');
+}
+echo "BEGIN tasks smoke (sapi=" . PHP_SAPI . ")\n";
 
 $admin = db()->query("SELECT id, name FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1")->fetch();
 if (!$admin) { http_response_code(500); exit("FAIL\n  - no active admin user found\n"); }
