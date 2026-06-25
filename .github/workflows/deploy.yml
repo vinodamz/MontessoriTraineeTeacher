@@ -182,7 +182,21 @@ jobs:
               echo "::error::inventory master-spec smoke did NOT pass (no PASS marker in /last-smoke.log)"
               exit 1
           fi
-          echo "::notice::Site is live (login + parent form + inventory boot OK; migration 031 applied; master-spec smoke ✓)."
+          # ----- Tasks master-spec assertions (same shape as inventory) -------
+          TSMOKE=$(curl -sS --max-time 30 "$BASE/last-tasks-smoke.log?_=$(date +%s)") \
+              || { echo "::error::could not fetch /last-tasks-smoke.log"; exit 1; }
+          echo "--- /last-tasks-smoke.log ---"
+          printf '%s\n' "$TSMOKE"
+          if printf '%s' "$TSMOKE" | grep -qE '^FAIL'; then
+              echo "::error::tasks master-spec smoke reported FAIL"
+              exit 1
+          fi
+          if ! printf '%s' "$TSMOKE" | grep -qE '^PASS'; then
+              echo "::error::tasks master-spec smoke did NOT pass (no PASS marker in /last-tasks-smoke.log)"
+              exit 1
+          fi
+
+          echo "::notice::Site is live (login + parent form + inventory + tasks master-spec smoke ✓)."
 
       - name: 4/4 — Authed inventory integration test (skips without credentials)
         env:

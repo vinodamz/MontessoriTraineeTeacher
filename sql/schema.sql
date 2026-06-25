@@ -25,6 +25,9 @@ DROP TABLE IF EXISTS crm_campaigns;
 DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS expenses;
 DROP TABLE IF EXISTS expense_categories;
+DROP TABLE IF EXISTS task_deletions;
+DROP TABLE IF EXISTS task_attachments;
+DROP TABLE IF EXISTS task_subtasks;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_recurrences;
 DROP TABLE IF EXISTS task_columns;
@@ -445,16 +448,67 @@ CREATE TABLE tasks (
     instance_date       DATE         NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- Soft-delete tombstone (migration 032). The Trash page reads it.
+    deleted_at          DATETIME     NULL,
     INDEX idx_status (status),
     INDEX idx_col_pos (column_id, board_position),
     INDEX idx_assigned (assigned_to_user_id),
     INDEX idx_due (due_date),
     INDEX idx_instance_date (instance_date),
+    INDEX idx_tasks_deleted (deleted_at),
     UNIQUE KEY uq_recurrence_date (recurrence_id, instance_date),
     CONSTRAINT fk_tasks_column     FOREIGN KEY (column_id)           REFERENCES task_columns(id)      ON DELETE RESTRICT,
     CONSTRAINT fk_tasks_assigned   FOREIGN KEY (assigned_to_user_id) REFERENCES users(id)             ON DELETE SET NULL,
     CONSTRAINT fk_tasks_creator    FOREIGN KEY (created_by_user_id)  REFERENCES users(id)             ON DELETE RESTRICT,
     CONSTRAINT fk_tasks_recurrence FOREIGN KEY (recurrence_id)       REFERENCES task_recurrences(id)  ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE task_subtasks (
+    id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    task_id          INT UNSIGNED NOT NULL,
+    title            VARCHAR(255) NOT NULL,
+    done             TINYINT(1)   NOT NULL DEFAULT 0,
+    assignee_user_id INT UNSIGNED NULL,
+    order_idx        INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_ts_task     (task_id, order_idx),
+    KEY idx_ts_assignee (assignee_user_id),
+    CONSTRAINT fk_ts_task FOREIGN KEY (task_id)          REFERENCES tasks(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ts_user FOREIGN KEY (assignee_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE task_attachments (
+    id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    task_id             INT UNSIGNED NOT NULL,
+    original_filename   VARCHAR(255) NOT NULL,
+    stored_filename     VARCHAR(80)  NOT NULL,
+    mime_type           VARCHAR(120) NOT NULL,
+    size_bytes          INT UNSIGNED NOT NULL,
+    uploaded_by_user_id INT UNSIGNED NOT NULL,
+    uploaded_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_ta_stored (stored_filename),
+    KEY idx_ta_task (task_id, uploaded_at),
+    CONSTRAINT fk_ta_task FOREIGN KEY (task_id)             REFERENCES tasks(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ta_user FOREIGN KEY (uploaded_by_user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Append-only deletion audit. No FK on task_id so the row survives if a
+-- task is ever hard-purged; snapshot_json holds the full task payload.
+CREATE TABLE task_deletions (
+    id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    task_id             INT UNSIGNED NOT NULL,
+    snapshot_json       MEDIUMTEXT   NOT NULL,
+    deleted_by_user_id  INT UNSIGNED NOT NULL,
+    deleted_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    restored            TINYINT(1)   NOT NULL DEFAULT 0,
+    restored_at         DATETIME     NULL,
+    restored_by_user_id INT UNSIGNED NULL,
+    KEY idx_td_task     (task_id),
+    KEY idx_td_deleted  (deleted_at),
+    KEY idx_td_restored (restored, deleted_at),
+    CONSTRAINT fk_td_user     FOREIGN KEY (deleted_by_user_id)  REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_td_restorer FOREIGN KEY (restored_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------

@@ -18,7 +18,7 @@ $hasKanban = $cols !== [];
 // Stats per column (when kanban is set up), otherwise per status (legacy).
 $colStats = [];   // [['name' => 'To do', 'color' => '#...', 'is_done' => 0, 'n' => 3], ...]
 if ($hasKanban) {
-    $counts = db()->query("SELECT column_id, COUNT(*) AS n FROM tasks WHERE column_id IS NOT NULL GROUP BY column_id")->fetchAll();
+    $counts = db()->query("SELECT column_id, COUNT(*) AS n FROM tasks WHERE column_id IS NOT NULL AND deleted_at IS NULL GROUP BY column_id")->fetchAll();
     $byCol = [];
     foreach ($counts as $r) $byCol[(int)$r['column_id']] = (int)$r['n'];
     foreach ($cols as $col) {
@@ -38,7 +38,7 @@ if ($hasKanban) {
         FROM tasks t
         LEFT JOIN users u          ON u.id   = t.assigned_to_user_id
         LEFT JOIN task_columns col ON col.id = t.column_id
-        WHERE t.assigned_to_user_id = :uid AND (col.is_done IS NULL OR col.is_done = 0)
+        WHERE t.assigned_to_user_id = :uid AND t.deleted_at IS NULL AND (col.is_done IS NULL OR col.is_done = 0)
         ORDER BY (t.due_date IS NULL), t.due_date ASC, FIELD(t.priority,'high','normal','low')
         LIMIT 10
     ");
@@ -47,7 +47,7 @@ if ($hasKanban) {
         SELECT t.*, u.name AS assignee_name, NULL AS column_name, NULL AS column_color
         FROM tasks t
         LEFT JOIN users u ON u.id = t.assigned_to_user_id
-        WHERE t.assigned_to_user_id = :uid AND t.status <> 'done'
+        WHERE t.assigned_to_user_id = :uid AND t.deleted_at IS NULL AND t.status <> 'done'
         ORDER BY (t.due_date IS NULL), t.due_date ASC, FIELD(t.priority,'high','normal','low')
         LIMIT 10
     ");
@@ -80,7 +80,10 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="actionbar">
     <h2 class="section-h">Your open tasks</h2>
-    <a class="btn btn-primary" href="tasks.php"><span class="plus">+</span> All tasks</a>
+    <a class="btn" href="/tasks/dashboard.php">Dashboard</a>
+    <a class="btn" href="/tasks/my.php">My subtasks</a>
+    <a class="btn btn-ghost" href="/tasks/trash.php">Trash</a>
+    <a class="btn btn-primary" href="/tasks/tasks.php"><span class="plus">+</span> All tasks</a>
 </div>
 
 <?php if (!$mine): ?>

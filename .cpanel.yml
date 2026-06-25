@@ -28,4 +28,6 @@ deployment:
     - /bin/cp $HOME/last-migrate.log $HOME/thelittlegraduates.in/mtt/last-migrate.log
     - cd $HOME/thelittlegraduates.in/mtt && /bin/bash inventory/run-smoke.sh > $HOME/last-smoke.log 2>&1 || echo "SMOKE WRAPPER EXIT $?" >> $HOME/last-smoke.log
     - /bin/cp $HOME/last-smoke.log $HOME/thelittlegraduates.in/mtt/last-smoke.log
+    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash tasks/run-smoke.sh > $HOME/last-tasks-smoke.log 2>&1 || echo "TASKS SMOKE WRAPPER EXIT $?" >> $HOME/last-tasks-smoke.log
+    - /bin/cp $HOME/last-tasks-smoke.log $HOME/thelittlegraduates.in/mtt/last-tasks-smoke.log
     - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log
