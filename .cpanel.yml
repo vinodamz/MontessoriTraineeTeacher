@@ -26,6 +26,6 @@ deployment:
     - /usr/bin/find $HOME/thelittlegraduates.in/mtt -name '*.php' -exec /usr/bin/touch {} +
     - cd $HOME/thelittlegraduates.in/mtt && php migrate.php > $HOME/last-migrate.log 2>&1 || echo "MIGRATE FAILED exit=$?" >> $HOME/last-migrate.log
     - /bin/cp $HOME/last-migrate.log $HOME/thelittlegraduates.in/mtt/last-migrate.log
-    - curl -sS --max-time 30 -H "Host: mtt.thelittlegraduates.in" http://127.0.0.1/inventory/_smoke.php > $HOME/last-smoke.log 2>&1 || echo "SMOKE EXIT $?" >> $HOME/last-smoke.log
+    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash inventory/run-smoke.sh > $HOME/last-smoke.log 2>&1 || echo "SMOKE WRAPPER EXIT $?" >> $HOME/last-smoke.log
     - /bin/cp $HOME/last-smoke.log $HOME/thelittlegraduates.in/mtt/last-smoke.log
     - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log
