@@ -171,8 +171,15 @@ jobs:
               || { echo "::error::could not fetch /last-smoke.log"; exit 1; }
           echo "--- /last-smoke.log ---"
           printf '%s\n' "$SMOKE"
-          if ! printf '%s' "$SMOKE" | head -1 | grep -q '^PASS'; then
-              echo "::error::inventory master-spec smoke did NOT pass"
+          # PASS may not be on the first line (the wrapper prints the HTTP
+          # loopback banner first, then the CLI-fallback PASS). Grep for the
+          # PASS marker anywhere in the log; FAIL anywhere fails the deploy.
+          if printf '%s' "$SMOKE" | grep -qE '^FAIL'; then
+              echo "::error::inventory master-spec smoke reported FAIL"
+              exit 1
+          fi
+          if ! printf '%s' "$SMOKE" | grep -qE '^PASS'; then
+              echo "::error::inventory master-spec smoke did NOT pass (no PASS marker in /last-smoke.log)"
               exit 1
           fi
           echo "::notice::Site is live (login + parent form + inventory boot OK; migration 031 applied; master-spec smoke ✓)."
