@@ -189,10 +189,14 @@ jobs:
           printf '%s\n' "$TSMOKE"
           if printf '%s' "$TSMOKE" | grep -qE '^FAIL'; then
               echo "::error::tasks master-spec smoke reported FAIL"
+              echo "--- /last-migrate.log tail (last 30 lines) ---"
+              curl -sS --max-time 15 "$BASE/last-migrate.log?_=$(date +%s)" | tail -30 || true
               exit 1
           fi
           if ! printf '%s' "$TSMOKE" | grep -qE '^PASS'; then
               echo "::error::tasks master-spec smoke did NOT pass (no PASS marker in /last-tasks-smoke.log)"
+              echo "--- /last-migrate.log tail (last 30 lines) ---"
+              curl -sS --max-time 15 "$BASE/last-migrate.log?_=$(date +%s)" | tail -30 || true
               exit 1
           fi
 
