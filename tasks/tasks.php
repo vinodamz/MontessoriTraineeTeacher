@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/tasks.php';
 
 $user = require_login();
 
@@ -199,11 +200,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($op === 'delete') {
-        $id = (int)($_POST['id'] ?? 0);
-        $stmt = db()->prepare("DELETE FROM tasks WHERE id = :id");
-        $stmt->execute([':id' => $id]);
-        flash_set('ok', 'Task deleted.');
+        // Two-step delete (goal: "explicit confirm step, not a one-click delete"):
+        // the form posts confirm=yes and an op=soft-delete intent. Without the
+        // confirm, we redirect to a confirmation page instead of acting.
+        $id      = (int)($_POST['id'] ?? 0);
+        $confirm = (string)($_POST['confirm'] ?? '');
+        if ($confirm !== 'yes') {
+            redirect('tasks.php?confirm_delete=' . $id);
+        }
+        try {
+            task_soft_delete($id, (int)$user['id']);
+            flash_set('ok', 'Task archived — recover it from the Trash if needed.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Delete failed: ' . $e->getMessage());
+        }
         redirect('tasks.php');
+    }
+
+    if ($op === 'restore') {
+        $deletionId = (int)($_POST['deletion_id'] ?? 0);
+        try {
+            $tid = task_restore($deletionId, (int)$user['id']);
+            flash_set('ok', 'Task #' . $tid . ' restored.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Restore failed: ' . $e->getMessage());
+        }
+        redirect('trash.php');
+    }
+
+    if ($op === 'subtask_create') {
+        $tid   = (int)($_POST['task_id'] ?? 0);
+        $title = (string)($_POST['title'] ?? '');
+        $aid   = (int)($_POST['assignee_user_id'] ?? 0) ?: null;
+        try {
+            task_subtask_create($tid, $title, $aid);
+            if ($isAjax) { json_out(['ok' => true]); }
+            flash_set('ok', 'Subtask added.');
+        } catch (Throwable $e) {
+            if ($isAjax) { json_out(['ok' => false, 'error' => $e->getMessage()], 400); }
+            flash_set('error', $e->getMessage());
+        }
+        redirect('tasks.php?edit=1&id=' . $tid);
+    }
+
+    if ($op === 'subtask_update') {
+        $sid   = (int)($_POST['id'] ?? 0);
+        $tid   = (int)($_POST['task_id'] ?? 0);
+        $title = (string)($_POST['title'] ?? '');
+        $aid   = (int)($_POST['assignee_user_id'] ?? 0) ?: null;
+        try { task_subtask_update($sid, $tid, $title, $aid); } catch (Throwable $e) { flash_set('error', $e->getMessage()); }
+        if ($isAjax) json_out(['ok' => true]);
+        redirect('tasks.php?edit=1&id=' . $tid);
+    }
+
+    if ($op === 'subtask_toggle') {
+        $sid  = (int)($_POST['id'] ?? 0);
+        $tid  = (int)($_POST['task_id'] ?? 0);
+        $done = !empty($_POST['done']);
+        task_subtask_toggle($sid, $tid, $done);
+        if ($isAjax) {
+            $p = task_subtask_progress($tid);
+            json_out(['ok' => true, 'done' => $p['done'], 'total' => $p['total']]);
+        }
+        redirect('tasks.php?edit=1&id=' . $tid);
+    }
+
+    if ($op === 'subtask_delete') {
+        $sid = (int)($_POST['id'] ?? 0);
+        $tid = (int)($_POST['task_id'] ?? 0);
+        task_subtask_delete($sid, $tid);
+        if ($isAjax) json_out(['ok' => true]);
+        redirect('tasks.php?edit=1&id=' . $tid);
+    }
+
+    if ($op === 'subtask_reorder' && $isAjax) {
+        $tid = (int)($_POST['task_id'] ?? 0);
+        $ids = $_POST['ids'] ?? [];
+        if (!is_array($ids)) $ids = [];
+        task_subtask_reorder($tid, $ids);
+        json_out(['ok' => true]);
+    }
+
+    if ($op === 'attachment_upload') {
+        $tid = (int)($_POST['task_id'] ?? 0);
+        try {
+            task_attachment_store($_FILES['file'] ?? [], $tid, (int)$user['id']);
+            flash_set('ok', 'Attachment uploaded.');
+        } catch (Throwable $e) {
+            flash_set('error', $e->getMessage());
+        }
+        redirect('tasks.php?edit=1&id=' . $tid);
+    }
+
+    if ($op === 'attachment_delete') {
+        $aid = (int)($_POST['id'] ?? 0);
+        $tid = (int)($_POST['task_id'] ?? 0);
+        task_attachment_delete($aid);
+        flash_set('ok', 'Attachment removed.');
+        redirect('tasks.php?edit=1&id=' . $tid);
     }
 
     if ($op === 'quick_status') {
@@ -250,11 +344,29 @@ $filterAssn = $_GET['assignee'] ?? '';
 $filterCol  = $_GET['col']      ?? '';
 $search     = trim($_GET['q'] ?? '');
 
-$where = [];
+// Always hide soft-deleted tasks (migration 032). Trash page is separate.
+$where = ['t.deleted_at IS NULL'];
 $params = [];
 if ($filterAssn === 'me')                       { $where[] = 't.assigned_to_user_id = :me'; $params[':me'] = $user['id']; }
 elseif ($filterAssn !== '' && ctype_digit($filterAssn)) { $where[] = 't.assigned_to_user_id = :a'; $params[':a'] = (int)$filterAssn; }
 if ($filterCol !== '' && ctype_digit($filterCol)) { $where[] = 't.column_id = :col'; $params[':col'] = (int)$filterCol; }
+
+// Dashboard bucket filter — clicking a tile on /tasks/dashboard.php lands
+// here with ?bucket=… so the user immediately sees the rows behind the
+// number they tapped.
+$bucket = (string)($_GET['bucket'] ?? '');
+if ($bucket === 'assigned')   { $where[] = "t.status <> 'done' AND t.assigned_to_user_id IS NOT NULL"; }
+elseif ($bucket === 'completed') { $where[] = "t.status = 'done'"; }
+elseif ($bucket === 'pending')   { $where[] = "t.status <> 'done' AND (t.due_date IS NULL OR t.due_date >= CURDATE())"; }
+elseif ($bucket === 'missed')    { $where[] = "t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date < CURDATE()"; }
+
+// The dashboard's per-person links use assigned_to_user_id=N (more explicit
+// than the existing assignee=N alias). Honour both.
+$assnExplicit = (string)($_GET['assigned_to_user_id'] ?? '');
+if ($assnExplicit !== '' && ctype_digit($assnExplicit)) {
+    $where[] = 't.assigned_to_user_id = :auid';
+    $params[':auid'] = (int)$assnExplicit;
+}
 if ($search !== '') { $where[] = '(t.title LIKE :q OR t.description LIKE :q)'; $params[':q'] = '%'.$search.'%'; }
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -294,6 +406,10 @@ foreach ($tasks as $t) {
 
 $pageTitle = 'Tasks — LG Task Manager';
 $wideLayout = ($view === 'board');
+
+// Subtask progress per visible task — one query, used by the row pills below.
+$subtaskProgress = task_subtask_progress_for(array_map(fn($t) => (int)$t['id'], $tasks));
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -446,7 +562,171 @@ include __DIR__ . '/../includes/header.php';
             <?php if ($editing): ?><a class="btn btn-ghost" href="tasks.php?view=<?= e($view) ?>">Cancel</a><?php endif; ?>
         </div>
     </form>
+
+    <?php if ($editing):
+        $subRows  = task_subtasks_for((int)$editing['id']);
+        $attRows  = task_attachments_for((int)$editing['id']);
+        $progress = task_subtask_progress((int)$editing['id']); ?>
+
+        <h3 style="margin: 1.4rem 0 .6rem;">
+            Checklist
+            <?php if ($progress['total']): ?>
+                <span class="pill"><?= $progress['done'] ?>/<?= $progress['total'] ?> done</span>
+            <?php endif; ?>
+        </h3>
+        <ul class="subtask-list" id="subtask-list" data-task-id="<?= (int)$editing['id'] ?>"
+            style="list-style:none; padding:0; margin:0 0 .5rem;">
+            <?php foreach ($subRows as $sub): ?>
+                <li data-id="<?= (int)$sub['id'] ?>" style="display:flex; gap:.5rem; align-items:center; padding:.35rem 0; border-bottom:1px solid var(--line-soft);">
+                    <span class="drag-handle" title="Drag to reorder" style="cursor:grab; color:var(--muted);">⋮⋮</span>
+                    <form method="post" class="subtask-toggle-form inline" style="margin:0;">
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="op" value="subtask_toggle">
+                        <input type="hidden" name="id" value="<?= (int)$sub['id'] ?>">
+                        <input type="hidden" name="task_id" value="<?= (int)$editing['id'] ?>">
+                        <input type="hidden" name="done" value="<?= (int)$sub['done'] === 1 ? '0' : '1' ?>">
+                        <button type="submit" style="background:transparent; border:0; cursor:pointer; font-size:1.1rem; padding:0;">
+                            <?= (int)$sub['done'] === 1 ? '☑' : '☐' ?>
+                        </button>
+                    </form>
+                    <div style="flex:1; <?= (int)$sub['done'] === 1 ? 'text-decoration:line-through; color:var(--muted);' : '' ?>">
+                        <?= e($sub['title']) ?>
+                        <?php if (!empty($sub['assignee_name'])): ?>
+                            <span class="pill"><?= e($sub['assignee_name']) ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <form method="post" class="inline" style="margin:0;" onsubmit="return confirm('Remove this subtask?')">
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="op" value="subtask_delete">
+                        <input type="hidden" name="id" value="<?= (int)$sub['id'] ?>">
+                        <input type="hidden" name="task_id" value="<?= (int)$editing['id'] ?>">
+                        <button class="link-btn" type="submit">×</button>
+                    </form>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+        <form method="post" class="row" style="margin:.4rem 0 .8rem; gap:.4rem; align-items:flex-end;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="subtask_create">
+            <input type="hidden" name="task_id" value="<?= (int)$editing['id'] ?>">
+            <div class="field" style="flex:2 1 220px;">
+                <label>Add subtask</label>
+                <input name="title" required maxlength="255" placeholder="What needs doing?">
+            </div>
+            <div class="field" style="flex:1 1 160px;">
+                <label>Assignee (optional)</label>
+                <select name="assignee_user_id">
+                    <option value="">—</option>
+                    <?php foreach ($users as $u): ?>
+                        <option value="<?= (int)$u['id'] ?>"><?= e($u['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <button class="btn" type="submit">Add</button>
+        </form>
+
+        <h3 style="margin: 1.2rem 0 .6rem;">Attachments</h3>
+        <?php if ($attRows): ?>
+            <ul style="list-style:none; padding:0; margin:0 0 .5rem;">
+                <?php foreach ($attRows as $att): ?>
+                    <li style="display:flex; gap:.6rem; align-items:center; padding:.35rem 0; border-bottom:1px solid var(--line-soft);">
+                        <div style="flex:1;">
+                            <a href="/tasks/attachment.php?id=<?= (int)$att['id'] ?>" target="_blank" rel="noopener"><?= e($att['original_filename']) ?></a>
+                            <div class="muted small">
+                                <?= e(format_bytes((int)$att['size_bytes'])) ?>
+                                · <?= e(date('j M Y', strtotime((string)$att['uploaded_at']))) ?>
+                                <?php if (!empty($att['uploader_name'])): ?> · <?= e($att['uploader_name']) ?><?php endif; ?>
+                            </div>
+                        </div>
+                        <a class="btn btn-ghost" href="/tasks/attachment.php?id=<?= (int)$att['id'] ?>&download=1">Download</a>
+                        <form method="post" class="inline" style="margin:0;" onsubmit="return confirm('Remove this attachment?')">
+                            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                            <input type="hidden" name="op" value="attachment_delete">
+                            <input type="hidden" name="id" value="<?= (int)$att['id'] ?>">
+                            <input type="hidden" name="task_id" value="<?= (int)$editing['id'] ?>">
+                            <button class="link-btn" type="submit">×</button>
+                        </form>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+        <form method="post" enctype="multipart/form-data" class="row" style="margin:.4rem 0; gap:.4rem; align-items:flex-end;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="attachment_upload">
+            <input type="hidden" name="task_id" value="<?= (int)$editing['id'] ?>">
+            <div class="field" style="flex:2 1 320px;">
+                <label>Upload a file <span class="muted small">(up to 10 MB · PDF / image / Office / TXT / ZIP)</span></label>
+                <input type="file" name="file" required>
+            </div>
+            <button class="btn" type="submit">Upload</button>
+        </form>
+
+        <script>
+        // Drag-reorder the checklist using Sortable.js (already loaded for the
+        // kanban board on tasks/index.php; load it here so the Edit page works
+        // standalone). Fire a subtask_reorder POST when the order changes.
+        (function() {
+            const list = document.getElementById('subtask-list');
+            if (!list) return;
+            function init() {
+                if (typeof Sortable === 'undefined') return;
+                const taskId = list.dataset.taskId;
+                Sortable.create(list, {
+                    handle: '.drag-handle',
+                    animation: 120,
+                    onEnd: () => {
+                        const ids = [...list.querySelectorAll('li')].map(li => li.dataset.id);
+                        const fd = new FormData();
+                        fd.append('_csrf', '<?= e(csrf_token()) ?>');
+                        fd.append('op', 'subtask_reorder');
+                        fd.append('task_id', taskId);
+                        ids.forEach(id => fd.append('ids[]', id));
+                        fetch('/tasks/tasks.php', {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            body: fd,
+                        });
+                    },
+                });
+            }
+            if (typeof Sortable !== 'undefined') {
+                init();
+            } else {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+                s.onload = init;
+                document.head.appendChild(s);
+            }
+        })();
+        </script>
+    <?php endif; ?>
 </details>
+
+<?php
+// ---------- Confirm-delete banner (goal: explicit confirm step) ---------------
+// /tasks/tasks.php?confirm_delete=N renders this banner — the actual delete
+// action only runs when the form posts op=delete + confirm=yes.
+$confirmDeleteId = isset($_GET['confirm_delete']) ? (int)$_GET['confirm_delete'] : 0;
+if ($confirmDeleteId > 0):
+    $dStmt = db()->prepare("SELECT id, title FROM tasks WHERE id = :id AND deleted_at IS NULL");
+    $dStmt->execute([':id' => $confirmDeleteId]);
+    $dRow = $dStmt->fetch();
+    if ($dRow): ?>
+<div class="card" style="border-left: 4px solid #f5b342; background:#fff8e7;">
+    <h2 style="margin-top:0;">Archive “<?= e($dRow['title']) ?>”?</h2>
+    <p class="muted">The task moves to the Trash. You can restore it from there at any time — no data is lost. The delete is recorded in the audit log with your name + today's date.</p>
+    <form method="post" style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="delete">
+        <input type="hidden" name="id" value="<?= (int)$dRow['id'] ?>">
+        <input type="hidden" name="confirm" value="yes">
+        <button class="btn btn-primary" type="submit">Yes — archive it</button>
+        <a class="btn btn-ghost" href="/tasks/tasks.php">Cancel</a>
+    </form>
+</div>
+    <?php endif;
+endif;
+?>
 <?php if (!$editing && recurrence_available()): ?>
 <script>
 (function(){
@@ -541,6 +821,10 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                     <h3 class="task-title">
                         <a href="tasks.php?view=<?= e($view) ?>&edit=<?= (int)$t['id'] ?>"><?= e($t['title']) ?></a>
+                        <?php $progressRow = $subtaskProgress[(int)$t['id']] ?? null;
+                              if ($progressRow && $progressRow['total'] > 0): ?>
+                            <span class="pill" style="font-size:.72rem; margin-left:.4rem;">☐ <?= (int)$progressRow['done'] ?>/<?= (int)$progressRow['total'] ?></span>
+                        <?php endif; ?>
                     </h3>
                     <?php if (!empty($t['description'])): ?>
                         <p class="task-desc"><?= nl2br(e($t['description'])) ?></p>
