@@ -123,8 +123,6 @@ try {
 
     // ---- 5. Soft delete + audit + restore --------------------------------
     task_soft_delete($tid, $adminId);
-    $stillVisible = (int)db()->prepare("SELECT COUNT(*) FROM tasks WHERE id = :id AND deleted_at IS NULL")
-        ->execute([':id' => $tid]);   // execute() returns bool but we read column next
     $cnt = db()->prepare("SELECT COUNT(*) FROM tasks WHERE id = :id AND deleted_at IS NULL");
     $cnt->execute([':id' => $tid]);
     if ((int)$cnt->fetchColumn() !== 0) $failures[] = "soft-delete left the task in the default visible set";
@@ -133,8 +131,6 @@ try {
     $auditCnt->execute([':id' => $tid, ':u' => $adminId]);
     if ((int)$auditCnt->fetchColumn() !== 1) $failures[] = "audit row for soft-delete missing or wrong shape";
 
-    $delId = (int)db()->prepare("SELECT id FROM task_deletions WHERE task_id = :id ORDER BY id DESC LIMIT 1")
-        ->execute([':id' => $tid]) ? null : null;
     $g = db()->prepare("SELECT id FROM task_deletions WHERE task_id = :id ORDER BY id DESC LIMIT 1");
     $g->execute([':id' => $tid]);
     $delId = (int)$g->fetchColumn();
