@@ -255,13 +255,18 @@ if ($failures) {
     exit;
 }
 
-echo "PASS — all master-spec criteria verified on the live app\n";
+$mode = $isCli ? 'CLI (data layer only)' : 'HTTP loopback (data layer + UI render)';
+echo "PASS — master-spec criteria verified on the live app ($mode)\n";
 echo "  - schema has every master-spec column\n";
 echo "  - category map matches the master spec exactly\n";
 echo "  - reorder query catches qty <= min items\n";
 echo "  - due-for-check catches NULL last_stock_check\n";
-echo "  - edit form renders all 16 master-spec fields + cascade JSON\n";
-echo "  - CSV export's first row contains every master-spec column header\n";
 echo "  - 'I checked this today' persists CURDATE()\n";
 echo "  - retire via status='damaged' preserves the row (no hard-delete)\n";
 echo "  - reports per-category rollup query executes\n";
+if (!$isCli) {
+    echo "  - edit form renders all 16 master-spec fields + cascade JSON\n";
+    echo "  - CSV export's first row contains every master-spec column header\n";
+} else {
+    echo "  - [skipped under CLI: edit-form HTML render + CSV header row — needs HTTP loopback]\n";
+}
