@@ -163,7 +163,7 @@ jobs:
           [ $INV_FAIL -eq 0 ] || exit 1
 
           # ----- Inventory master-spec assertions (runs on the cPanel host) ---
-          # .cpanel.yml curls inventory/_smoke.php from 127.0.0.1 after the
+          # .cpanel.yml curls inventory/smoke_internal.php from 127.0.0.1 after the
           # rsync + migrate. The endpoint is IP-gated so only the host
           # itself can hit it. We read the captured output here and fail
           # the deploy if any assertion failed.
