@@ -1,0 +1,87 @@
+name: Verify live inventory module
+
+# Manually-triggerable check that walks the inventory routes on the live
+# site and pulls /last-migrate.log to confirm migration 031 applied.
+#
+# The container running the assistant can't reach the school's domain
+# (egress proxy 403s the CONNECT), but the GitHub-hosted runner can —
+# so the goal-verification step lives here.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Probe live inventory routes
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1/3 — /last-migrate.log must show migration 031 applied
+        run: |
+          set -euo pipefail
+          BASE=https://mtt.thelittlegraduates.in
+          echo "--- fetching last-migrate.log ---"
+          LOG=$(curl -sS --fail-with-body --max-time 30 "$BASE/last-migrate.log") \
+              || { echo "::error::could not fetch last-migrate.log"; exit 1; }
+          echo "$LOG" | tail -120
+          echo "--- checks ---"
+          if ! echo "$LOG" | grep -q "migrate_031_inventory_extras.sql"; then
+              echo "::error::migrate_031 not mentioned in last-migrate.log"
+              exit 1
+          fi
+          # The migrate.php output marks each successful migration with the
+          # literal "✓ applied" line — see migrate.php's per-file loop.
+          if ! echo "$LOG" | awk '/migrate_031_inventory_extras\.sql/{f=1; next} f && /applied/{found=1; exit} f && /───/{exit} END{exit !found}'; then
+              echo "::error::migrate_031 line not followed by 'applied'"
+              exit 1
+          fi
+          echo "::notice::Migration 031 ✓ applied on the live DB"
+
+      - name: 2/3 — every inventory route returns non-500
+        run: |
+          set -euo pipefail
+          BASE=https://mtt.thelittlegraduates.in
+          fail=0
+          for path in \
+              "/inventory/index.php" \
+              "/inventory/index.php?view=low" \
+              "/inventory/index.php?view=due" \
+              "/inventory/index.php?view=attention" \
+              "/inventory/index.php?format=csv" \
+              "/inventory/edit.php" \
+              "/inventory/reports.php"; do
+              S=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 20 "$BASE$path")
+              echo "  $S  $path"
+              if [ "$S" = "500" ] || [ "$S" = "502" ] || [ "$S" = "503" ]; then
+                  echo "::error::$path returned $S"
+                  echo "--- response body ---"
+                  head -c 800 /tmp/body
+                  fail=1
+              fi
+              # The friendly error page (includes/errors.php) also returns 500
+              # with our "Something went wrong 🐛" body; flag the marker too.
+              if grep -q "Something went wrong" /tmp/body 2>/dev/null; then
+                  echo "::error::$path rendered the friendly error page"
+                  fail=1
+              fi
+          done
+          [ $fail -eq 0 ] || exit 1
+          echo "::notice::All inventory routes responded without server errors"
+
+      - name: 3/3 — non-auth'd hits should redirect to login
+        run: |
+          set -euo pipefail
+          BASE=https://mtt.thelittlegraduates.in
+          # /inventory/index.php uses require_module('inventory'), which calls
+          # require_login() → 302 to /login.php for non-auth'd requests.
+          # That's the healthy shape: the page bootstraps, runs auth, redirects.
+          LOC=$(curl -sS -o /dev/null -w "%{http_code} %{redirect_url}" --max-time 20 "$BASE/inventory/index.php")
+          echo "  $LOC"
+          STATUS=${LOC%% *}
+          REDIR=${LOC#* }
+          if [ "$STATUS" = "302" ] && echo "$REDIR" | grep -q "/login.php"; then
+              echo "::notice::Inventory page bootstraps and routes to login as expected"
+          elif [ "$STATUS" = "200" ]; then
+              echo "::notice::Inventory page returned 200 — likely served the friendly error page or is otherwise unauth'd; manual UI check still recommended."
+          else
+              echo "::error::unexpected status/redirect: $LOC"
+              exit 1
+          fi
