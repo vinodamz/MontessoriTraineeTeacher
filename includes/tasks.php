@@ -333,18 +333,24 @@ function task_dashboard_counts(?int $assigneeId = null): array
 
 function task_dashboard_per_user(): array
 {
+    // Wrap in a subquery so HAVING/ORDER BY can reference the aliases —
+    // MariaDB's strict mode rejects column aliases inside HAVING when the
+    // alias points at an aggregate ("Reference 'assigned' not supported
+    // (reference to group function)").
     $sql = "
-        SELECT u.id, u.name,
-          SUM(CASE WHEN t.status <> 'done' AND t.assigned_to_user_id IS NOT NULL THEN 1 ELSE 0 END) AS assigned,
-          SUM(CASE WHEN t.status = 'done'  THEN 1 ELSE 0 END) AS completed,
-          SUM(CASE WHEN t.status <> 'done' AND (t.due_date IS NULL OR t.due_date >= CURDATE()) THEN 1 ELSE 0 END) AS pending,
-          SUM(CASE WHEN t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date < CURDATE() THEN 1 ELSE 0 END) AS missed
-        FROM users u
-        LEFT JOIN tasks t ON t.assigned_to_user_id = u.id AND t.deleted_at IS NULL
-        WHERE u.active = 1
-        GROUP BY u.id
-        HAVING (assigned + completed + pending + missed) > 0
-        ORDER BY (assigned + missed) DESC, u.name
+        SELECT * FROM (
+            SELECT u.id, u.name,
+              SUM(CASE WHEN t.status <> 'done' AND t.assigned_to_user_id IS NOT NULL THEN 1 ELSE 0 END) AS assigned,
+              SUM(CASE WHEN t.status = 'done'  THEN 1 ELSE 0 END) AS completed,
+              SUM(CASE WHEN t.status <> 'done' AND (t.due_date IS NULL OR t.due_date >= CURDATE()) THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date < CURDATE() THEN 1 ELSE 0 END) AS missed
+            FROM users u
+            LEFT JOIN tasks t ON t.assigned_to_user_id = u.id AND t.deleted_at IS NULL
+            WHERE u.active = 1
+            GROUP BY u.id
+        ) AS x
+        WHERE (assigned + completed + pending + missed) > 0
+        ORDER BY (assigned + missed) DESC, name
     ";
     return db()->query($sql)->fetchAll();
 }
