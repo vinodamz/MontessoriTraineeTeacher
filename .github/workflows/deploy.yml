@@ -143,14 +143,18 @@ jobs:
               "/inventory/index.php?format=csv" \
               "/inventory/edit.php" \
               "/inventory/reports.php"; do
-            S=$(curl -sS -o /tmp/inv_body -w "%{http_code}" --max-time 20 "$BASE$path&_=$(date +%s)" 2>/dev/null \
-                || curl -sS -o /tmp/inv_body -w "%{http_code}" --max-time 20 "$BASE$path?_=$(date +%s)")
+            # Append a cache-buster, picking & or ? based on the path itself.
+            case "$path" in *\?*) SEP="&" ;; *) SEP="?" ;; esac
+            URL="$BASE$path${SEP}_=$(date +%s)"
+            S=$(curl -sS -o /tmp/inv_body -w "%{http_code}" --max-time 20 "$URL")
             echo "  $S  $path"
-            if [ "$S" = "500" ] || [ "$S" = "502" ] || [ "$S" = "503" ]; then
-              echo "::error::$path returned $S"
-              head -c 800 /tmp/inv_body
-              INV_FAIL=1
-            fi
+            # Non-auth'd hits must redirect to login (302/303). 200 is also
+            # accepted — happens when the page renders the friendly error,
+            # which is then caught by the grep below. 404/5xx fail the deploy.
+            case "$S" in
+              200|301|302|303) : ;;
+              *) echo "::error::$path returned $S (expected 302 to /login.php)"; head -c 600 /tmp/inv_body; INV_FAIL=1 ;;
+            esac
             if grep -q "Something went wrong" /tmp/inv_body 2>/dev/null; then
               echo "::error::$path rendered the friendly error page"
               INV_FAIL=1
