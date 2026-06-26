@@ -82,6 +82,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $docs[] = $doc;
         }
 
+        // Intro message (migrate_033) — prepended on the FIRST send of this
+        // stage to this family, so the Meta-approved template doesn't land
+        // cold without saying who the school is. Empty intro_text → skip
+        // entirely. Failure to send the intro doesn't block the real send;
+        // we just don't mark it sent so we'll retry next time.
+        $introRaw = crm_stage_intro((string)$f['status']);
+        $introSent = false;
+        if ($introRaw !== '' && !crm_intro_already_sent($id, (string)$f['status'])) {
+            $intro = crm_wa_substitute($introRaw, $vars);
+            // Free-text only: empty template name forces WACRM to send the body.
+            $iRes = wacrm_send_to_lead($phone, $intro, '', $wa['wa_template_lang'], $vars);
+            if ($iRes['ok']) {
+                crm_mark_intro_sent($id, (string)$f['status']);
+                crm_audit_log('wa_intro_sent', $id, ['stage' => $f['status']]);
+                $introSent = true;
+            }
+        }
+
         $res = wacrm_send_to_lead(
             $phone,
             $text,
@@ -93,7 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($res['ok']) {
             crm_audit_log('wa_sent', $id, ['stage' => $f['status'], 'mode' => $res['sent']]);
             $how = $res['sent'] === 'template' ? 'approved template' : 'message';
-            flash_set('ok', 'WhatsApp ' . $how . ' sent via the CRM. It will appear in the inbox.');
+            $prefix = $introSent ? 'Intro + ' : '';
+            flash_set('ok', $prefix . 'WhatsApp ' . $how . ' sent via the CRM. It will appear in the inbox.');
         } else {
             flash_set('error', 'Could not send: ' . $res['error']);
         }

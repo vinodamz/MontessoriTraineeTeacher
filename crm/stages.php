@@ -63,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $waText = trim((string)($_POST['wa_text'] ?? ''));
         $waTpl  = trim((string)($_POST['wa_template'] ?? ''));
         $waLang = trim((string)($_POST['wa_template_lang'] ?? ''));
+        $intro  = trim((string)($_POST['intro_text'] ?? ''));
         if ($label === '' || $id <= 0) {
             flash_set('error', 'Stage label is required.');
             redirect('/crm/stages.php');
@@ -70,13 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("
             UPDATE crm_stages
             SET label=:l, probability=:p, is_open=:o, is_active=:a,
-                wa_text=:wt, wa_template=:wtpl, wa_template_lang=:wlang
+                wa_text=:wt, wa_template=:wtpl, wa_template_lang=:wlang,
+                intro_text=:intro
             WHERE id=:id
         ")->execute([
             ':l' => $label, ':p' => $prob, ':o' => $open, ':a' => $act,
             ':wt'    => $waText === '' ? null : $waText,
             ':wtpl'  => $waTpl  === '' ? null : $waTpl,
             ':wlang' => $waLang === '' ? 'en_US' : $waLang,
+            ':intro' => $intro === '' ? null : $intro,
             ':id' => $id,
         ]);
         flash_set('ok', 'Stage updated.');
@@ -240,6 +243,11 @@ foreach ($rows as $r):
                                         value="<?= e((string)($r['wa_template_lang'] ?? 'en_US')) ?>" placeholder="en_US">
                                 </label>
                             </div>
+                            <label class="muted" style="font-size:.85em;">
+                                Intro message (optional) <small>(sent once before the template the FIRST time this stage messages the family — Meta templates don't say "Little Graduates", this fills the gap. Same <code>{parent_name}</code> / <code>{child_name}</code> / <code>{school_name}</code> / <code>{stage}</code> tokens.)</small>
+                                <textarea form="stage-edit-<?= $rid ?>" name="intro_text" rows="2"
+                                    style="width:100%;" placeholder="Hi {parent_name}, this is Little Graduates Admissions — you'll see a quick update from us right after this."><?= e((string)($r['intro_text'] ?? '')) ?></textarea>
+                            </label>
                         </div>
                     </details>
                 </td>

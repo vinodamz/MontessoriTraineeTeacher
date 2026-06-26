@@ -386,6 +386,42 @@ function crm_stage_wa(string $code): array
 }
 
 /**
+ * Optional intro WhatsApp body for a stage (migrate_033). Empty string if
+ * the stage has no intro configured. Variable substitution uses the same
+ * {parent_name} / {child_name} / {school_name} / {stage} tokens as wa_text.
+ */
+function crm_stage_intro(string $code): string
+{
+    if ($code === '') return '';
+    try {
+        $st = db()->prepare("SELECT intro_text FROM crm_stages WHERE code = :c LIMIT 1");
+        $st->execute([':c' => $code]);
+        return trim((string)($st->fetchColumn() ?: ''));
+    } catch (Throwable $e) { return ''; }
+}
+
+/** True once an intro for (family, stage) has already been sent. */
+function crm_intro_already_sent(int $familyId, string $stageCode): bool
+{
+    if ($familyId <= 0 || $stageCode === '') return true;   // refuse to send when ambiguous
+    try {
+        $st = db()->prepare("SELECT 1 FROM crm_stage_intros_sent WHERE family_id = :f AND stage_code = :c LIMIT 1");
+        $st->execute([':f' => $familyId, ':c' => $stageCode]);
+        return (bool)$st->fetchColumn();
+    } catch (Throwable $e) { return true; }   // if the tracker is unreachable, don't risk double-sending
+}
+
+/** Mark the intro for (family, stage) as sent. Idempotent on the composite PK. */
+function crm_mark_intro_sent(int $familyId, string $stageCode): void
+{
+    if ($familyId <= 0 || $stageCode === '') return;
+    try {
+        db()->prepare("INSERT IGNORE INTO crm_stage_intros_sent (family_id, stage_code) VALUES (:f, :c)")
+            ->execute([':f' => $familyId, ':c' => $stageCode]);
+    } catch (Throwable $e) { /* tracker write best-effort */ }
+}
+
+/**
  * Document attachments (PDFs) configured for a stage (migrate_030). Returns a
  * list of ['link'=>, 'filename'=>, 'caption'=>]. Isolated in its own try/catch
  * so a missing wa_docs column never breaks crm_stage_wa() or the send button.
