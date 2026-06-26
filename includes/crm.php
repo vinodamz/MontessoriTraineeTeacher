@@ -498,8 +498,21 @@ function crm_wa_defaults(array $vars): array
 {
     if (trim((string) ($vars['parent_name'] ?? '')) === '') $vars['parent_name'] = 'there';
     if (trim((string) ($vars['child_name'] ?? '')) === '')  $vars['child_name']  = 'your little one';
-    if (trim((string) ($vars['school_name'] ?? '')) === '') $vars['school_name'] = app_name();
+    if (trim((string) ($vars['school_name'] ?? '')) === '') $vars['school_name'] = crm_school_full_name();
     return $vars;
+}
+
+/**
+ * Full school identity used inside WhatsApp templates and intros — long-form
+ * so cold messages tell the parent who's writing AND from where. Falls back
+ * to app_name() when nothing is configured. Edit in Admin →
+ * "WhatsApp school name" (app_settings.crm_school_name).
+ */
+function crm_school_full_name(): string
+{
+    $v = trim((string) app_setting('crm_school_name', ''));
+    if ($v !== '') return $v;
+    return app_name();
 }
 
 /**

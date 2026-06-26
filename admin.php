@@ -133,6 +133,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $upsert->execute([':k' => 'app_name',       ':v' => substr($newName,  0, 120)]);
         $upsert->execute([':k' => 'app_short_name', ':v' => substr($newShort, 0, 30)]);
+        // Long-form school identity that substitutes for {school_name} inside
+        // every WA template + intro line (migration 034). Falls back to
+        // app_name() when blank.
+        $crmName = trim((string)($_POST['crm_school_name'] ?? ''));
+        $upsert->execute([':k' => 'crm_school_name', ':v' => substr($crmName, 0, 160)]);
+        app_setting_clear_cache();
         // External app endpoints — admin can change these without a code
         // deploy. Empty string clears the integration.
         foreach (external_apps_registry() as $appKey => $appMeta) {
@@ -293,6 +299,11 @@ require __DIR__ . '/includes/header.php';
                 <label>Short name</label>
                 <input name="app_short_name" value="<?= e(app_short_name()) ?>" maxlength="30">
                 <span class="muted small">Reserved for spaces where the long name doesn't fit. Currently unused on UI.</span>
+            </div>
+            <div class="field" style="flex: 2 1 100%;">
+                <label>WhatsApp school name</label>
+                <input name="crm_school_name" value="<?= e((string)app_setting('crm_school_name', '')) ?>" maxlength="160" placeholder="e.g. The Little Graduates Playschool, Kaloor, Kochi">
+                <span class="muted small">Long-form identity that substitutes for <code>{school_name}</code> in every CRM WhatsApp template + intro. Blank falls back to the Display name above — but spelling out the location helps cold parents recognise who's writing.</span>
             </div>
         </div>
         <h3 style="margin:.8rem 0 .4rem;">External app URLs</h3>
