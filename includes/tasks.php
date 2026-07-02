@@ -188,14 +188,19 @@ function task_attachments_for(int $taskId): array
     return $st->fetchAll();
 }
 
-function task_attachment_delete(int $attachmentId): void
+function task_attachment_delete(int $attachmentId, int $taskId = 0): void
 {
-    $st = db()->prepare("SELECT stored_filename FROM task_attachments WHERE id = :id");
-    $st->execute([':id' => $attachmentId]);
-    $stored = (string)($st->fetchColumn() ?: '');
-    db()->prepare("DELETE FROM task_attachments WHERE id = :id")->execute([':id' => $attachmentId]);
-    if ($stored !== '') {
-        $p = task_attachments_dir() . '/' . basename($stored);
+    // Scoped to the task the caller was actually looking at — an unscoped id
+    // would let any tasks user delete any attachment on any task.
+    $where  = "id = :id" . ($taskId > 0 ? " AND task_id = :tid" : "");
+    $params = [':id' => $attachmentId] + ($taskId > 0 ? [':tid' => $taskId] : []);
+    $st = db()->prepare("SELECT stored_filename FROM task_attachments WHERE $where");
+    $st->execute($params);
+    $stored = $st->fetchColumn();
+    if ($stored === false) return;   // wrong task or already gone
+    db()->prepare("DELETE FROM task_attachments WHERE $where")->execute($params);
+    if ((string)$stored !== '') {
+        $p = task_attachments_dir() . '/' . basename((string)$stored);
         if (is_file($p)) @unlink($p);
     }
 }
@@ -248,6 +253,9 @@ function task_restore(int $deletionId, int $byUserId): int
         $check->execute([':id' => $tid]);
         $t = $check->fetch();
         if ($t) {
+            if ($t['deleted_at'] === null) {
+                throw new RuntimeException('Task #' . $tid . ' is not in the trash.');
+            }
             $pdo->prepare("UPDATE tasks SET deleted_at = NULL WHERE id = :id")->execute([':id' => $tid]);
         } else {
             // Row was hard-purged at some point — recreate from snapshot.
@@ -277,6 +285,22 @@ function task_restore(int $deletionId, int $byUserId): int
                 ':idate'  => $tsk['instance_date'] ?? null,
                 ':ca'     => $tsk['created_at'] ?? date('Y-m-d H:i:s'),
             ]);
+            // The snapshot carried the checklist — bring it back too.
+            // (Attachment FILES are gone once purged; rows stay lost.)
+            $insSub = $pdo->prepare("
+                INSERT INTO task_subtasks (task_id, title, done, assignee_user_id, order_idx)
+                VALUES (:tid, :title, :done, :aid, :idx)
+            ");
+            foreach (($snap['subtasks'] ?? []) as $sub) {
+                if (!isset($sub['title'])) continue;
+                $insSub->execute([
+                    ':tid'   => $tid,
+                    ':title' => $sub['title'],
+                    ':done'  => (int)($sub['done'] ?? 0),
+                    ':aid'   => $sub['assignee_user_id'] ?? null,
+                    ':idx'   => (int)($sub['order_idx'] ?? 0),
+                ]);
+            }
         }
 
         $pdo->prepare("

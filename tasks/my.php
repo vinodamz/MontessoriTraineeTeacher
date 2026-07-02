@@ -72,13 +72,14 @@ require __DIR__ . '/../includes/header.php';
                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                     <input type="hidden" name="task_id" value="<?= (int)$r['task_id'] ?>">
                     <input type="hidden" name="done" value="<?= $done ? '0' : '1' ?>">
+                    <input type="hidden" name="return_to" value="my">
                     <button type="submit" style="background:transparent; border:0; cursor:pointer; font-size:1.1rem;">
                         <?= $done ? '☑' : '☐' ?>
                     </button>
                 </form>
                 <div style="flex:1; <?= $done ? 'text-decoration:line-through; color:var(--muted);' : '' ?>">
                     <?= e($r['title']) ?>
-                    <div class="muted small">on <a href="/tasks/tasks.php?edit=1&id=<?= (int)$r['task_id'] ?>"><?= e($r['task_title']) ?></a></div>
+                    <div class="muted small">on <a href="/tasks/tasks.php?edit=<?= (int)$r['task_id'] ?>"><?= e($r['task_title']) ?></a></div>
                 </div>
             </li>
         <?php endforeach; ?>

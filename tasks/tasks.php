@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/tasks.php';
 
-$user = require_login();
+$user = require_module('tasks');
 
 // Materialise today's recurring instances on every visit.
 materialize_recurrences();
@@ -44,9 +44,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // place the moved card
             $set = $pdo->prepare("
-                UPDATE tasks SET column_id = :c, board_position = :p WHERE id = :id
+                UPDATE tasks SET column_id = :c, board_position = :p
+                WHERE id = :id AND deleted_at IS NULL
             ");
             $set->execute([':c' => $colId, ':p' => $pos, ':id' => $id]);
+
+            // keep the legacy status column in step with the Done column —
+            // the dashboard's completed/missed rollups key off status='done'.
+            $sync = $pdo->prepare("
+                UPDATE tasks t JOIN task_columns c ON c.id = t.column_id
+                SET t.status = IF(c.is_done = 1, 'done', 'todo')
+                WHERE t.id = :id
+            ");
+            $sync->execute([':id' => $id]);
 
             // normalise positions (0..n-1) in the destination column
             $rows = $pdo->prepare("SELECT id FROM tasks WHERE column_id = :c ORDER BY board_position, id");
@@ -72,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $description = trim($_POST['description'] ?? '');
         $colId       = isset($_POST['column_id']) ? (int)$_POST['column_id'] : 0;
         $priority    = $_POST['priority'] ?? 'normal';
-        $due         = $_POST['due_date'] ?: null;
+        $due         = ($_POST['due_date'] ?? '') !== '' ? $_POST['due_date'] : null;
         $assignee    = isset($_POST['assigned_to_user_id']) && $_POST['assigned_to_user_id'] !== ''
                        ? (int)$_POST['assigned_to_user_id'] : null;
 
@@ -162,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $assignee, 'tasks', 'task_assigned',
                     'New task: ' . $title,
                     implode("\n", $bodyLines),
-                    '/tasks/tasks.php?highlight=' . $newTaskId
+                    '/tasks/tasks.php?edit=' . $newTaskId
                 );
             }
         } else {
@@ -178,12 +188,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = db()->prepare("
                 UPDATE tasks SET title=:t, description=:d, column_id=:col, priority=:p,
                                  due_date=:due, assigned_to_user_id=:a
-                WHERE id=:id
+                WHERE id=:id AND deleted_at IS NULL
             ");
             $stmt->execute([
                 ':t' => $title, ':d' => $description, ':col' => $colId ?: null,
                 ':p' => $priority, ':due' => $due, ':a' => $assignee, ':id' => $id,
             ]);
+            // Column may have changed — keep status in step (see op=move).
+            $sync = db()->prepare("
+                UPDATE tasks t JOIN task_columns c ON c.id = t.column_id
+                SET t.status = IF(c.is_done = 1, 'done', 'todo')
+                WHERE t.id = :id
+            ");
+            $sync->execute([':id' => $id]);
             flash_set('ok', 'Task updated.');
 
             if ($assignee && $assignee !== $prevAssignee && $assignee !== (int)$user['id']) {
@@ -192,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $assignee, 'tasks', 'task_assigned',
                     'Task assigned to you: ' . $title,
                     ($due ? "Due $due. " : '') . 'Reassigned by ' . $user['name'],
-                    '/tasks/tasks.php?highlight=' . $id
+                    '/tasks/tasks.php?edit=' . $id
                 );
             }
         }
@@ -228,6 +245,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('trash.php');
     }
 
+    // Post-op destination for subtask/attachment ops: the task's edit
+    // form (?edit=<task id> — the old URL shape put the task id in a
+    // separate param the form loader never read, so it loaded task #1
+    // and invited edits landing on the wrong task), or back to My
+    // Subtasks when the toggle came from there.
+    $opReturn = function (int $tid): string {
+        return ($_POST['return_to'] ?? '') === 'my' ? 'my.php' : 'tasks.php?edit=' . $tid;
+    };
+
     if ($op === 'subtask_create') {
         $tid   = (int)($_POST['task_id'] ?? 0);
         $title = (string)($_POST['title'] ?? '');
@@ -240,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($isAjax) { json_out(['ok' => false, 'error' => $e->getMessage()], 400); }
             flash_set('error', $e->getMessage());
         }
-        redirect('tasks.php?edit=1&id=' . $tid);
+        redirect($opReturn($tid));
     }
 
     if ($op === 'subtask_update') {
@@ -250,7 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $aid   = (int)($_POST['assignee_user_id'] ?? 0) ?: null;
         try { task_subtask_update($sid, $tid, $title, $aid); } catch (Throwable $e) { flash_set('error', $e->getMessage()); }
         if ($isAjax) json_out(['ok' => true]);
-        redirect('tasks.php?edit=1&id=' . $tid);
+        redirect($opReturn($tid));
     }
 
     if ($op === 'subtask_toggle') {
@@ -262,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $p = task_subtask_progress($tid);
             json_out(['ok' => true, 'done' => $p['done'], 'total' => $p['total']]);
         }
-        redirect('tasks.php?edit=1&id=' . $tid);
+        redirect($opReturn($tid));
     }
 
     if ($op === 'subtask_delete') {
@@ -270,7 +296,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tid = (int)($_POST['task_id'] ?? 0);
         task_subtask_delete($sid, $tid);
         if ($isAjax) json_out(['ok' => true]);
-        redirect('tasks.php?edit=1&id=' . $tid);
+        redirect($opReturn($tid));
     }
 
     if ($op === 'subtask_reorder' && $isAjax) {
@@ -289,15 +315,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             flash_set('error', $e->getMessage());
         }
-        redirect('tasks.php?edit=1&id=' . $tid);
+        redirect($opReturn($tid));
     }
 
     if ($op === 'attachment_delete') {
         $aid = (int)($_POST['id'] ?? 0);
         $tid = (int)($_POST['task_id'] ?? 0);
-        task_attachment_delete($aid);
+        task_attachment_delete($aid, $tid);
         flash_set('ok', 'Attachment removed.');
-        redirect('tasks.php?edit=1&id=' . $tid);
+        redirect($opReturn($tid));
     }
 
     if ($op === 'quick_status') {
@@ -309,8 +335,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $q = db()->prepare("SELECT COALESCE(MAX(board_position), -1) + 1 FROM tasks WHERE column_id = :c");
             $q->execute([':c' => $colId]);
             $maxPos = (int) $q->fetchColumn();
-            $stmt = db()->prepare("UPDATE tasks SET column_id = :c, board_position = :p WHERE id = :id");
+            $stmt = db()->prepare("UPDATE tasks SET column_id = :c, board_position = :p WHERE id = :id AND deleted_at IS NULL");
             $stmt->execute([':c' => $colId, ':p' => $maxPos, ':id' => $id]);
+            $sync = db()->prepare("
+                UPDATE tasks t JOIN task_columns c ON c.id = t.column_id
+                SET t.status = IF(c.is_done = 1, 'done', 'todo')
+                WHERE t.id = :id
+            ");
+            $sync->execute([':id' => $id]);
         }
         redirect('tasks.php' . (!empty($_POST['return']) ? '?' . $_POST['return'] : ''));
     }
@@ -334,7 +366,7 @@ if ($view === 'board' && !$hasKanban) $view = 'list';
 
 $editing = null;
 if (!empty($_GET['edit'])) {
-    $stmt = db()->prepare("SELECT * FROM tasks WHERE id = :id");
+    $stmt = db()->prepare("SELECT * FROM tasks WHERE id = :id AND deleted_at IS NULL");
     $stmt->execute([':id' => (int)$_GET['edit']]);
     $editing = $stmt->fetch() ?: null;
 }
@@ -427,6 +459,13 @@ include __DIR__ . '/../includes/header.php';
 
 <form class="filters" method="get">
     <input type="hidden" name="view" value="<?= e($view) ?>">
+    <?php if ($bucket !== ''): ?>
+        <input type="hidden" name="bucket" value="<?= e($bucket) ?>">
+        <?php if (!empty($_GET['assigned_to_user_id'])): ?>
+            <input type="hidden" name="assigned_to_user_id" value="<?= (int)$_GET['assigned_to_user_id'] ?>">
+        <?php endif; ?>
+        <a class="pill" href="tasks.php?view=<?= e($view) ?>" title="Remove the dashboard filter">bucket: <?= e($bucket) ?> ×</a>
+    <?php endif; ?>
     <input type="search" name="q" placeholder="Search tasks…" value="<?= e($search) ?>">
     <?php if ($hasKanban): ?>
         <select name="col">
@@ -562,6 +601,14 @@ include __DIR__ . '/../includes/header.php';
             <?php if ($editing): ?><a class="btn btn-ghost" href="tasks.php?view=<?= e($view) ?>">Cancel</a><?php endif; ?>
         </div>
     </form>
+    <?php if ($editing): ?>
+    <form method="post" class="inline" style="margin-top:.5rem">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="delete">
+        <input type="hidden" name="id" value="<?= (int)$editing['id'] ?>">
+        <button class="link-btn danger">Archive this task…</button>
+    </form>
+    <?php endif; ?>
 
     <?php if ($editing):
         $subRows  = task_subtasks_for((int)$editing['id']);
@@ -850,7 +897,7 @@ endif;
                         </form>
                         <?php endif; ?>
                         <a class="btn btn-ghost" href="tasks.php?view=<?= e($view) ?>&edit=<?= (int)$t['id'] ?>">Edit</a>
-                        <form method="post" class="inline" onsubmit="return confirm('Delete this task?')">
+                        <form method="post" class="inline">
                             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="op" value="delete">
                             <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">

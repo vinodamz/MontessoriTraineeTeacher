@@ -6,7 +6,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-$user = require_login();
+$user = require_module('montessori');
 
 $studentId = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
 

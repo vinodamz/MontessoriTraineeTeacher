@@ -41,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $probability = max(0, min(100, (int)($_POST['probability'] ?? crm_default_probability($status))));
-    $fee         = $_POST['expected_fee'] !== '' ? (float)$_POST['expected_fee'] : null;
-    $start       = $_POST['expected_start'] !== '' ? $_POST['expected_start'] : null;
+    $fee         = ($_POST['expected_fee'] ?? '') !== '' ? (float)$_POST['expected_fee'] : null;
+    $start       = ($_POST['expected_start'] ?? '') !== '' ? $_POST['expected_start'] : null;
     $priority    = $_POST['priority'] ?? 'normal';
     if (!array_key_exists($priority, crm_priorities())) $priority = 'normal';
     $campaignId  = (int)($_POST['campaign_id'] ?? 0) ?: null;
@@ -338,6 +338,17 @@ require __DIR__ . '/../includes/header.php';
     <p class="muted small">One row per child. Empty rows are dropped on save.</p>
     <div class="crm-rows" id="kid-rows">
         <?php foreach ($children as $i => $k): ?>
+            <?php if (!empty($k['promoted_student_id'])): ?>
+                <div class="crm-row" style="align-items:center">
+                    <div class="field" style="flex:1">
+                        <label>Enrolled child</label>
+                        <div><strong><?= e(trim($k['first_name'] . ' ' . (string)$k['last_name'])) ?></strong>
+                             <span class="pill small">enrolled ✓</span>
+                             <span class="muted small">managed in the Students module</span></div>
+                    </div>
+                </div>
+                <?php continue; ?>
+            <?php endif; ?>
             <div class="crm-row">
                 <div class="field"><label>First name</label>
                     <input name="kid_name[]" value="<?= e($k['first_name']) ?>" maxlength="120"></div>
@@ -420,7 +431,13 @@ function cloneRow(containerId) {
     const last = c.lastElementChild;
     const copy = last.cloneNode(true);
     copy.querySelectorAll('input, select, textarea').forEach(el => {
-        if (el.type === 'radio') { el.checked = false; return; }
+        if (el.type === 'radio') {
+            el.checked = false;
+            // Radios carry the ROW INDEX as their value — without renumbering,
+            // ticking "Primary?" on a cloned row marks the first parent.
+            el.value = String(c.children.length);
+            return;
+        }
         if (el.tagName === 'SELECT') { el.selectedIndex = 0; return; }
         el.value = '';
     });

@@ -30,34 +30,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'move' && 
             echo json_encode(['ok' => false, 'error' => 'bad input']);
             exit;
         }
-        // Read previous status for the audit entry.
-        $prev = db()->prepare("SELECT status, lost_reason FROM inquiry_families WHERE id = :id");
-        $prev->execute([':id' => $id]);
-        $prevRow    = $prev->fetch() ?: [];
-        $prevStatus = (string)($prevRow['status'] ?? '');
-        $prevReason = $prevRow['lost_reason'] ?? null;
-
-        // When the card lands in "lost", the client must include a reason
-        // chosen from crm_lost_reasons(). Moving OUT of lost clears it.
-        if ($st === 'lost') {
-            $reason = (string)($_POST['lost_reason'] ?? '');
-            if (!array_key_exists($reason, crm_lost_reasons())) {
-                http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'lost_reason required', 'need_reason' => true]);
-                exit;
-            }
-            db()->prepare("UPDATE inquiry_families SET status = :s, lost_reason = :r WHERE id = :id")
-                ->execute([':s' => $st, ':r' => $reason, ':id' => $id]);
-        } else {
-            db()->prepare("UPDATE inquiry_families SET status = :s, lost_reason = NULL WHERE id = :id")
-                ->execute([':s' => $st, ':id' => $id]);
-        }
-
-        if ($prevStatus !== '' && $prevStatus !== $st) {
-            $meta = ['from' => $prevStatus, 'to' => $st, 'via' => 'kanban_drag'];
-            if ($st === 'lost')          $meta['lost_reason'] = $_POST['lost_reason'] ?? null;
-            if ($prevStatus === 'lost')  $meta['prev_lost_reason'] = $prevReason;
-            crm_audit_log('status_changed', $id, $meta);
+        // One shared transition path: applies the new stage's default
+        // probability (dragging to Offered used to keep the old 20%),
+        // stamps enrolled_at, handles lost_reason, audit-logs.
+        $res = crm_move_stage($id, $st, [
+            'lost_reason' => $_POST['lost_reason'] ?? null,
+            'via'         => 'kanban_drag',
+        ]);
+        if (!$res['ok']) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $res['error'],
+                              'need_reason' => $res['error'] === 'lost_reason required']);
+            exit;
         }
         echo json_encode(['ok' => true]);
         exit;
@@ -309,6 +293,21 @@ if ($ownerParam !== null) $dueStmt->bindValue(':owner_param', $ownerParam, PDO::
 $dueStmt->execute();
 $dueFollowups = $dueStmt->fetchAll();
 
+// The list is LIMIT 10 for display; the tile needs the real total.
+$dueCountSql = "
+    SELECT COUNT(*)
+    FROM inquiry_touchpoints t
+    JOIN inquiry_families f ON f.id = t.family_id
+    WHERE t.follow_up_at IS NOT NULL
+      AND t.follow_up_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
+      AND f.status IN ('" . implode("','", crm_open_statuses()) . "')
+      $ownerWhere
+";
+$dueCountStmt = db()->prepare($dueCountSql);
+if ($ownerParam !== null) $dueCountStmt->bindValue(':owner_param', $ownerParam, PDO::PARAM_INT);
+$dueCountStmt->execute();
+$dueFollowupsTotal = (int)$dueCountStmt->fetchColumn();
+
 $pageTitle  = 'Admissions';
 $wideLayout = true;
 require __DIR__ . '/../includes/header.php';
@@ -424,7 +423,7 @@ require __DIR__ . '/../includes/header.php';
     <li>
         <div class="admin-tile <?= $dueFollowups ? 'tile-warn' : 'tile-ok' ?>">
             <span class="tile-label">Follow-ups (7d)</span>
-            <span class="tile-value"><?= count($dueFollowups) ?></span>
+            <span class="tile-value"><?= $dueFollowupsTotal ?></span>
             <span class="tile-sub">Scheduled in next week</span>
         </div>
     </li>

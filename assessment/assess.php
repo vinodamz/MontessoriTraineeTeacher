@@ -3,19 +3,26 @@
  * assess.php — monthly assessment entry for one student.
  *
  * GET  ?student_id=N&month=Jun-25 → renders the rating form (pre-filled if a
- *      prior assessment exists for the same student+teacher+month).
+ *      prior assessment exists for the same student+month).
  * POST → transactional save: deletes prior eval_cards/assessments/comments
- *      for (student_id, teacher_id, month_year) then inserts fresh rows.
+ *      for (student_id, month_year) then inserts fresh rows. The month is the
+ *      unit of record — teacher_id on the rows just records who saved last,
+ *      so an admin (or a newly assigned teacher) edits the same data the
+ *      previous assessor entered instead of creating an invisible duplicate.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-$user = require_login();
+$user = require_module('montessori');
 
 // ---------- Resolve student + month ----------------------------------------
 $studentId    = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
 $monthParam   = trim($_REQUEST['month'] ?? '');
-$monthChosen  = $monthParam !== '' && DateTime::createFromFormat('M-y', $monthParam);
+$monthDt      = $monthParam !== '' ? DateTime::createFromFormat('M-y', $monthParam) : false;
+$monthChosen  = $monthDt !== false;
+// Normalise case ("jun-25" → "Jun-25") so one calendar month can't exist
+// under two different string keys.
+if ($monthChosen) $monthParam = $monthDt->format('M-y');
 
 $stmt = db()->prepare("SELECT id, first_name, last_name, grade, teacher_id FROM students WHERE id = :id");
 $stmt->execute([':id' => $studentId]);
@@ -62,6 +69,14 @@ $isNewMonth = !in_array($month, $existingMonths, true);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    // The form carries its month in a hidden field. Refuse to guess: saving
+    // under a re-resolved "latest" month could silently overwrite a different
+    // month than the one the teacher was looking at.
+    if (!$monthChosen) {
+        flash_set('error', 'The form did not say which month it was for — nothing was saved. Please reopen the month and try again.');
+        redirect("assess.php?student_id=$studentId");
+    }
+
     $rmap        = rating_config_map();
     $ratings     = $_POST['rating'] ?? [];          // key = "std:NN" or "cust:NN", value = D|P|N
     $catComments = $_POST['cat_comment'] ?? [];     // key = category name
@@ -82,9 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $indicatorCat = [];   // ["std:123" => "MATHEMATICS", ...]
     if ($stdIds) {
+        // Restricted to the student's grade so a crafted POST can't attach
+        // other-grade categories. Deliberately NOT restricted to is_active —
+        // a rating carried forward for a since-retired indicator must survive
+        // the save instead of being silently dropped.
         $place = implode(',', array_fill(0, count($stdIds), '?'));
-        $rows  = db()->prepare("SELECT id, category FROM skill_indicators WHERE id IN ($place)");
-        $rows->execute($stdIds);
+        $rows  = db()->prepare("SELECT id, category FROM skill_indicators WHERE id IN ($place) AND grade = ?");
+        $params = $stdIds;
+        $params[] = $student['grade'];
+        $rows->execute($params);
         foreach ($rows as $r) $indicatorCat['std:' . $r['id']] = $r['category'];
     }
     if ($custIds) {
@@ -99,12 +120,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $del = $pdo->prepare("DELETE FROM evaluation_cards   WHERE student_id=:s AND teacher_id=:t AND month_year=:m");
-        $del->execute([':s' => $studentId, ':t' => $assessingTeacherId, ':m' => $month]);
-        $del = $pdo->prepare("DELETE FROM assessments        WHERE student_id=:s AND teacher_id=:t AND month_year=:m");
-        $del->execute([':s' => $studentId, ':t' => $assessingTeacherId, ':m' => $month]);
-        $del = $pdo->prepare("DELETE FROM assessment_comments WHERE student_id=:s AND teacher_id=:t AND month_year=:m");
-        $del->execute([':s' => $studentId, ':t' => $assessingTeacherId, ':m' => $month]);
+        // Month-scoped (not teacher-scoped): the previous assessor's rows are
+        // replaced, not duplicated under a second teacher_id.
+        $del = $pdo->prepare("DELETE FROM evaluation_cards   WHERE student_id=:s AND month_year=:m");
+        $del->execute([':s' => $studentId, ':m' => $month]);
+        $del = $pdo->prepare("DELETE FROM assessments        WHERE student_id=:s AND month_year=:m");
+        $del->execute([':s' => $studentId, ':m' => $month]);
+        $del = $pdo->prepare("DELETE FROM assessment_comments WHERE student_id=:s AND month_year=:m");
+        $del->execute([':s' => $studentId, ':m' => $month]);
 
         // Insert eval cards + tally per-category averages.
         $ins = $pdo->prepare("
@@ -177,7 +200,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('progress.php?student_id=' . $studentId);
     } catch (Throwable $e) {
         $pdo->rollBack();
-        flash_set('error', 'Save failed: ' . $e->getMessage());
+        $msg = ($e instanceof PDOException && $e->getCode() == 23000)
+            ? 'Someone else saved this month at the same moment — reload the page and check their entries before saving again.'
+            : 'Save failed: ' . $e->getMessage();
+        flash_set('error', $msg);
         redirect("assess.php?student_id=$studentId&month=" . urlencode($month));
     }
 }
@@ -204,14 +230,14 @@ $stmt = db()->prepare("
 $stmt->execute([':s' => $studentId]);
 $customIndicators = $stmt->fetchAll();
 
-// Pre-fill: existing ratings for this (student, teacher, month).
+// Pre-fill: existing ratings for this (student, month) — whoever entered them.
 $existing = [];
 $stmt = db()->prepare("
     SELECT indicator_id, rating, is_custom_indicator
     FROM evaluation_cards
-    WHERE student_id = :s AND teacher_id = :t AND month_year = :m
+    WHERE student_id = :s AND month_year = :m
 ");
-$stmt->execute([':s' => $studentId, ':t' => $assessingTeacherId, ':m' => $month]);
+$stmt->execute([':s' => $studentId, ':m' => $month]);
 foreach ($stmt as $r) {
     $key = ($r['is_custom_indicator'] ? 'cust' : 'std') . ':' . $r['indicator_id'];
     $existing[$key] = $r['rating'];
@@ -223,12 +249,39 @@ $existingOverall    = '';
 $stmt = db()->prepare("
     SELECT category, comment
     FROM assessment_comments
-    WHERE student_id = :s AND teacher_id = :t AND month_year = :m
+    WHERE student_id = :s AND month_year = :m
 ");
-$stmt->execute([':s' => $studentId, ':t' => $assessingTeacherId, ':m' => $month]);
+$stmt->execute([':s' => $studentId, ':m' => $month]);
 foreach ($stmt as $r) {
     if ($r['category'] === null) $existingOverall = $r['comment'];
     else                         $existingCatComment[$r['category']] = $r['comment'];
+}
+
+// Indicators rated this month but since retired (deactivated) must still
+// render — otherwise the delete-then-insert save would silently drop their
+// ratings and change the category average.
+$activeKeys = [];
+foreach ($indicators as $i)       $activeKeys['std:'  . $i['id']] = true;
+foreach ($customIndicators as $i) $activeKeys['cust:' . $i['id']] = true;
+$retiredStd = $retiredCust = [];
+foreach (array_keys($existing) as $key) {
+    if (isset($activeKeys[$key])) continue;
+    [$kind, $id] = explode(':', $key, 2);
+    if ($kind === 'std') $retiredStd[] = (int)$id; else $retiredCust[] = (int)$id;
+}
+if ($retiredStd) {
+    $place = implode(',', array_fill(0, count($retiredStd), '?'));
+    $rows  = db()->prepare("SELECT id, category, indicator_text, display_order FROM skill_indicators WHERE id IN ($place)");
+    $rows->execute($retiredStd);
+    foreach ($rows as $r) { $r['_retired'] = true; $indicators[] = $r; }
+}
+if ($retiredCust) {
+    $place = implode(',', array_fill(0, count($retiredCust), '?'));
+    $rows  = db()->prepare("SELECT id, category, indicator_text, display_order FROM student_custom_indicators WHERE id IN ($place) AND student_id = ?");
+    $params = $retiredCust;
+    $params[] = $studentId;
+    $rows->execute($params);
+    foreach ($rows as $r) { $r['_retired'] = true; $customIndicators[] = $r; }
 }
 
 // Group indicators by category (preserve insertion order — already sorted).
@@ -280,8 +333,13 @@ require __DIR__ . '/../includes/header.php';
         <?php
         $usedSet     = array_flip($existingMonths);
         $todayMy     = current_month_year();
+        // Academic-year months PLUS any month that actually has data (last
+        // year's tiles must stay reachable), plus today and the month being
+        // viewed (April/May fall outside the Jun–Mar academic list).
+        $monthsOrdered = array_unique(array_merge($allAcademic, $existingMonths, [$todayMy, $month]));
+        usort($monthsOrdered, 'compare_month_year');
         // Most recent month first, so any cell with data lands in the top-left.
-        $monthsOrdered = array_reverse($allAcademic);
+        $monthsOrdered = array_reverse($monthsOrdered);
         foreach ($monthsOrdered as $my):
             $isUsed   = isset($usedSet[$my]);
             $isActive = $my === $month;
@@ -316,8 +374,11 @@ require __DIR__ . '/../includes/header.php';
         Apply <code>sql/seeds.sql</code> or add indicators in Admin → Indicators.</p>
     </div>
 <?php else: ?>
-<form method="post" class="assess-form" id="assessForm">
+<form method="post" class="assess-form" id="assessForm"
+      action="assess.php?student_id=<?= $studentId ?>&amp;month=<?= e(urlencode($month)) ?>">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+    <input type="hidden" name="student_id" value="<?= $studentId ?>">
+    <input type="hidden" name="month" value="<?= e($month) ?>">
 
     <div class="rating-legend">
         <?php foreach ($ratingCodes as $code): ?>
@@ -345,6 +406,7 @@ require __DIR__ . '/../includes/header.php';
                         <td class="ind-text">
                             <?= e($ind['indicator_text']) ?>
                             <?php if ($kind === 'cust'): ?><span class="pill small">custom</span><?php endif; ?>
+                            <?php if (!empty($ind['_retired'])): ?><span class="pill small" title="This indicator was deactivated after this month was assessed; the rating is kept.">retired</span><?php endif; ?>
                         </td>
                         <td class="ind-rating">
                             <?php foreach ($ratingCodes as $code): ?>

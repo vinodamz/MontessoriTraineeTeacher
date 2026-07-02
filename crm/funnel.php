@@ -75,9 +75,20 @@ $enrolled = 0;
 $lost     = 0;
 $active   = 0;
 
-// Per-stage "reached" counts.
+// Per-stage "reached" counts. The funnel is the LINEAR path to Enrolled, so
+// sideways exits (lost, waitlisted, future_intake) neither appear as rows nor
+// credit later stages — a waitlisted family whose stage happens to sort after
+// Offered has NOT "reached Enrolled".
+$SIDEWAYS = ['lost', 'waitlisted', 'future_intake'];
+// "Entry" threshold = the real display_order of the intake stages, not a
+// hardcoded 20 that breaks the moment an admin reorders the board.
+$entryOrder = max($stageOrder['lead'] ?? 0, $stageOrder['new'] ?? 0);
+
 $reached = [];
-foreach ($stages as $s) $reached[$s['code']] = 0;
+foreach ($stages as $s) {
+    if (in_array($s['code'], $SIDEWAYS, true)) continue;
+    $reached[$s['code']] = 0;
+}
 
 foreach ($inquiries as $r) {
     $statusCode  = (string)$r['status'];
@@ -86,22 +97,18 @@ foreach ($inquiries as $r) {
     elseif ($statusCode === 'lost') $lost++;
     else $active++;
 
-    // For the conversion funnel we want the linear progression Leads → Enrolled.
-    // 'lost' sits at the end with display_order 100 but conceptually it's a
-    // sideways exit — don't credit lost rows with passing through later stages
-    // they may never have touched.
-    if ($statusCode === 'lost') {
-        // count only the 'lead' / 'new' rows below it as "reached".
-        foreach ($stages as $s) {
-            if ((int)$s['display_order'] <= 20) {
-                $reached[$s['code']]++;
+    if (in_array($statusCode, $SIDEWAYS, true)) {
+        // Credit only the intake stages the family certainly passed through.
+        foreach ($reached as $code => $_) {
+            if ($stageOrder[$code] <= $entryOrder) {
+                $reached[$code]++;
             }
         }
         continue;
     }
-    foreach ($stages as $s) {
-        if ((int)$s['display_order'] <= $famOrder) {
-            $reached[$s['code']]++;
+    foreach ($reached as $code => $_) {
+        if ($stageOrder[$code] <= $famOrder) {
+            $reached[$code]++;
         }
     }
 }
@@ -218,9 +225,10 @@ require __DIR__ . '/../includes/header.php';
             $prev = null;
             foreach ($stages as $i => $s):
                 $code  = $s['code'];
+                // Sideways exits (lost / waitlisted / future_intake) aren't
+                // rows in the linear funnel.
+                if (!array_key_exists($code, $reached)) continue;
                 $count = (int)$reached[$code];
-                // Skip 'lost' in the linear funnel — it's an exit, not a stage.
-                if ($code === 'lost') continue;
                 $stagePct = pct($count, $total);
                 $stageVsPrev = $prev === null ? '—' : pct($count, $prev);
                 $prev = $count;

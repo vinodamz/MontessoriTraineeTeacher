@@ -8,7 +8,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-$user = require_login();
+$user = require_module('montessori');
 
 $studentId = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
 
@@ -41,7 +41,7 @@ $stmt = db()->prepare("
     SELECT month_year, category, category_avg, score
     FROM assessments
     WHERE student_id = :s
-    ORDER BY category, month_year
+    ORDER BY category, month_year, id
 ");
 $stmt->execute([':s' => $studentId]);
 $rows = $stmt->fetchAll();
@@ -68,7 +68,7 @@ $stmt = db()->prepare("
     SELECT month_year, category, comment, created_at
     FROM assessment_comments
     WHERE student_id = :s
-    ORDER BY month_year DESC, category IS NULL DESC, category
+    ORDER BY category IS NULL DESC, category
 ");
 $stmt->execute([':s' => $studentId]);
 $comments = [];
@@ -76,6 +76,9 @@ foreach ($stmt as $r) {
     $cat = $r['category'] ?? '';
     $comments[$r['month_year']][$cat][] = $r['comment'];
 }
+// 'M-y' strings sort alphabetically ("Jun-25" above "Jan-26"), so order the
+// month groups in PHP — newest first.
+uksort($comments, fn($a, $b) => compare_month_year($b, $a));
 
 // ---------- Chart maths ---------------------------------------------------
 $rmap = rating_config_map();

@@ -38,7 +38,8 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <div class="actionbar">
         <a class="btn" href="/tasks/tasks.php">Task list</a>
-        <a class="btn" href="/tasks/index.php">Board</a>
+        <a class="btn" href="/tasks/tasks.php?view=board">Board</a>
+        <a class="btn" href="/tasks/calendar.php">Calendar</a>
         <a class="btn" href="/tasks/my.php">My subtasks</a>
         <a class="btn btn-ghost" href="/tasks/trash.php">Trash</a>
     </div>

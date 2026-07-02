@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-$user = require_login();
+$user = require_module('tasks');
 materialize_recurrences();
 
 // ---------- Parse view + anchor date -----------------------------------------
@@ -48,7 +48,8 @@ $sql = "
     FROM tasks t
     LEFT JOIN users u          ON u.id   = t.assigned_to_user_id
     LEFT JOIN task_columns col ON col.id = t.column_id
-    WHERE COALESCE(t.due_date, t.instance_date) BETWEEN :s AND :e
+    WHERE t.deleted_at IS NULL
+      AND COALESCE(t.due_date, t.instance_date) BETWEEN :s AND :e
     ORDER BY col.is_done ASC, FIELD(t.priority,'high','normal','low'), t.board_position ASC, t.id DESC
 ";
 $stmt = db()->prepare($sql);

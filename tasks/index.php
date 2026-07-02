@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-$user = current_user();
+$user = require_module('tasks');
 if (!$user) {
     redirect('/login.php');
 }
@@ -82,8 +82,9 @@ include __DIR__ . '/../includes/header.php';
     <h2 class="section-h">Your open tasks</h2>
     <a class="btn" href="/tasks/dashboard.php">Dashboard</a>
     <a class="btn" href="/tasks/my.php">My subtasks</a>
+    <a class="btn" href="/tasks/calendar.php">Calendar</a>
     <a class="btn btn-ghost" href="/tasks/trash.php">Trash</a>
-    <a class="btn btn-primary" href="/tasks/tasks.php"><span class="plus">+</span> All tasks</a>
+    <a class="btn btn-primary" href="/tasks/tasks.php">All tasks</a>
 </div>
 
 <?php if (!$mine): ?>

@@ -41,7 +41,7 @@ try {
     $sel = $pdo->prepare("
         SELECT id FROM inquiry_families
         WHERE RIGHT(REGEXP_REPLACE(COALESCE(primary_phone,''), '[^0-9]', ''), 10) = :d
-          AND id <> :keep AND status <> 'lost'");
+          AND id <> :keep AND status NOT IN ('lost', 'enrolled')");
     $sel->execute([':d' => $last10, ':keep' => $keep]);
     $ids = array_map('intval', $sel->fetchAll(PDO::FETCH_COLUMN));
 
@@ -50,7 +50,7 @@ try {
             UPDATE inquiry_families
             SET status='lost', lost_reason='duplicate', probability=0
             WHERE RIGHT(REGEXP_REPLACE(COALESCE(primary_phone,''), '[^0-9]', ''), 10) = :d
-              AND id <> :keep AND status <> 'lost'")
+              AND id <> :keep AND status NOT IN ('lost', 'enrolled')")
             ->execute([':d' => $last10, ':keep' => $keep]);
         foreach ($ids as $aid) {
             crm_audit_log('lead_deduped', $aid, ['kept' => $keep, 'reason' => 'duplicate']);

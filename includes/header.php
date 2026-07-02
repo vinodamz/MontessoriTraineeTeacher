@@ -14,6 +14,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#FFF8F0">
     <meta name="csrf-token" content="<?= e(function_exists('csrf_token') ? csrf_token() : '') ?>">
+    <meta name="school-name" content="<?= e(function_exists('crm_school_full_name') ? crm_school_full_name() : app_name()) ?>">
     <title><?= e($pageTitle ?? app_name()) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

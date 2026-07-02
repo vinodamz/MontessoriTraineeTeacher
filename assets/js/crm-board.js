@@ -23,20 +23,54 @@
     // onEnd twice due to a browser quirk, or a fast drag + select combo).
     var inflight = {};
 
+    // In-page dropdown dialog (replaces the old "type a number 1-8" prompt,
+    // which was hopeless on mobile). Resolves to the reason code, or null.
     function promptLostReason() {
-        var labels = Object.keys(lostReasons).map(function (k) { return k + ' — ' + lostReasons[k]; });
-        var msg = 'Why was this inquiry lost?\n\n' +
-                  labels.map(function (l, i) { return (i + 1) + '. ' + l; }).join('\n') +
-                  '\n\nEnter the number (1-' + labels.length + '):';
-        var pick = window.prompt(msg, '');
-        if (pick === null) return null;          // cancelled
-        var idx = parseInt(String(pick).trim(), 10) - 1;
-        var codes = Object.keys(lostReasons);
-        if (isNaN(idx) || idx < 0 || idx >= codes.length) {
-            alert('Please pick a number from the list.');
-            return null;
-        }
-        return codes[idx];
+        return new Promise(function (resolve) {
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem;';
+            var box = document.createElement('div');
+            box.style.cssText = 'background:#fff;border-radius:12px;padding:1.1rem 1.2rem;max-width:22rem;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);';
+            var h = document.createElement('h3');
+            h.textContent = 'Why was this inquiry lost?';
+            h.style.cssText = 'margin:0 0 .7rem;font-size:1.05rem;';
+            var sel = document.createElement('select');
+            sel.style.cssText = 'width:100%;padding:.5rem;font-size:1rem;margin-bottom:.9rem;';
+            Object.keys(lostReasons).forEach(function (code) {
+                var o = document.createElement('option');
+                o.value = code;
+                o.textContent = lostReasons[code];
+                sel.appendChild(o);
+            });
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;gap:.5rem;justify-content:flex-end;';
+            var cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'btn btn-ghost';
+            cancel.textContent = 'Cancel';
+            var ok = document.createElement('button');
+            ok.type = 'button';
+            ok.className = 'btn btn-primary';
+            ok.textContent = 'Mark lost';
+            row.appendChild(cancel);
+            row.appendChild(ok);
+            box.appendChild(h);
+            box.appendChild(sel);
+            box.appendChild(row);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+            sel.focus();
+            function done(val) {
+                document.body.removeChild(overlay);
+                resolve(val);
+            }
+            cancel.addEventListener('click', function () { done(null); });
+            ok.addEventListener('click', function () { done(sel.value || null); });
+            overlay.addEventListener('click', function (ev) { if (ev.target === overlay) done(null); });
+            document.addEventListener('keydown', function esc(ev) {
+                if (ev.key === 'Escape') { document.removeEventListener('keydown', esc); done(null); }
+            });
+        });
     }
 
     function moveCard(card, newStatus, oldStatus, onSnapBack) {
@@ -49,15 +83,19 @@
 
         // For Lost, capture the reason BEFORE we hit the server so we don't
         // bounce on the "lost_reason required" 400 and surprise the user.
-        var lostReason = null;
         if (newStatus === 'lost') {
-            lostReason = promptLostReason();
-            if (lostReason === null) {
-                if (onSnapBack) onSnapBack();
-                return Promise.resolve(false);
-            }
+            return promptLostReason().then(function (reason) {
+                if (reason === null) {
+                    if (onSnapBack) onSnapBack();
+                    return false;
+                }
+                return postMove(card, newStatus, reason, onSnapBack);
+            });
         }
+        return postMove(card, newStatus, null, onSnapBack);
+    }
 
+    function postMove(card, newStatus, lostReason, onSnapBack) {
         var inquiryId = parseInt(card.dataset.inquiryId, 10);
         if (!inquiryId) return Promise.resolve(false);
 
