@@ -42,6 +42,11 @@ jobs:
       CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
       REPO_ROOT:    /home/${{ secrets.CPANEL_USER }}/repos/MontessoriTraineeTeacher
     steps:
+      # The self-test computes LAST_MIG from sql/migrate_*.sql in the
+      # checkout — without this step `ls` finds nothing and the gate
+      # fails even when the live site deployed fine.
+      - uses: actions/checkout@v4
+
       - name: Normalise CPANEL_HOST (strip scheme / trailing slash)
         run: |
           HOST=$(printf '%s' "${CPANEL_HOST}" | sed -E 's#^https?://##; s#/+$##')
