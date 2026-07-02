@@ -5,12 +5,16 @@ require_once __DIR__ . '/../includes/functions.php';
 $user = require_module('montessori');
 
 // Admins see every student. Teachers see only their own. Withdrawn/graduated
-// children drop off the assessment dashboard — they'd otherwise sit as
-// "Not yet assessed" forever.
-$activeWhere = "s.is_active = 1 AND s.enrollment_status IN ('enrolled','promoted')";
+// children drop off the assessment dashboard by default — they'd otherwise
+// sit as "Not yet assessed" forever — but ?show=all brings them back so LAST
+// YEAR'S assessments stay one click away.
+$showAll     = ($_GET['show'] ?? '') === 'all';
+$activeWhere = $showAll
+    ? '1=1'
+    : "s.is_active = 1 AND s.enrollment_status IN ('enrolled','promoted')";
 if ($user['role'] === 'admin') {
     $students = db()->query("
-        SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id, t.name AS teacher_name
+        SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id, s.is_active, s.enrollment_status, t.name AS teacher_name
         FROM students s
         JOIN users t ON t.id = s.teacher_id
         WHERE $activeWhere
@@ -18,7 +22,7 @@ if ($user['role'] === 'admin') {
     ")->fetchAll();
 } else {
     $stmt = db()->prepare("
-        SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id
+        SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id, s.is_active, s.enrollment_status
         FROM students s
         WHERE s.teacher_id = :tid AND $activeWhere
         ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
@@ -55,6 +59,19 @@ if ($students) {
 
 $currentMonth = current_month_year();
 
+// How many students the default filter hides (former/withdrawn/graduated) —
+// shown next to the toggle so old assessments are never invisibly gone.
+$formerCount = 0;
+if (!$showAll) {
+    if ($user['role'] === 'admin') {
+        $formerCount = (int)db()->query("SELECT COUNT(*) FROM students s WHERE NOT (s.is_active = 1 AND s.enrollment_status IN ('enrolled','promoted'))")->fetchColumn();
+    } else {
+        $fq = db()->prepare("SELECT COUNT(*) FROM students s WHERE s.teacher_id = :tid AND NOT (s.is_active = 1 AND s.enrollment_status IN ('enrolled','promoted'))");
+        $fq->execute([':tid' => $user['id']]);
+        $formerCount = (int)$fq->fetchColumn();
+    }
+}
+
 $pageTitle = 'Dashboard';
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -65,9 +82,16 @@ require __DIR__ . '/../includes/header.php';
         <p class="muted">Current month: <strong><?= e(month_year_label($currentMonth)) ?></strong>
             · <?= count($students) ?> student<?= count($students) === 1 ? '' : 's' ?></p>
     </div>
-    <?php if ($user['role'] === 'admin'): ?>
-        <a class="btn btn-primary" href="admin.php?tab=students">Manage students</a>
-    <?php endif; ?>
+    <div class="head-actions">
+        <?php if ($showAll): ?>
+            <a class="btn btn-ghost" href="index.php">← Current students only</a>
+        <?php elseif ($formerCount > 0): ?>
+            <a class="btn btn-ghost" href="index.php?show=all" title="Include withdrawn/graduated children so their past assessments stay reachable">Former students (<?= $formerCount ?>)</a>
+        <?php endif; ?>
+        <?php if ($user['role'] === 'admin'): ?>
+            <a class="btn btn-primary" href="admin.php?tab=students">Manage students</a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php if (!$students): ?>
@@ -94,6 +118,9 @@ require __DIR__ . '/../includes/header.php';
                 <div>
                     <div class="student-name"><?= e($fullName) ?></div>
                     <span class="<?= e(grade_badge_class($s['grade'])) ?>"><?= e($s['grade']) ?></span>
+                    <?php if (isset($s['is_active']) && (!$s['is_active'] || !in_array($s['enrollment_status'] ?? 'enrolled', ['enrolled','promoted'], true))): ?>
+                        <span class="pill small"><?= e($s['enrollment_status'] ?? 'inactive') ?></span>
+                    <?php endif; ?>
                     <?php if ($user['role'] === 'admin' && !empty($s['teacher_name'])): ?>
                         <span class="muted small"> · <?= e($s['teacher_name']) ?></span>
                     <?php endif; ?>

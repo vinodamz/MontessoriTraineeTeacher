@@ -699,6 +699,23 @@ function rating_config_map(): array
     return $map;
 }
 
+/**
+ * Every rating code ever configured, active or not. Old assessments keep
+ * referencing a code after it's deactivated (e.g. a legacy 'D'); saves and
+ * pre-fills must still recognise those or editing an old month silently
+ * drops its ratings.
+ */
+function rating_config_map_all(): array
+{
+    static $map = null;
+    if ($map === null) {
+        $rows = db()->query("SELECT code, label, color, numeric_value, is_active FROM rating_config")->fetchAll();
+        $map = [];
+        foreach ($rows as $r) $map[$r['code']] = $r;
+    }
+    return $map;
+}
+
 function rating_codes(): array
 {
     $map = rating_config_map();

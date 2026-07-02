@@ -77,7 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect("assess.php?student_id=$studentId");
     }
 
-    $rmap        = rating_config_map();
+    // ALL configured codes (active + retired): an old month may carry a
+    // legacy code; the save must keep it, not silently drop it.
+    $rmap        = rating_config_map_all();
     $ratings     = $_POST['rating'] ?? [];          // key = "std:NN" or "cust:NN", value = D|P|N
     $catComments = $_POST['cat_comment'] ?? [];     // key = category name
     $overall     = trim($_POST['overall_comment'] ?? '');
@@ -409,6 +411,14 @@ require __DIR__ . '/../includes/header.php';
                             <?php if (!empty($ind['_retired'])): ?><span class="pill small" title="This indicator was deactivated after this month was assessed; the rating is kept.">retired</span><?php endif; ?>
                         </td>
                         <td class="ind-rating">
+                            <?php if ($sel !== '' && !isset($rmap[$sel])): ?>
+                                <?php $legacy = rating_config_map_all()[$sel] ?? null; ?>
+                                <span class="pill" title="Recorded with the retired rating code '<?= e($sel) ?>' — kept as-is."
+                                      style="<?= $legacy ? 'border:1px solid ' . e($legacy['color']) . ';' : '' ?>">
+                                    <?= e($sel) ?><?= $legacy ? ' · ' . e($legacy['label']) : '' ?> (legacy)
+                                </span>
+                                <input type="hidden" name="rating[<?= e($key) ?>]" value="<?= e($sel) ?>">
+                            <?php else: ?>
                             <?php foreach ($ratingCodes as $code): ?>
                                 <label class="rating-pick rating-<?= e($code) ?> <?= $sel === $code ? 'is-on' : '' ?>"
                                        style="--ring: <?= e($rmap[$code]['color']) ?>">
@@ -419,6 +429,7 @@ require __DIR__ . '/../includes/header.php';
                                     <?= e($code) ?>
                                 </label>
                             <?php endforeach; ?>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
