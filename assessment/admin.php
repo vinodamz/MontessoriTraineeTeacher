@@ -50,6 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pin  = preg_replace('/\D/', '', $_POST['pin'] ?? '');
                 $active = !empty($_POST['active']) ? 1 : 0;
                 if ($id <= 0 || $name === '') throw new RuntimeException('Bad input.');
+                if ($id === (int)$user['id'] && ($role !== 'admin' || !$active)) {
+                    throw new RuntimeException('You cannot demote or deactivate your own account.');
+                }
                 if ($pin !== '') {
                     if (strlen($pin) < 4 || strlen($pin) > 6) throw new RuntimeException('PIN must be 4–6 digits.');
                     $stmt = db()->prepare("UPDATE users SET name=:n, role=:r, active=:a, pin_hash=:h WHERE id=:id");
@@ -93,11 +96,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             case 'student_delete': {
+                // Soft-withdraw only. A hard DELETE cascades through
+                // attendance, fee invoices + payments, documents and parents
+                // — far more than the assessment data this tab manages.
+                // Real deletion (with file cleanup) belongs to /students/.
                 $id = (int)($_POST['id'] ?? 0);
                 if ($id <= 0) throw new RuntimeException('Bad input.');
-                $stmt = db()->prepare("DELETE FROM students WHERE id = :id");
+                $stmt = db()->prepare("UPDATE students SET is_active = 0, enrollment_status = 'withdrawn' WHERE id = :id");
                 $stmt->execute([':id' => $id]);
-                flash_set('ok', "Student deleted (cards and baseline removed).");
+                flash_set('ok', "Student marked withdrawn — assessments, fees and attendance history are kept. Manage the full record in the Students module.");
                 redirect('admin.php?tab=students');
             }
 
@@ -173,7 +180,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $id   = (int)$id;
                         $lbl  = trim($f['label'] ?? '');
                         $col  = trim($f['color'] ?? '');
-                        $num  = (int)($f['numeric_value'] ?? 0);
+                        // Chart + stored category averages assume a 1–5 scale.
+                        $num  = max(1, min(5, (int)($f['numeric_value'] ?? 0)));
                         $act  = !empty($f['is_active']) ? 1 : 0;
                         if ($id <= 0 || $lbl === '' || $col === '') continue;
                         $upd->execute([':l'=>$lbl, ':c'=>$col, ':n'=>$num, ':a'=>$act, ':id'=>$id]);
@@ -359,9 +367,18 @@ require __DIR__ . '/../includes/header.php';
         </label>
         <label>Teacher
             <select name="teacher_id" required>
-                <?php foreach ($teachers as $t): if (empty($t['active'])) continue; ?>
-                    <option value="<?= (int)$t['id'] ?>" <?= (int)($editStudent['teacher_id'] ?? 0) === (int)$t['id'] ? 'selected' : '' ?>>
-                        <?= e($t['name']) ?>
+                <?php
+                // Keep the student's CURRENT teacher selectable even if that
+                // account was deactivated — otherwise the browser silently
+                // preselects the first option and a cosmetic edit reassigns
+                // the child to whoever sorts first.
+                $currentTid = (int)($editStudent['teacher_id'] ?? 0);
+                foreach ($teachers as $t):
+                    $isCurrent = $currentTid === (int)$t['id'];
+                    if (empty($t['active']) && !$isCurrent) continue;
+                ?>
+                    <option value="<?= (int)$t['id'] ?>" <?= $isCurrent ? 'selected' : '' ?>>
+                        <?= e($t['name']) ?><?= empty($t['active']) ? ' (inactive)' : '' ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -388,11 +405,11 @@ require __DIR__ . '/../includes/header.php';
                 <td class="row-actions">
                     <a class="btn btn-ghost small" href="admin.php?tab=students&edit=<?= (int)$s['id'] ?>">Edit</a>
                     <a class="btn btn-ghost small" href="custom_indicators.php?student_id=<?= (int)$s['id'] ?>">Custom indicators</a>
-                    <form method="post" onsubmit="return confirm('Delete <?= e(addslashes($s['first_name'].' '.$s['last_name'])) ?>? This also removes their cards and baseline.');" style="display:inline">
+                    <form method="post" onsubmit="return confirm('Mark <?= e(addslashes($s['first_name'].' '.$s['last_name'])) ?> as withdrawn? They disappear from assessment lists; all history is kept.');" style="display:inline">
                         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="student_delete">
                         <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
-                        <button class="btn btn-ghost small danger">Delete</button>
+                        <button class="btn btn-ghost small danger">Withdraw</button>
                     </form>
                 </td>
             </tr>
@@ -484,7 +501,7 @@ require __DIR__ . '/../includes/header.php';
                         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="indicator_delete">
                         <input type="hidden" name="id" value="<?= (int)$i['id'] ?>">
-                        <button class="btn btn-ghost small danger">Delete</button>
+                        <button class="btn btn-ghost small danger">Withdraw</button>
                     </form>
                 </td>
             </tr>
@@ -514,7 +531,7 @@ require __DIR__ . '/../includes/header.php';
                     <td><strong style="color:<?= e($r['color']) ?>"><?= e($r['code']) ?></strong></td>
                     <td><input name="r[<?= (int)$r['id'] ?>][label]" value="<?= e($r['label']) ?>" maxlength="60" required></td>
                     <td><input name="r[<?= (int)$r['id'] ?>][color]" value="<?= e($r['color']) ?>" maxlength="20" required></td>
-                    <td><input type="number" name="r[<?= (int)$r['id'] ?>][numeric_value]" value="<?= (int)$r['numeric_value'] ?>" min="0" max="100" required></td>
+                    <td><input type="number" name="r[<?= (int)$r['id'] ?>][numeric_value]" value="<?= (int)$r['numeric_value'] ?>" min="1" max="5" required></td>
                     <td><input type="checkbox" name="r[<?= (int)$r['id'] ?>][is_active]" value="1" <?= !empty($r['is_active']) ? 'checked' : '' ?>></td>
                 </tr>
             <?php endforeach; ?>

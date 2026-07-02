@@ -30,4 +30,8 @@ deployment:
     - /bin/cp $HOME/last-smoke.log $HOME/thelittlegraduates.in/mtt/last-smoke.log
     - cd $HOME/thelittlegraduates.in/mtt && /bin/bash tasks/run-smoke.sh > $HOME/last-tasks-smoke.log 2>&1 || echo "TASKS SMOKE WRAPPER EXIT $?" >> $HOME/last-tasks-smoke.log
     - /bin/cp $HOME/last-tasks-smoke.log $HOME/thelittlegraduates.in/mtt/last-tasks-smoke.log
+    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash assessment/run-smoke.sh > $HOME/last-assessment-smoke.log 2>&1 || echo "ASSESSMENT SMOKE WRAPPER EXIT $?" >> $HOME/last-assessment-smoke.log
+    - /bin/cp $HOME/last-assessment-smoke.log $HOME/thelittlegraduates.in/mtt/last-assessment-smoke.log
+    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash crm/run-smoke.sh > $HOME/last-crm-smoke.log 2>&1 || echo "CRM SMOKE WRAPPER EXIT $?" >> $HOME/last-crm-smoke.log
+    - /bin/cp $HOME/last-crm-smoke.log $HOME/thelittlegraduates.in/mtt/last-crm-smoke.log
     - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log

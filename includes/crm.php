@@ -109,6 +109,64 @@ function crm_default_probability(string $status): int
     return crm_statuses()[$status]['prob'] ?? 0;
 }
 
+/**
+ * The one way to move a family between pipeline stages. Every UI (board drag,
+ * quick-move select, detail form) calls this so the side-effects are always
+ * the same:
+ *   - probability snaps to the new stage's default unless the caller passes
+ *     an explicit user-chosen value in $opts['probability']
+ *   - moving to 'lost' requires a valid lost_reason; moving out clears it
+ *   - moving to 'enrolled' stamps enrolled_at (once) and pins probability 100
+ *   - the transition is audit-logged with from/to/via
+ *
+ * Returns ['ok' => bool, 'error' => string|null].
+ */
+function crm_move_stage(int $familyId, string $to, array $opts = []): array
+{
+    if (!array_key_exists($to, crm_statuses())) {
+        return ['ok' => false, 'error' => 'unknown stage'];
+    }
+    $pdo = db();
+    $st = $pdo->prepare("SELECT status, lost_reason FROM inquiry_families WHERE id = :id");
+    $st->execute([':id' => $familyId]);
+    $prev = $st->fetch();
+    if (!$prev) return ['ok' => false, 'error' => 'family not found'];
+
+    $lostReason = null;
+    if ($to === 'lost') {
+        $lostReason = (string)($opts['lost_reason'] ?? '');
+        if (!array_key_exists($lostReason, crm_lost_reasons())) {
+            return ['ok' => false, 'error' => 'lost_reason required'];
+        }
+    }
+
+    $prob = isset($opts['probability'])
+        ? max(0, min(100, (int)$opts['probability']))
+        : crm_default_probability($to);
+
+    if ($to === 'enrolled') {
+        $prob = 100;
+        $pdo->prepare("UPDATE inquiry_families
+                       SET status=:s, lost_reason=NULL, probability=:p,
+                           enrolled_at = COALESCE(enrolled_at, NOW())
+                       WHERE id=:id")
+            ->execute([':s' => $to, ':p' => $prob, ':id' => $familyId]);
+    } else {
+        $pdo->prepare("UPDATE inquiry_families
+                       SET status=:s, lost_reason=:lr, probability=:p
+                       WHERE id=:id")
+            ->execute([':s' => $to, ':lr' => $lostReason, ':p' => $prob, ':id' => $familyId]);
+    }
+
+    if ((string)$prev['status'] !== $to) {
+        $meta = ['from' => (string)$prev['status'], 'to' => $to, 'via' => (string)($opts['via'] ?? 'unknown')];
+        if ($to === 'lost')                     $meta['lost_reason'] = $lostReason;
+        if ((string)$prev['status'] === 'lost') $meta['prev_lost_reason'] = $prev['lost_reason'];
+        crm_audit_log('status_changed', $familyId, $meta);
+    }
+    return ['ok' => true, 'error' => null];
+}
+
 /** Statuses still in the funnel (everything except enrolled/lost). */
 function crm_open_statuses(): array
 {
@@ -552,14 +610,16 @@ function crm_wa_vars_for_families(array $familyIds): array
 
     $out = [];
     foreach ($familyIds as $fid) {
-        $out[$fid] = ['parent_name' => '', 'child_name' => ''];
+        $out[$fid] = ['parent_name' => '', 'child_name' => '', 'stage' => ''];
     }
 
-    // primary_name from inquiry_families as fallback parent name.
-    $famRows = $pdo->prepare("SELECT id, primary_name FROM inquiry_families WHERE id IN ($place)");
+    // primary_name from inquiry_families as fallback parent name; the stage
+    // label feeds the picker's {stage} variable.
+    $famRows = $pdo->prepare("SELECT id, primary_name, status FROM inquiry_families WHERE id IN ($place)");
     $famRows->execute($familyIds);
     foreach ($famRows as $r) {
         $out[(int)$r['id']]['parent_name'] = trim(explode(',', (string)$r['primary_name'])[0] ?: '');
+        $out[(int)$r['id']]['stage']       = crm_status_label((string)$r['status']);
     }
 
     // First-parent name (prefer is_primary) overrides primary_name.
@@ -654,7 +714,9 @@ function crm_phone_actions(?string $phone, ?int $familyId = null, array $waVars 
     if ($familyId && $waVars) {
         $p = htmlspecialchars((string)($waVars['parent_name'] ?? ''), ENT_QUOTES);
         $c = htmlspecialchars((string)($waVars['child_name']  ?? ''), ENT_QUOTES);
-        $waAttrs = ' data-wa-parent="' . $p . '" data-wa-child="' . $c . '"';
+        $s = htmlspecialchars((string)($waVars['stage'] ?? ''), ENT_QUOTES);
+        $waAttrs = ' data-wa-parent="' . $p . '" data-wa-child="' . $c . '"'
+                 . ($s !== '' ? ' data-wa-stage="' . $s . '"' : '');
     }
 
     // "Save as contact" link — only render when we have a family_id since
@@ -703,6 +765,20 @@ function crm_audit_actions(): array
         'phone_call_initiated'  => 'Phone call (Call button)',
         'whatsapp_initiated'    => 'WhatsApp opened',
         'contact_saved'         => 'Saved as contact (vCard)',
+        'wa_sent'               => 'WhatsApp sent (CRM)',
+        'wa_intro_sent'         => 'WhatsApp intro sent',
+        'visit_marked'          => 'Visit marked done',
+        'visit_lead_created'    => 'Lead created (visit booking)',
+        'bot_lead_created'      => 'Lead created (bot)',
+        'bot_intro_sent'        => 'Bot intro sent',
+        'bot_stage_changed'     => 'Stage changed (bot)',
+        'bot_marked_lost'       => 'Marked lost (bot)',
+        'bot_future_intake'     => 'Parked for future intake (bot)',
+        'lead_deduped'          => 'Duplicate archived (dedupe)',
+        'lead_merged'           => 'Merged into another lead',
+        'appointment_done'      => 'Appointment done',
+        'appointment_cancelled' => 'Appointment cancelled',
+        'appointment_no_show'   => 'Appointment no-show',
     ];
 }
 

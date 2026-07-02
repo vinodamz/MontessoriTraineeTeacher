@@ -163,6 +163,9 @@ function wacrm_template_params(string $template, array $vars): array
         'visit_invitation_v2'     => ['parent_name', 'school_name'],
         'post_visit_followup_v2'  => ['parent_name', 'school_name', 'child_name'],
         'admission_next_steps_v2' => ['parent_name', 'child_name', 'school_name'],
+        // Cold-outreach intro (migration 035): school + city are hardcoded in
+        // the template body; the only variable is the parent's name.
+        'intro_admission_enquiry'  => ['parent_name'],
     ];
     $order = $orders[$template] ?? ['parent_name'];
     return array_map(static fn($k) => (string) ($vars[$k] ?? ''), $order);
@@ -384,36 +387,28 @@ function _materialize_recurrences_inner(): void
 {
     if (!recurrence_available()) return;
 
-    $today  = (new DateTime('today'))->format('Y-m-d');
-    $dow    = (int) date('w');
-    $dom    = (int) date('j');
+    // The materialiser only runs when someone loads a page, so it must
+    // BACKFILL: a monthly task whose day fell on a quiet Sunday used to be
+    // skipped forever ("today doesn't match the rule any more"). We walk every
+    // day since the recurrence's last materialised instance (capped, so an
+    // app dormant for months doesn't spawn a wall of stale dailies).
+    $BACKFILL_DAYS = 31;
+
+    $todayDt = new DateTime('today');
+    $today   = $todayDt->format('Y-m-d');
+    $floor   = (clone $todayDt)->modify('-' . $BACKFILL_DAYS . ' days')->format('Y-m-d');
 
     $pdo = db();
-    $stmt = $pdo->prepare("
-        SELECT r.*
+    $recs = $pdo->prepare("
+        SELECT r.*,
+               (SELECT MAX(t.instance_date) FROM tasks t WHERE t.recurrence_id = r.id) AS last_instance
         FROM task_recurrences r
         WHERE r.is_active = 1
-          AND r.start_date <= :today_a
-          AND (r.end_date IS NULL OR r.end_date >= :today_b)
-          AND NOT EXISTS (
-              SELECT 1 FROM tasks t
-              WHERE t.recurrence_id = r.id AND t.instance_date = :today_c
-          )
-          AND (
-              r.frequency = 'daily'
-              OR (r.frequency = 'weekly'  AND (r.days_mask & :dow_bit) > 0)
-              OR (r.frequency = 'monthly' AND r.day_of_month = :dom)
-          )
+          AND r.start_date <= :today
     ");
-    $stmt->execute([
-        ':today_a' => $today,
-        ':today_b' => $today,
-        ':today_c' => $today,
-        ':dow_bit' => 1 << $dow,
-        ':dom'     => $dom,
-    ]);
-    $due = $stmt->fetchAll();
-    if (!$due) return;
+    $recs->execute([':today' => $today]);
+    $recs = $recs->fetchAll();
+    if (!$recs) return;
 
     $posQ = $pdo->prepare("SELECT COALESCE(MAX(board_position), -1) + 1 FROM tasks WHERE column_id = :c");
     $ins  = $pdo->prepare("
@@ -424,27 +419,48 @@ function _materialize_recurrences_inner(): void
         VALUES (:t, :d, 'todo', :col, :pos, :p, :due, :a, :c, :r, :date)
     ");
 
-    foreach ($due as $r) {
-        $posQ->execute([':c' => $r['column_id']]);
-        $pos = (int) $posQ->fetchColumn();
+    foreach ($recs as $r) {
+        // First candidate day: the day after the last instance, clamped to
+        // [start_date, today - BACKFILL_DAYS].
+        $from = $r['last_instance']
+            ? (new DateTime($r['last_instance']))->modify('+1 day')->format('Y-m-d')
+            : $r['start_date'];
+        if ($from < $floor)            $from = $floor;
+        if ($from < $r['start_date'])  $from = $r['start_date'];
+        if ($from > $today)            continue;
 
-        $offset  = isset($r['due_offset_days']) ? (int)$r['due_offset_days'] : 0;
-        $dueDate = $offset === 0
-            ? $today
-            : (new DateTime($today))->modify(($offset >= 0 ? '+' : '') . $offset . ' days')->format('Y-m-d');
+        $end = ($r['end_date'] !== null && $r['end_date'] < $today) ? $r['end_date'] : $today;
 
-        $ins->execute([
-            ':t'    => $r['title'],
-            ':d'    => $r['description'],
-            ':col'  => $r['column_id'],
-            ':pos'  => $pos,
-            ':p'    => $r['priority'],
-            ':due'  => $dueDate,
-            ':a'    => $r['assigned_to_user_id'],
-            ':c'    => $r['created_by_user_id'],
-            ':r'    => $r['id'],
-            ':date' => $today,
-        ]);
+        for ($d = new DateTime($from); $d->format('Y-m-d') <= $end; $d->modify('+1 day')) {
+            $iso = $d->format('Y-m-d');
+            $dow = (int)$d->format('w');
+            $dom = (int)$d->format('j');
+            $matches = $r['frequency'] === 'daily'
+                || ($r['frequency'] === 'weekly'  && (((int)$r['days_mask']) & (1 << $dow)) > 0)
+                || ($r['frequency'] === 'monthly' && (int)$r['day_of_month'] === $dom);
+            if (!$matches) continue;
+
+            $posQ->execute([':c' => $r['column_id']]);
+            $pos = (int) $posQ->fetchColumn();
+
+            $offset  = isset($r['due_offset_days']) ? (int)$r['due_offset_days'] : 0;
+            $dueDate = $offset === 0
+                ? $iso
+                : (clone $d)->modify(($offset >= 0 ? '+' : '') . $offset . ' days')->format('Y-m-d');
+
+            $ins->execute([
+                ':t'    => $r['title'],
+                ':d'    => $r['description'],
+                ':col'  => $r['column_id'],
+                ':pos'  => $pos,
+                ':p'    => $r['priority'],
+                ':due'  => $dueDate,
+                ':a'    => $r['assigned_to_user_id'],
+                ':c'    => $r['created_by_user_id'],
+                ':r'    => $r['id'],
+                ':date' => $iso,
+            ]);
+        }
     }
 }
 
@@ -452,7 +468,9 @@ function date_bucket(?string $isoDate): string
 {
     if (!$isoDate) return 'no-date';
     $today    = new DateTime('today');
-    $taskDate = DateTime::createFromFormat('Y-m-d', $isoDate);
+    // '!' zeroes the time-of-day; without it the parsed date carries the
+    // current clock time and a task 1 day overdue rounds to "today".
+    $taskDate = DateTime::createFromFormat('!Y-m-d', $isoDate);
     if (!$taskDate) return 'no-date';
     $diff = (int) $today->diff($taskDate)->format('%r%a');
     if ($diff < 0)  return 'overdue';
@@ -466,7 +484,7 @@ function date_label(?string $isoDate): string
 {
     $bucket = date_bucket($isoDate);
     if ($bucket === 'no-date') return '';
-    $taskDate = DateTime::createFromFormat('Y-m-d', $isoDate);
+    $taskDate = DateTime::createFromFormat('!Y-m-d', $isoDate);
     return match ($bucket) {
         'today'    => 'Today',
         'tomorrow' => 'Tomorrow',

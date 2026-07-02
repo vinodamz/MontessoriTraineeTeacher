@@ -2,21 +2,25 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-$user = require_login();
+$user = require_module('montessori');
 
-// Admins see every student. Teachers see only their own.
+// Admins see every student. Teachers see only their own. Withdrawn/graduated
+// children drop off the assessment dashboard — they'd otherwise sit as
+// "Not yet assessed" forever.
+$activeWhere = "s.is_active = 1 AND s.enrollment_status IN ('enrolled','promoted')";
 if ($user['role'] === 'admin') {
     $students = db()->query("
         SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id, t.name AS teacher_name
         FROM students s
         JOIN users t ON t.id = s.teacher_id
+        WHERE $activeWhere
         ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
     ")->fetchAll();
 } else {
     $stmt = db()->prepare("
         SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id
         FROM students s
-        WHERE s.teacher_id = :tid
+        WHERE s.teacher_id = :tid AND $activeWhere
         ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
     ");
     $stmt->execute([':tid' => $user['id']]);
@@ -103,8 +107,9 @@ require __DIR__ . '/../includes/header.php';
             <div class="student-actions">
                 <a class="btn btn-primary" href="assess.php?student_id=<?= $sid ?>">Assess</a>
                 <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress</a>
-                <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>"><?= $hasBl ? 'Edit first assessment' : 'Add first assessment' ?></a>
-                <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $sid ?>" title="Manage custom indicators for this student">Custom</a>
+                <?php if (!$hasBl): ?>
+                    <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>">Add first assessment</a>
+                <?php endif; ?>
             </div>
         </li>
     <?php endforeach; ?>

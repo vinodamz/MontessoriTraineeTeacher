@@ -11,6 +11,10 @@
 -- For an existing MTT database, run sql/migrate_001_unify_users.sql instead.
 -- ============================================================================
 
+-- Tables reference each other out of creation order (notifications → users),
+-- so a fresh import needs FK checks deferred until the end.
+SET FOREIGN_KEY_CHECKS = 0;
+
 SET NAMES utf8mb4;
 SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
@@ -824,3 +828,5 @@ CREATE TABLE expenses (
 
 -- After running this schema, open /install.php to create the first admin.
 -- For seed data (rating scheme + curriculum indicators), run sql/seeds.sql next.
+
+SET FOREIGN_KEY_CHECKS = 1;

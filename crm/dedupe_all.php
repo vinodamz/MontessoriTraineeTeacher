@@ -55,6 +55,12 @@ try {
     // then most recent. The keeper keeps its stage — merging never downgrades.
     foreach ($groups as &$g) {
         usort($g, function ($a, $b) {
+            // An enrolled record is never archived as a duplicate — raw
+            // display_order would rank 'waitlisted' (90) above 'enrolled'
+            // (80) and destroy a customer's record.
+            $aEnr = (int) ($a['status'] === 'enrolled');
+            $bEnr = (int) ($b['status'] === 'enrolled');
+            if ($aEnr !== $bEnr) return $bEnr <=> $aEnr;
             $aLost = (int) ($a['status'] === 'lost');
             $bLost = (int) ($b['status'] === 'lost');
             if ($aLost !== $bLost) return $aLost <=> $bLost;
@@ -86,6 +92,12 @@ try {
             $kid = (int) $keeper['id'];
             foreach ($dupes as $d) {
                 $did = (int) $d['id'];
+                // Belt-and-braces: never archive an enrolled record even if
+                // two enrolled rows share a phone — that needs a human.
+                if ($d['status'] === 'enrolled') continue;
+                // A half-merged family (children moved, shell not archived)
+                // is worse than no merge — all-or-nothing per duplicate.
+                $pdo->beginTransaction();
                 // Move child records onto the keeper.
                 foreach (['inquiry_touchpoints', 'crm_appointments', 'inquiry_children', 'inquiry_parents'] as $tbl) {
                     try {
@@ -112,6 +124,7 @@ try {
                     WHERE id = :d
                 ")->execute([':m' => '[' . date('Y-m-d H:i') . "] merged into #$kid (phone dedupe)", ':d' => $did]);
                 crm_audit_log('lead_merged', $did, ['into' => $kid, 'via' => 'dedupe_all']);
+                $pdo->commit();
             }
         }
         $report[] = $entry;

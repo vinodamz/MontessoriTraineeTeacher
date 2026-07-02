@@ -25,6 +25,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $phone   = trim($_POST['primary_phone'] ?? '') ?: null;
     $email   = trim($_POST['primary_email'] ?? '') ?: null;
+
+    // Same dedupe contract as the bot/booking ingest paths: an existing
+    // family with this phone means "open it", not "create a twin" that later
+    // needs the destructive dedupe tools.
+    if ($phone !== null) {
+        $existing = crm_find_lead_by_phone($phone);
+        if ($existing !== null) {
+            flash_set('ok', 'A record with this phone number already exists — opened it instead of creating a duplicate.');
+            redirect('/crm/view.php?id=' . $existing);
+        }
+    }
+
     $camp    = (int)($_POST['campaign_id'] ?? 0) ?: null;
     $prio    = $_POST['priority'] ?? 'normal';
     if (!array_key_exists($prio, crm_priorities())) $prio = 'normal';

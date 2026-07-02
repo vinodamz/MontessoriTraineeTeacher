@@ -68,6 +68,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', 'Stage label is required.');
             redirect('/crm/stages.php');
         }
+        if (!$act) {
+            // Cards in a deactivated stage render in no kanban column and
+            // drop out of every follow-up list — it looks like data loss.
+            $chk = $pdo->prepare("
+                SELECT s.code, COUNT(f.id) AS n
+                FROM crm_stages s
+                LEFT JOIN inquiry_families f ON f.status = s.code
+                WHERE s.id = :id
+                GROUP BY s.code
+            ");
+            $chk->execute([':id' => $id]);
+            $row = $chk->fetch();
+            if ($row && (int)$row['n'] > 0) {
+                flash_set('error', 'Cannot deactivate "' . $label . '" — ' . (int)$row['n'] . ' famil' . ((int)$row['n'] === 1 ? 'y is' : 'ies are') . ' still in this stage. Move them first.');
+                redirect('/crm/stages.php');
+            }
+        }
         $pdo->prepare("
             UPDATE crm_stages
             SET label=:l, probability=:p, is_open=:o, is_active=:a,

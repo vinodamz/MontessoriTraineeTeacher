@@ -134,31 +134,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($op === 'status') {
         $st = $_POST['status'] ?? '';
-        if (!array_key_exists($st, crm_statuses())) {
-            flash_set('error', 'Unknown status.');
+        // The probability field always posts, prefilled with the current
+        // value. Treat an UNCHANGED value as "no explicit choice" so a stage
+        // change picks up the new stage's default — otherwise moving
+        // New (20%) → Offered kept the stale 20% forever.
+        $curStmt = $pdo->prepare("SELECT status, probability FROM inquiry_families WHERE id = :id");
+        $curStmt->execute([':id' => $id]);
+        $cur  = $curStmt->fetch() ?: ['status' => '', 'probability' => null];
+        $opts = ['lost_reason' => $_POST['lost_reason'] ?? null, 'via' => 'detail_form'];
+        $postedProb = isset($_POST['probability']) ? (int)$_POST['probability'] : null;
+        $stageChanged = (string)$cur['status'] !== $st;
+        if ($postedProb !== null && (!$stageChanged || $postedProb !== (int)$cur['probability'])) {
+            $opts['probability'] = $postedProb;
+        }
+        $res = crm_move_stage($id, $st, $opts);
+        if (!$res['ok']) {
+            flash_set('error', $res['error'] === 'lost_reason required'
+                ? 'Pick a "Lost reason" before saving.'
+                : 'Could not update: ' . $res['error']);
             redirect('/crm/view.php?id=' . $id);
-        }
-        $lostReason = null;
-        if ($st === 'lost') {
-            $lr = trim((string)($_POST['lost_reason'] ?? ''));
-            if ($lr === '' || !array_key_exists($lr, crm_lost_reasons())) {
-                flash_set('error', 'Pick a "Lost reason" before saving.');
-                redirect('/crm/view.php?id=' . $id);
-            }
-            $lostReason = $lr;
-        }
-        $prob = isset($_POST['probability'])
-            ? max(0, min(100, (int)$_POST['probability']))
-            : crm_default_probability($st);
-        $prevStmt = $pdo->prepare("SELECT status FROM inquiry_families WHERE id = :id");
-        $prevStmt->execute([':id' => $id]);
-        $prevStatus = (string)$prevStmt->fetchColumn();
-        $pdo->prepare("UPDATE inquiry_families SET status=:s, lost_reason=:lr, probability=:p WHERE id=:id")
-            ->execute([':s' => $st, ':lr' => $lostReason, ':p' => $prob, ':id' => $id]);
-        if ($prevStatus !== $st) {
-            $meta = ['from' => $prevStatus, 'to' => $st, 'via' => 'detail_form'];
-            if ($st === 'lost') $meta['lost_reason'] = $lostReason;
-            crm_audit_log('status_changed', $id, $meta);
         }
         flash_set('ok', 'Status updated.');
         redirect('/crm/view.php?id=' . $id);
@@ -420,10 +414,21 @@ require __DIR__ . '/../includes/header.php';
     $pv = crm_wa_defaults($pv);
     $waPreviewText = $waStageMsg['wa_text'] !== '' ? crm_wa_substitute($waStageMsg['wa_text'], $pv) : '';
     $waPreviewDocs = crm_stage_docs((string)$family['status']);
+    // First send of this stage to this family also carries the intro line
+    // (migrate_033) — show it so "an extra message went out" is never a surprise.
+    $waPreviewIntro = '';
+    $introRawPv = crm_stage_intro((string)$family['status']);
+    if ($introRawPv !== '' && !crm_intro_already_sent((int)$family['id'], (string)$family['status'])) {
+        $waPreviewIntro = crm_wa_substitute($introRawPv, $pv);
+    }
 ?>
     <div id="wa-preview" class="card" style="display:none; border-left:4px solid #25d366;">
         <h3 style="margin-top:0;">Preview — WhatsApp to <?= e($family['primary_phone']) ?>
             <small class="muted" style="font-weight:normal;">· "<?= e(crm_status_label((string)$family['status'])) ?>" stage</small></h3>
+        <?php if ($waPreviewIntro !== ''): ?>
+            <div style="background:#fffbe7; border:1px solid #ead9a0; border-radius:10px; padding:.7rem .9rem; max-width:34rem; white-space:pre-wrap; margin-bottom:.5rem;"><?= e($waPreviewIntro) ?></div>
+            <p class="muted small" style="margin:0 0 .5rem;">↑ one-time intro (first message of this stage to this family) — delivers only inside the 24h window.</p>
+        <?php endif; ?>
         <?php if ($waPreviewText !== ''): ?>
             <div style="background:#e7ffe9; border:1px solid #bfe8c5; border-radius:10px; padding:.7rem .9rem; max-width:34rem; white-space:pre-wrap;"><?= e($waPreviewText) ?></div>
         <?php else: ?>

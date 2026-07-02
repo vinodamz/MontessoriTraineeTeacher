@@ -44,12 +44,17 @@ $userIds = array_flip($users);
 
 function parse_csv(string $body, array $allowed): array
 {
-    $lines = preg_split('/\r\n|\r|\n/', $body);
-    $rows  = [];
-    foreach ($lines as $line) {
-        if (trim($line) === '') continue;
-        $rows[] = str_getcsv($line);
+    // fgetcsv over a stream — splitting on raw newlines broke any quoted
+    // field containing a line break (e.g. a two-line notes cell).
+    $fh = fopen('php://temp', 'r+');
+    fwrite($fh, $body);
+    rewind($fh);
+    $rows = [];
+    while (($r = fgetcsv($fh, 0, ',', '"', '\\')) !== false) {
+        if ($r === [null] || (count($r) === 1 && trim((string)$r[0]) === '')) continue;
+        $rows[] = $r;
     }
+    fclose($fh);
     if (!$rows) return ['headers' => [], 'data' => []];
     $headers = array_map(fn($h) => mb_strtolower(trim((string)$h)), array_shift($rows));
     $headers = array_map(fn($h) => in_array($h, $allowed, true) ? $h : null, $headers);
@@ -129,8 +134,23 @@ if ($step === 'preview') {
     }
 
     $records = [];
+    $seenPhones = [];
     foreach ($p['data'] as $row) {
-        $records[] = row_to_record($row, $p['headers'], $campaigns, $users, (int)$user['id']);
+        $rec = row_to_record($row, $p['headers'], $campaigns, $users, (int)$user['id']);
+        // Flag duplicates: a phone already in the CRM, or repeated within
+        // this very file (classic re-upload of last month's list).
+        $digits = substr(preg_replace('/\D/', '', $rec['rec']['phone']), -10);
+        if ($digits !== '') {
+            if (isset($seenPhones[$digits])) {
+                $rec['errors'][] = 'duplicate phone within this file (row ' . $seenPhones[$digits] . ') — will be skipped';
+                $rec['dup'] = true;
+            } elseif (crm_find_lead_by_phone($rec['rec']['phone']) !== null) {
+                $rec['errors'][] = 'phone already exists in the CRM — will be skipped';
+                $rec['dup'] = true;
+            }
+            $seenPhones[$digits] = count($records) + 1;
+        }
+        $records[] = $rec;
     }
     $_SESSION['_lead_import'] = ['records' => $records];
     $preview = $records;
@@ -155,7 +175,7 @@ if ($step === 'commit') {
         VALUES (:n, :p, :e, :st, :pr, :prob, :c, :o, :notes)
     ");
     foreach ($records as $r) {
-        $hasFatal = false;
+        $hasFatal = !empty($r['dup']);
         foreach ($r['errors'] as $err) {
             if (str_starts_with($err, 'name')) { $hasFatal = true; break; }
         }
