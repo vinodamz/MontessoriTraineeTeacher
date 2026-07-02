@@ -124,15 +124,25 @@ jobs:
           MIG=$(curl -sS --fail-with-body --max-time 30 "$BASE/last-migrate.log?_=$(date +%s)") \
               || { echo "::error::could not fetch /last-migrate.log"; exit 1; }
           echo "$MIG" | tail -80
-          if ! echo "$MIG" | grep -q "migrate_031_inventory_extras.sql"; then
-            echo "::error::migrate_031 not mentioned in /last-migrate.log"
+          # Any migration failing (or the CLI wrapper's MIGRATE FAILED marker)
+          # fails the deploy — a stalled run used to sail through green while
+          # every later migration silently never applied.
+          if echo "$MIG" | grep -qE "FAILED"; then
+            echo "::error::migration run reported a failure — see /last-migrate.log above"
             exit 1
           fi
-          if ! echo "$MIG" | awk '/migrate_031_inventory_extras\.sql/{f=1; next} f && /applied/{ok=1; exit} f && /───/{exit} END{exit !ok}'; then
-            echo "::error::migrate_031 line not followed by 'applied'"
+          # The HIGHEST-numbered migration in this checkout must be applied —
+          # checking one hardcoded file lets everything after it stall unseen.
+          LAST_MIG=$(ls sql/migrate_*.sql | sort | tail -1 | xargs basename)
+          if ! echo "$MIG" | grep -q "$LAST_MIG"; then
+            echo "::error::latest migration $LAST_MIG not mentioned in /last-migrate.log"
             exit 1
           fi
-          echo "::notice::Migration 031 ✓ applied on the live DB."
+          if ! echo "$MIG" | awk -v f="$LAST_MIG" 'index($0, f){found=1; next} found && /applied/{ok=1; exit} found && /───/{exit} END{exit !ok}'; then
+            echo "::error::$LAST_MIG line not followed by 'applied'"
+            exit 1
+          fi
+          echo "::notice::All migrations through $LAST_MIG ✓ applied on the live DB."
 
           INV_FAIL=0
           for path in \
