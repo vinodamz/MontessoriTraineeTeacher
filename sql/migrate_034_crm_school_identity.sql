@@ -30,7 +30,8 @@ INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES
 -- (the template that follows it carries the rest of the message), so the
 -- intro just establishes WHO is writing and from WHERE.
 UPDATE crm_stages
-SET    intro_text =
-       'Hi {parent_name}, this is the admissions team at The Little Graduates Playschool in Kaloor, Kochi 🌿 — '
-     . 'a quick note from us right after this:'
+SET    intro_text = CONCAT(
+           'Hi {parent_name}, this is the admissions team at The Little Graduates Playschool in Kaloor, Kochi 🌿 — ',
+           'a quick note from us right after this:'
+       )
 WHERE  (intro_text IS NULL OR intro_text = '');

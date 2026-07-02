@@ -160,6 +160,7 @@ if (!$files) {
     exit;
 }
 
+$failed = false;
 foreach ($files as $f) {
     $base = basename($f);
     echo "── $base ──────────────────────────────────────\n";
@@ -178,10 +179,16 @@ foreach ($files as $f) {
     } catch (Throwable $e) {
         echo "  ✗ FAILED: " . $e->getMessage() . "\n";
         echo "  (Each migration is idempotent — re-running after fixing the root cause is safe.)\n\n";
+        $failed = true;
         break;
     }
 }
-echo "Done. You can now visit /login.php.\n";
+echo $failed ? "Done WITH FAILURES — see above.\n" : "Done. You can now visit /login.php.\n";
+// Non-zero exit so .cpanel.yml's `|| echo "MIGRATE FAILED"` marker fires and
+// the deploy gate can spot a stalled migration run instead of reporting green.
+if ($failed && PHP_SAPI === 'cli') {
+    exit(1);
+}
 
 /**
  * Splits a SQL file that contains `DELIMITER //` blocks into chunks the PDO
