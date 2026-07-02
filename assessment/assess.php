@@ -335,11 +335,19 @@ require __DIR__ . '/../includes/header.php';
         <?php
         $usedSet     = array_flip($existingMonths);
         $todayMy     = current_month_year();
-        // Academic-year months PLUS any month that actually has data (last
-        // year's tiles must stay reachable), plus today and the month being
-        // viewed (April/May fall outside the Jun–Mar academic list).
-        $monthsOrdered = array_unique(array_merge($allAcademic, $existingMonths, [$todayMy, $month]));
-        usort($monthsOrdered, 'compare_month_year');
+        // A CONTINUOUS month range, not just the current academic year:
+        // from the student's earliest assessment (or the academic-year start,
+        // whichever is older) through the latest of today / academic-year end
+        // / the month being viewed. Last year's months are all present — with
+        // data or as fillable gaps — so history is never out of reach.
+        $bounds = array_merge($allAcademic, $existingMonths, [$todayMy, $month]);
+        usort($bounds, 'compare_month_year');
+        $rangeStart = DateTime::createFromFormat('!M-y', $bounds[0]);
+        $rangeEnd   = DateTime::createFromFormat('!M-y', end($bounds));
+        $monthsOrdered = [];
+        for ($d = clone $rangeStart; $d <= $rangeEnd; $d->modify('+1 month')) {
+            $monthsOrdered[] = $d->format('M-y');
+        }
         // Most recent month first, so any cell with data lands in the top-left.
         $monthsOrdered = array_reverse($monthsOrdered);
         foreach ($monthsOrdered as $my):
