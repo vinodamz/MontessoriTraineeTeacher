@@ -34,4 +34,6 @@ deployment:
     - /bin/cp $HOME/last-assessment-smoke.log $HOME/thelittlegraduates.in/mtt/last-assessment-smoke.log
     - cd $HOME/thelittlegraduates.in/mtt && /bin/bash crm/run-smoke.sh > $HOME/last-crm-smoke.log 2>&1 || echo "CRM SMOKE WRAPPER EXIT $?" >> $HOME/last-crm-smoke.log
     - /bin/cp $HOME/last-crm-smoke.log $HOME/thelittlegraduates.in/mtt/last-crm-smoke.log
+    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash materials/run-smoke.sh > $HOME/last-materials-smoke.log 2>&1 || echo "MATERIALS SMOKE WRAPPER EXIT $?" >> $HOME/last-materials-smoke.log
+    - /bin/cp $HOME/last-materials-smoke.log $HOME/thelittlegraduates.in/mtt/last-materials-smoke.log
     - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log

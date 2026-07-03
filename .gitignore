@@ -25,3 +25,5 @@ uploads/logbook/*
 
 uploads/student_photos/*
 !uploads/student_photos/.gitkeep
+uploads/material_media/*
+!uploads/material_media/.gitkeep

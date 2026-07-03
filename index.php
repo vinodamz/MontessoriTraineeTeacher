@@ -64,6 +64,7 @@ $hasExpenses = user_has_module($user, 'expenses');
 $hasFees     = user_has_module($user, 'fees');
 $hasLogbook  = user_has_module($user, 'logbook');
 $hasInventory = user_has_module($user, 'inventory');
+$hasMaterials = user_has_module($user, 'materials');
 $hasWacrm     = user_has_module($user, 'wacrm');
 $hasN8n       = user_has_module($user, 'n8n');
 
@@ -81,7 +82,7 @@ if ($inStaffRoster) {
 }
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasWacrm + (int)$hasN8n;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n;
 if ($moduleCount === 1) {
     if ($hasTasks)     redirect('/tasks/index.php');
     if ($hasMontess)   redirect('/assessment/index.php');
@@ -93,6 +94,7 @@ if ($moduleCount === 1) {
     if ($hasFees)      redirect('/fees/index.php');
     if ($hasLogbook)   redirect('/logbook/index.php');
     if ($hasInventory) redirect('/inventory/index.php');
+    if ($hasMaterials) redirect('/materials/index.php');
     if ($hasWacrm)     redirect('/wacrm/index.php');
     if ($hasN8n)       redirect('/n8n/index.php');
 }
@@ -365,6 +367,16 @@ if ($hasInventory) {
     if ($invStats['low'] > 0) $stats[] = ['label' => $invStats['low'] . ' low', 'tone' => 'warn'];
     $apps[] = ['key' => 'inventory', 'name' => 'Inventory', 'subtitle' => 'Stock · Supplies · Reorder', 'href' => '/inventory/index.php', 'stats' => $stats];
 }
+if ($hasMaterials) {
+    require_once __DIR__ . '/includes/materials.php';
+    $mmTotal = (int)db()->query("SELECT COUNT(*) FROM mm_materials WHERE is_active = 1")->fetchColumn();
+    $mmStmt  = db()->prepare("SELECT COUNT(*) FROM mm_condition_checks WHERE period = :p AND needs_replacement = 1");
+    $mmStmt->execute([':p' => date('Y-m')]);
+    $mmReplace = (int)$mmStmt->fetchColumn();
+    $stats = [['label' => $mmTotal . ' materials', 'tone' => '']];
+    if ($mmReplace > 0) $stats[] = ['label' => $mmReplace . ' to replace', 'tone' => 'warn'];
+    $apps[] = ['key' => 'materials', 'name' => 'Materials', 'subtitle' => 'Condition · Kreedo replacement', 'href' => '/materials/index.php', 'stats' => $stats];
+}
 // External apps (wacrm, n8n) — driven by external_apps_registry() in
 // includes/functions.php. Each tile shows the configured host as a hint,
 // or "Not configured" prompting admin to set the URL.
@@ -397,6 +409,7 @@ $icons = [
     'money'       => '<circle cx="12" cy="12" r="9"/><path d="M9 8h6M9 12h6M10 8c3 0 4 1.5 4 3s-1 3-4 3l4 4"/>',
     'logbook'     => '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z"/><path d="M9 3v18M13 8h4M13 12h4"/>',
     'inventory'   => '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+    'materials'   => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/><path d="M15 13l2 2 3-3"/>',
 ];
 // External-app SVGs are owned by the registry so they ship in one place.
 foreach (external_apps_registry() as $extKey => $extMeta) {
@@ -408,7 +421,7 @@ $GROUPS = [
     'children'   => ['label' => 'Children',   'keys' => ['students', 'assessment', 'logbook']],
     'admissions' => ['label' => 'Admissions', 'keys' => ['admissions']],
     'money'      => ['label' => 'Money',      'keys' => ['money', 'fees', 'expenses']],
-    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'tasks', 'inventory', 'recruitment', 'wacrm', 'n8n']],
+    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'tasks', 'inventory', 'materials', 'recruitment', 'wacrm', 'n8n']],
 ];
 $grouped = array_fill_keys(array_keys($GROUPS), []);
 foreach ($apps as $app) {
