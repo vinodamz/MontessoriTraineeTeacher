@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // re-stamp every untouched row with today's user + time.
             if (($existing[$mid] ?? '') === $code) continue;
             mm_save_check($mid, $period, $code,
-                mm_conditions()[$code]['suggests_replace'], 0, '', (int)$user['id']);
+                mm_conditions()[$code]['suggests_replace'], 0, null, (int)$user['id']);
             $saved++;
         }
         flash_set('ok', $saved > 0
@@ -90,8 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $needs = !empty($_POST['needs_replacement']);
             $qty   = max(0, (int)($_POST['replace_qty'] ?? 0));
             if ($needs && $qty === 0) $qty = 1;
-            mm_save_check($mid, $period, $code, $needs, $qty,
-                          trim((string)($_POST['notes'] ?? '')), (int)$user['id']);
+            // Posted notes SET (empty clears); an absent field keeps what's
+            // there — the dashboard's verdict edits don't carry notes.
+            $notes = array_key_exists('notes', $_POST) ? trim((string)$_POST['notes']) : null;
+            mm_save_check($mid, $period, $code, $needs, $qty, $notes, (int)$user['id']);
             echo json_encode([
                 'ok'    => true,
                 'label' => mm_condition_label($code),
@@ -147,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->execute($params);
         $ids = $st->fetchAll(PDO::FETCH_COLUMN);
         foreach ($ids as $mid) {
-            mm_save_check((int)$mid, $period, 'good', false, 0, '', (int)$user['id']);
+            mm_save_check((int)$mid, $period, 'good', false, 0, null, (int)$user['id']);
         }
         $label = $scope !== '' ? $scope : 'all shelves';
         flash_set('ok', count($ids) . ' unmarked material' . (count($ids) === 1 ? '' : 's') . " in $label marked Good. Already-marked rows untouched.");

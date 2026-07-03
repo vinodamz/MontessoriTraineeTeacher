@@ -88,8 +88,9 @@ $mediaRows = db()->prepare("
     ORDER BY m.location, m.sort_order, m.name, md.uploaded_at
 ");
 $mediaRows->execute([':p' => $period]);
+// Group: shelf/location → material → its media items.
 $gallery = [];
-foreach ($mediaRows as $r) $gallery[$r['material_id']][] = $r;
+foreach ($mediaRows as $r) $gallery[$r['location']][$r['material_id']][] = $r;
 
 $periods = mm_period_options();
 $TONE_BG = ['ok' => '#dff1d3;color:#2d6526', 'warn' => '#fcebc6;color:#6c4612', 'bad' => '#fbdcd8;color:#8b1c14'];
@@ -176,19 +177,31 @@ require __DIR__ . '/../includes/header.php';
 
 <section class="card">
     <h2 style="margin-top:0;">Photos &amp; videos this month <span class="muted small">(<?= $stats['media'] ?>)</span></h2>
+    <p class="muted small">Review the evidence and correct the verdict right here — condition and replacement changes save instantly.</p>
     <?php if (!$gallery): ?>
         <p class="muted">No photos or videos yet — take them from the audit board (📷 / 🎥 on each material).</p>
     <?php else: ?>
-        <?php foreach ($gallery as $items): $first = $items[0]; ?>
-            <div style="margin-bottom:1rem;">
-                <h3 style="margin:.2rem 0 .4rem;">
-                    <?= e($first['material']) ?>
-                    <span class="muted small">· <?= e($first['location']) ?></span>
-                    <span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($first['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($first['condition_code'])) ?></span>
-                    <?php if ($first['needs_replacement']): ?>
-                        <span class="pill small" style="background:#fbdcd8;color:#8b1c14;">replace ×<?= max(1, (int)$first['replace_qty']) ?></span>
-                    <?php endif; ?>
-                </h3>
+        <?php foreach ($gallery as $location => $mats): ?>
+            <h3 style="margin:1rem 0 .5rem; padding-bottom:.25rem; border-bottom:2px solid #eee;"><?= e($location) ?></h3>
+            <?php foreach ($mats as $matId => $items): $first = $items[0]; ?>
+            <div class="mmd-mat" data-id="<?= (int)$matId ?>" style="margin:0 0 1rem .2rem;">
+                <div class="mmd-mathead" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.4rem;">
+                    <strong><?= e($first['material']) ?></strong>
+                    <select class="mmd-cond">
+                        <?php foreach (mm_conditions() as $code => $meta): ?>
+                            <option value="<?= e($code) ?>" <?= $first['condition_code'] === $code ? 'selected' : '' ?>
+                                    data-suggests="<?= $meta['suggests_replace'] ? '1' : '0' ?>"><?= e($meta['label']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <label style="display:inline-flex; align-items:center; gap:.25rem; font-size:.85rem; white-space:nowrap;">
+                        <input type="checkbox" class="mmd-needs" <?= !empty($first['needs_replacement']) ? 'checked' : '' ?>>
+                        <span>replace</span>
+                    </label>
+                    <input type="number" class="mmd-qty" min="1" max="99" inputmode="numeric"
+                           value="<?= max(1, (int)$first['replace_qty']) ?>"
+                           style="width:4rem; <?= !empty($first['needs_replacement']) ? '' : 'display:none;' ?>">
+                    <span class="mmd-rowstatus muted small"></span>
+                </div>
                 <?php if (trim((string)$first['notes']) !== ''): ?>
                     <p class="muted small" style="margin:.1rem 0 .4rem;">“<?= e($first['notes']) ?>”</p>
                 <?php endif; ?>
@@ -205,9 +218,13 @@ require __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </div>
             </div>
+            <?php endforeach; ?>
         <?php endforeach; ?>
     <?php endif; ?>
 </section>
+<?php if ($gallery): ?>
+<input type="hidden" id="mmdCsrf" value="<?= e(csrf_token()) ?>">
+<?php endif; ?>
 
 <script>
 // Live tiles: poll the JSON stats every 30s. The gallery refreshes on reload
@@ -232,6 +249,50 @@ require __DIR__ . '/../includes/header.php';
             .catch(function () { /* transient — next tick retries */ });
     }
     setInterval(tick, 30000);
+})();
+
+// Gallery verdict editing: change condition / replace / qty next to the
+// photos → saves through the same ajax_mark endpoint the audit board uses.
+(function () {
+    var csrf = document.getElementById('mmdCsrf');
+    if (!csrf || !window.fetch) return;
+    document.querySelectorAll('.mmd-mat').forEach(function (mat) {
+        mat.addEventListener('change', function (ev) {
+            var cond   = mat.querySelector('.mmd-cond');
+            var needs  = mat.querySelector('.mmd-needs');
+            var qty    = mat.querySelector('.mmd-qty');
+            var status = mat.querySelector('.mmd-rowstatus');
+            if (ev.target === cond) {
+                var opt = cond.options[cond.selectedIndex];
+                needs.checked = opt && opt.dataset.suggests === '1';
+            }
+            qty.style.display = needs.checked ? '' : 'none';
+
+            var fd = new FormData();
+            fd.append('_csrf', csrf.value);
+            fd.append('op', 'ajax_mark');
+            fd.append('period', '<?= e($period) ?>');
+            fd.append('material_id', mat.dataset.id);
+            fd.append('condition_code', cond.value);
+            if (needs.checked) fd.append('needs_replacement', '1');
+            fd.append('replace_qty', needs.checked ? (qty.value || '1') : '0');
+            // notes deliberately not sent from here — ajax_mark would blank
+            // them; the board/detail page owns notes. (Server keeps notes
+            // only when the field is posted, see index.php ajax_mark.)
+            status.textContent = 'Saving…';
+            fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d.ok) throw new Error(d.error || 'failed');
+                    status.textContent = '✓ saved ' + d.at;
+                    status.style.color = '#2d6526';
+                })
+                .catch(function (e) {
+                    status.textContent = '⚠ not saved — try again';
+                    status.style.color = '#b3261e';
+                });
+        });
+    });
 })();
 </script>
 
