@@ -247,7 +247,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="empty"><p>No materials match. <a href="index.php?period=<?= e($period) ?>">Clear filters</a>.</p></div>
 <?php else: ?>
 
-<form method="post" id="bulkForm">
+<form method="post" id="bulkForm" autocomplete="off">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
     <input type="hidden" name="op" value="bulk_mark">
     <input type="hidden" name="period" value="<?= e($period) ?>">
@@ -304,8 +304,9 @@ require __DIR__ . '/../includes/header.php';
                                style="width:3.6rem; margin-left:.3rem; <?= !empty($m['needs_replacement']) ? '' : 'display:none;' ?>"
                                title="How many to replace">
                     </td>
-                    <td class="mm-status muted small" style="min-width:7.5rem;">
+                    <td class="mm-status muted small" style="min-width:9rem;">
                         <?php if ($marked): ?>
+                            <span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($m['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($m['condition_code'])) ?></span><br>
                             ✓ <?= e($m['checked_by'] ?? 'Unknown') ?> · <?= e(date('j M, g:ia', strtotime($m['checked_at']))) ?>
                         <?php else: ?>
                             <span style="color:#b3261e">not checked</span>
@@ -400,7 +401,11 @@ require __DIR__ . '/../includes/header.php';
             .then(function (d) {
                 if (!d.ok) throw new Error(d.error || 'save failed');
                 tr.dataset.saved = el.cond.value;
-                el.status.innerHTML = '✓ ' + escapeHtml(d.by) + ' · ' + escapeHtml(d.at);
+                el.cond.value = tr.dataset.saved;   // pin against browser form-restore
+                var toneBg = {ok:'#dff1d3;color:#2d6526', warn:'#fcebc6;color:#6c4612', bad:'#fbdcd8;color:#8b1c14'}[d.tone] || '#eee';
+                el.status.innerHTML =
+                    '<span class="pill small" style="background:' + toneBg + '">' + escapeHtml(d.label) + '</span><br>' +
+                    '✓ ' + escapeHtml(d.by) + ' · ' + escapeHtml(d.at);
                 el.status.style.color = '#2d6526';
                 return true;
             })
@@ -416,6 +421,12 @@ require __DIR__ . '/../includes/header.php';
             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
         });
     }
+
+    // Undo browser form-restore: the server's saved value wins on load.
+    form.querySelectorAll('tr.mm-row').forEach(function (tr) {
+        var sel = tr.querySelector('.mm-cond');
+        if (sel && sel.value !== tr.dataset.saved) sel.value = tr.dataset.saved || '';
+    });
 
     form.addEventListener('change', function (ev) {
         var t  = ev.target;
