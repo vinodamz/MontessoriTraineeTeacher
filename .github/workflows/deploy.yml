@@ -200,7 +200,7 @@ jobs:
           # ----- Tasks master-spec assertions (same shape as inventory) -------
           # Per-module smoke logs published by .cpanel.yml — every one must
           # carry a PASS marker and no FAIL line.
-          for MOD in tasks assessment crm; do
+          for MOD in tasks assessment crm materials; do
             LOGPATH="last-${MOD}-smoke.log"
             MSMOKE=$(curl -sS --max-time 30 "$BASE/$LOGPATH?_=$(date +%s)") \
                 || { echo "::error::could not fetch /$LOGPATH"; exit 1; }
@@ -220,7 +220,7 @@ jobs:
             fi
           done
 
-          echo "::notice::Site is live (login + parent form + inventory + tasks/assessment/crm smokes ✓)."
+          echo "::notice::Site is live (login + parent form + inventory + tasks/assessment/crm/materials smokes ✓)."
 
       - name: 4/4 — Authed inventory integration test (skips without credentials)
         env:

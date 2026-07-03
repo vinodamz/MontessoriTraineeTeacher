@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook', 'inventory', 'wacrm', 'n8n']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook', 'inventory', 'materials', 'wacrm', 'n8n']);
     return implode(',', $valid);
 }
 
@@ -371,6 +371,7 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="fees"><span>Fees</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="logbook"><span>Logbook</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="inventory"><span>Inventory</span></label>
+                <label class="checkbox"><input type="checkbox" name="modules[]" value="materials"><span>Materials</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="wacrm"><span>WACRM</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="n8n"><span>n8n</span></label>
             </div>
@@ -411,6 +412,7 @@ require __DIR__ . '/includes/header.php';
         $hasF    = in_array('fees', $mods, true);
         $hasL    = in_array('logbook', $mods, true);
         $hasInv  = in_array('inventory', $mods, true);
+        $hasMat  = in_array('materials', $mods, true);
         $hasWa   = in_array('wacrm',     $mods, true);
         $hasN8n  = in_array('n8n',       $mods, true);
     ?>
@@ -474,6 +476,10 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Inventory module (stock of materials, supplies, equipment)">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="inventory" <?= $hasInv ? 'checked' : '' ?>>
                     <span>Inventory</span>
+                </label>
+                <label class="checkbox" title="Materials — Montessori material condition audit + Kreedo replacement list">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="materials" <?= $hasMat ? 'checked' : '' ?>>
+                    <span>Materials</span>
                 </label>
                 <label class="checkbox" title="WACRM — WhatsApp CRM workspace (external app)">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="wacrm" <?= $hasWa ? 'checked' : '' ?>>
