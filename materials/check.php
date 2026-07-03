@@ -94,6 +94,20 @@ if ($check) {
     $media = $mm->fetchAll();
 }
 
+// Every photo/video EVER for this material, grouped by month, newest
+// first - the "history" the board thumbnail links to.
+$allMedia = db()->prepare("
+    SELECT md.id, md.kind, md.uploaded_at, c.period, u.name AS by_name
+    FROM mm_condition_media md
+    JOIN mm_condition_checks c ON c.id = md.check_id
+    LEFT JOIN users u ON u.id = md.uploaded_by_user_id
+    WHERE c.material_id = :id
+    ORDER BY c.period DESC, md.uploaded_at DESC
+");
+$allMedia->execute([':id' => $id]);
+$mediaByPeriod = [];
+foreach ($allMedia as $r) $mediaByPeriod[$r['period']][] = $r;
+
 // History across all months (who marked, when, what).
 $hist = db()->prepare("
     SELECT c.period, c.condition_code, c.needs_replacement, c.replace_qty, c.checked_at, u.name AS checked_by
@@ -201,8 +215,31 @@ require __DIR__ . '/../includes/header.php';
 </section>
 <?php endif; ?>
 
+<section class="card" id="history" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">Photo &amp; video history</h2>
+    <?php if (!$mediaByPeriod): ?>
+        <p class="muted">No photos or videos yet for this material.</p>
+    <?php else: ?>
+        <?php foreach ($mediaByPeriod as $per => $items): ?>
+            <h3 style="margin:.6rem 0 .3rem;"><?= e(mm_period_label($per)) ?> <span class="muted small">· <?= count($items) ?></span></h3>
+            <div style="display:flex; gap:.8rem; flex-wrap:wrap;">
+                <?php foreach ($items as $md): $url = '/materials/media.php?id=' . (int)$md['id']; ?>
+                    <div style="width:150px;">
+                        <?php if ($md['kind'] === 'video'): ?>
+                            <video src="<?= e($url) ?>" controls preload="metadata" style="width:100%; border-radius:8px; background:#000;"></video>
+                        <?php else: ?>
+                            <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>" alt="" loading="lazy" style="width:100%; border-radius:8px;"></a>
+                        <?php endif; ?>
+                        <div class="muted small" style="margin-top:.15rem;"><?= $md['kind'] === 'video' ? '🎥' : '📷' ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M Y', strtotime($md['uploaded_at']))) ?></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</section>
+
 <section class="card">
-    <h2 style="margin-top:0;">History</h2>
+    <h2 style="margin-top:0;">Condition history</h2>
     <?php if (!$history): ?>
         <p class="muted">No condition marks yet.</p>
     <?php else: ?>

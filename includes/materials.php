@@ -134,6 +134,91 @@ function mm_media_store(array $file, int $checkId, int $userId): ?int
     return (int)db()->lastInsertId();
 }
 
+/**
+ * Latest media item per material — across ALL months, so the board can always
+ * show "how this material last looked" even before this month's photo exists.
+ * Returns [material_id => ['id' => …, 'kind' => …, 'uploaded_at' => …]].
+ */
+function mm_latest_media(array $materialIds): array
+{
+    $materialIds = array_values(array_unique(array_filter(array_map('intval', $materialIds))));
+    if (!$materialIds) return [];
+    $place = implode(',', array_fill(0, count($materialIds), '?'));
+    $st = db()->prepare("
+        SELECT c.material_id, md.id, md.kind, md.uploaded_at
+        FROM mm_condition_media md
+        JOIN mm_condition_checks c ON c.id = md.check_id
+        JOIN (
+            SELECT c2.material_id, MAX(md2.id) AS max_id
+            FROM mm_condition_media md2
+            JOIN mm_condition_checks c2 ON c2.id = md2.check_id
+            WHERE c2.material_id IN ($place)
+            GROUP BY c2.material_id
+        ) latest ON latest.max_id = md.id
+    ");
+    $st->execute($materialIds);
+    $out = [];
+    foreach ($st as $r) {
+        $out[(int)$r['material_id']] = ['id' => (int)$r['id'], 'kind' => $r['kind'], 'uploaded_at' => $r['uploaded_at']];
+    }
+    return $out;
+}
+
+/**
+ * Evidence gaps for a month: materials flagged needs_replacement whose check
+ * has NO photo/video — Kreedo asks for proof, so these need a picture before
+ * the list goes out. Ordered by shelf.
+ */
+function mm_evidence_gaps(string $period): array
+{
+    $st = db()->prepare("
+        SELECT m.id, m.name, m.location, c.condition_code, c.replace_qty
+        FROM mm_condition_checks c
+        JOIN mm_materials m ON m.id = c.material_id AND m.is_active = 1
+        WHERE c.period = :p AND c.needs_replacement = 1
+          AND NOT EXISTS (SELECT 1 FROM mm_condition_media md WHERE md.check_id = c.id)
+        ORDER BY m.location, m.sort_order, m.name
+    ");
+    $st->execute([':p' => $period]);
+    return $st->fetchAll();
+}
+
+/**
+ * Per-shelf priority for a month, most urgent first. Urgency = materials
+ * still unchecked, then flagged-without-photo, then completion %. Each row:
+ * location, total, checked, unchecked, flagged, gaps (flagged w/o photo).
+ */
+function mm_shelf_priorities(string $period): array
+{
+    $st = db()->prepare("
+        SELECT m.location,
+               COUNT(*) AS total,
+               SUM(c.id IS NOT NULL) AS checked,
+               SUM(c.id IS NULL) AS unchecked,
+               SUM(COALESCE(c.needs_replacement, 0)) AS flagged,
+               SUM(CASE WHEN c.needs_replacement = 1
+                         AND NOT EXISTS (SELECT 1 FROM mm_condition_media md WHERE md.check_id = c.id)
+                        THEN 1 ELSE 0 END) AS gaps
+        FROM mm_materials m
+        LEFT JOIN mm_condition_checks c ON c.material_id = m.id AND c.period = :p
+        WHERE m.is_active = 1
+        GROUP BY m.location
+        ORDER BY MIN(m.sort_order)
+    ");
+    $st->execute([':p' => $period]);
+    $rows = $st->fetchAll();
+    usort($rows, function ($a, $b) {
+        // Unfinished shelves first (most unchecked), then photo gaps,
+        // then keep the natural shelf order (stable via location compare).
+        $c = (int)$b['unchecked'] <=> (int)$a['unchecked'];
+        if ($c !== 0) return $c;
+        $c = (int)$b['gaps'] <=> (int)$a['gaps'];
+        if ($c !== 0) return $c;
+        return strnatcasecmp((string)$a['location'], (string)$b['location']);
+    });
+    return $rows;
+}
+
 /** Best-effort unlink + row delete for a media item. */
 function mm_media_delete(int $mediaId): void
 {

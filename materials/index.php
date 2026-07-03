@@ -94,11 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // there — the dashboard's verdict edits don't carry notes.
             $notes = array_key_exists('notes', $_POST) ? trim((string)$_POST['notes']) : null;
             mm_save_check($mid, $period, $code, $needs, $qty, $notes, (int)$user['id']);
+            $mediaN = db()->prepare("
+                SELECT COUNT(*) FROM mm_condition_media md
+                JOIN mm_condition_checks c ON c.id = md.check_id
+                WHERE c.material_id = :m AND c.period = :p
+            ");
+            $mediaN->execute([':m' => $mid, ':p' => $period]);
             echo json_encode([
                 'ok'    => true,
                 'label' => mm_condition_label($code),
                 'tone'  => mm_condition_tone($code),
                 'needs' => $needs, 'qty' => $qty,
+                'media' => (int)$mediaN->fetchColumn(),
                 'by'    => (string)$user['name'],
                 'at'    => date('j M, g:ia'),
             ], JSON_UNESCAPED_UNICODE);
@@ -184,6 +191,10 @@ $rows = db()->prepare("
 $rows->execute($params);
 $materials = $rows->fetchAll();
 
+// Latest photo/video EVER per material — the board always shows how the
+// material last looked, even before this month's photo is taken.
+$latestMedia = mm_latest_media(array_column($materials, 'id'));
+
 $byLoc = [];
 foreach ($materials as $m) $byLoc[$m['location']][] = $m;
 
@@ -212,6 +223,11 @@ require __DIR__ . '/../includes/header.php';
 .mm-item  { padding: .6rem .2rem; border-bottom: 1px solid #eee; }
 .mm-item:last-child { border-bottom: 0; }
 .mm-top   { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; margin-bottom: .35rem; }
+.mm-thumb { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 8px; overflow: hidden;
+            border: 1px solid #ddd; display: flex; align-items: center; justify-content: center;
+            background: #f4f4f0; text-decoration: none; }
+.mm-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mm-thumb-vid { font-size: 1.2rem; }
 .mm-name  { flex: 1 1 12rem; }
 .mm-status { display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
 .mm-controls { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
@@ -309,8 +325,21 @@ require __DIR__ . '/../includes/header.php';
             ?>
             <div class="mm-item" id="m<?= $mid ?>" data-id="<?= $mid ?>" data-saved="<?= e((string)$m['condition_code']) ?>">
                 <div class="mm-top">
+                    <?php $lm = $latestMedia[$mid] ?? null; ?>
+                    <?php if ($lm): $lmUrl = '/materials/media.php?id=' . $lm['id']; ?>
+                        <a class="mm-thumb" href="check.php?id=<?= $mid ?>&period=<?= e($period) ?>#history"
+                           title="Latest <?= $lm['kind'] ?> · <?= e(date('j M Y', strtotime($lm['uploaded_at']))) ?> — tap for history">
+                            <?php if ($lm['kind'] === 'video'): ?>
+                                <span class="mm-thumb-vid">🎥</span>
+                            <?php else: ?>
+                                <img src="<?= e($lmUrl) ?>" alt="" loading="lazy">
+                            <?php endif; ?>
+                        </a>
+                    <?php endif; ?>
                     <strong class="mm-name"><?= e($m['name']) ?></strong>
                     <span class="pill small mm-media-pill" title="Photos/videos attached" <?= (int)$m['media_count'] > 0 ? '' : 'hidden' ?>>📎 <span class="mm-media-n"><?= (int)$m['media_count'] ?></span></span>
+                    <span class="pill small mm-nophoto" style="background:#fbdcd8;color:#8b1c14;"
+                          <?= ($marked && $m['needs_replacement'] && (int)$m['media_count'] === 0) ? '' : 'hidden' ?>>no photo 📷</span>
                     <span class="mm-status muted small">
                         <?php if ($marked): ?>
                             <span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($m['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($m['condition_code'])) ?></span>
@@ -428,10 +457,14 @@ require __DIR__ . '/../includes/header.php';
                 tr.dataset.saved = el.cond.value;
                 el.cond.value = tr.dataset.saved;   // pin against browser form-restore
                 var toneBg = {ok:'#dff1d3;color:#2d6526', warn:'#fcebc6;color:#6c4612', bad:'#fbdcd8;color:#8b1c14'}[d.tone] || '#eee';
+                var needsPhoto = d.needs && d.media === 0;
                 el.status.innerHTML =
                     '<span class="pill small" style="background:' + toneBg + '">' + escapeHtml(d.label) + '</span><br>' +
-                    '✓ ' + escapeHtml(d.by) + ' · ' + escapeHtml(d.at);
+                    '✓ ' + escapeHtml(d.by) + ' · ' + escapeHtml(d.at) +
+                    (needsPhoto ? ' <strong style="color:#b3261e">— add a photo 📷</strong>' : '');
                 el.status.style.color = '#2d6526';
+                var chip = tr.querySelector('.mm-nophoto');
+                if (chip) chip.hidden = !needsPhoto;
                 return true;
             })
             .catch(function (err) {
@@ -512,6 +545,10 @@ require __DIR__ . '/../includes/header.php';
                     var n = tr.querySelector('.mm-media-n');
                     n.textContent = String((parseInt(n.textContent, 10) || 0) + done);
                     pill.hidden = false;
+                    var chip = tr.querySelector('.mm-nophoto');
+                    if (chip) chip.hidden = true;
+                    var hint = tr.querySelector('.mm-status strong');
+                    if (hint) hint.remove();
                     input.value = '';
                     return;
                 }
