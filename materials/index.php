@@ -204,6 +204,34 @@ $pageTitle = 'Material condition — ' . mm_period_label($period);
 require __DIR__ . '/../includes/header.php';
 ?>
 
+<style>
+/* Materials board — mobile-first card rows (tables don't survive phones). */
+.mm-list  { display: flex; flex-direction: column; }
+.mm-item  { padding: .6rem .2rem; border-bottom: 1px solid #eee; }
+.mm-item:last-child { border-bottom: 0; }
+.mm-top   { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; margin-bottom: .35rem; }
+.mm-name  { flex: 1 1 12rem; }
+.mm-status { display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.mm-controls { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.mm-controls .mm-cond { flex: 1 1 11rem; max-width: 16rem; }
+.mm-rep   { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; white-space: nowrap; }
+.mm-qty   { width: 4.2rem; }
+.mm-snap  { font-size: 1.15rem; line-height: 1; }
+.mm-detail { display: flex; gap: .8rem; flex-wrap: wrap; align-items: end;
+             background: #fafaf7; border-radius: 8px; padding: .5rem .6rem; margin-top: .45rem; }
+.mm-noteswrap { flex: 2 1 240px; }
+.mm-noteswrap textarea { width: 100%; }
+.mm-upmsg:empty { display: none; }
+.mm-upmsg { margin-top: .25rem; }
+@media (pointer: coarse), (max-width: 640px) {
+    /* Fat-finger sizes: WCAG-ish 44px targets for the walk-the-shelf flow. */
+    .mm-controls .mm-cond, .mm-qty { min-height: 44px; font-size: 1rem; }
+    .mm-snap, .mm-expand { min-height: 44px; min-width: 48px; }
+    .mm-rep input[type="checkbox"] { width: 1.35rem; height: 1.35rem; }
+    .mm-item { padding: .75rem .1rem; }
+}
+</style>
+
 <div class="page-head">
     <div>
         <h1>Material condition audit</h1>
@@ -272,69 +300,62 @@ require __DIR__ . '/../includes/header.php';
                 </button>
             <?php endif; ?>
         </div>
-        <div class="table-scroll">
-        <table class="admin-table">
-            <thead><tr><th style="width:30%">Material</th><th>Condition</th><th>Replace?</th><th>Status</th><th></th></tr></thead>
-            <tbody>
+        <div class="mm-list">
             <?php foreach ($items as $m): $marked = $m['condition_code'] !== null;
                 $mid = (int)$m['id'];
-                $suggests = $marked ? (mm_conditions()[$m['condition_code']]['suggests_replace'] ?? false) : false;
             ?>
-                <tr id="m<?= $mid ?>" class="mm-row" data-id="<?= $mid ?>" data-saved="<?= e((string)$m['condition_code']) ?>">
-                    <td>
-                        <strong><?= e($m['name']) ?></strong>
-                        <span class="pill small mm-media-pill" title="Photos/videos attached" <?= (int)$m['media_count'] > 0 ? '' : 'hidden' ?>>📎 <span class="mm-media-n"><?= (int)$m['media_count'] ?></span></span>
-                    </td>
-                    <td>
-                        <select name="cond[<?= $mid ?>]" class="mm-cond">
-                            <option value="">— pick —</option>
-                            <?php foreach (mm_conditions() as $code => $meta): ?>
-                                <option value="<?= e($code) ?>" <?= $m['condition_code'] === $code ? 'selected' : '' ?>
-                                        data-suggests="<?= $meta['suggests_replace'] ? '1' : '0' ?>"><?= e($meta['label']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
-                    <td style="white-space:nowrap;">
-                        <label class="checkbox small" style="display:inline-flex; align-items:center; gap:.25rem;">
-                            <input type="checkbox" class="mm-needs" <?= !empty($m['needs_replacement']) ? 'checked' : '' ?>>
-                            <span>replace</span>
-                        </label>
-                        <input type="number" class="mm-qty" min="1" max="99"
-                               value="<?= max(1, (int)$m['replace_qty']) ?>"
-                               style="width:3.6rem; margin-left:.3rem; <?= !empty($m['needs_replacement']) ? '' : 'display:none;' ?>"
-                               title="How many to replace">
-                    </td>
-                    <td class="mm-status muted small" style="min-width:9rem;">
+            <div class="mm-item" id="m<?= $mid ?>" data-id="<?= $mid ?>" data-saved="<?= e((string)$m['condition_code']) ?>">
+                <div class="mm-top">
+                    <strong class="mm-name"><?= e($m['name']) ?></strong>
+                    <span class="pill small mm-media-pill" title="Photos/videos attached" <?= (int)$m['media_count'] > 0 ? '' : 'hidden' ?>>📎 <span class="mm-media-n"><?= (int)$m['media_count'] ?></span></span>
+                    <span class="mm-status muted small">
                         <?php if ($marked): ?>
-                            <span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($m['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($m['condition_code'])) ?></span><br>
+                            <span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($m['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($m['condition_code'])) ?></span>
                             ✓ <?= e($m['checked_by'] ?? 'Unknown') ?> · <?= e(date('j M, g:ia', strtotime($m['checked_at']))) ?>
                         <?php else: ?>
                             <span style="color:#b3261e">not checked</span>
                         <?php endif; ?>
-                    </td>
-                    <td style="white-space:nowrap;">
-                        <button type="button" class="btn btn-ghost small mm-expand" aria-expanded="false" title="Notes + photo">▸ note/photo</button>
-                    </td>
-                </tr>
-                <tr class="mm-detail" hidden>
-                    <td colspan="5" style="background:#fafaf7;">
-                        <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:start; padding:.3rem 0;">
-                            <label style="flex:2 1 260px;" class="small">
-                                Notes <span class="muted">(where's the mould, which part peeled…)</span>
-                                <textarea class="mm-notes" rows="2" style="width:100%;"><?= e((string)($m['notes'] ?? '')) ?></textarea>
-                            </label>
-                            <label style="flex:1 1 220px;" class="small">
-                                Photo / video
-                                <input type="file" class="mm-file" accept="image/*,video/*" capture="environment" multiple>
-                                <span class="mm-upmsg muted small"></span>
-                            </label>
-                            <a class="btn btn-ghost small" style="align-self:center;" href="check.php?id=<?= $mid ?>&period=<?= e($period) ?>">full history →</a>
-                        </div>
-                    </td>
-                </tr>
+                    </span>
+                </div>
+                <div class="mm-controls">
+                    <select name="cond[<?= $mid ?>]" class="mm-cond">
+                        <option value="">— condition —</option>
+                        <?php foreach (mm_conditions() as $code => $meta): ?>
+                            <option value="<?= e($code) ?>" <?= $m['condition_code'] === $code ? 'selected' : '' ?>
+                                    data-suggests="<?= $meta['suggests_replace'] ? '1' : '0' ?>"><?= e($meta['label']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <label class="mm-rep">
+                        <input type="checkbox" class="mm-needs" <?= !empty($m['needs_replacement']) ? 'checked' : '' ?>>
+                        <span>replace</span>
+                    </label>
+                    <input type="number" class="mm-qty" min="1" max="99" inputmode="numeric"
+                           value="<?= max(1, (int)$m['replace_qty']) ?>"
+                           style="<?= !empty($m['needs_replacement']) ? '' : 'display:none;' ?>"
+                           title="How many to replace">
+                    <!-- Direct capture: single-purpose inputs (capture is ignored
+                         when combined with multiple/mixed accept, which is why the
+                         old field opened the file picker instead of the camera). -->
+                    <button type="button" class="btn btn-ghost mm-snap" data-kind="photo" title="Take a photo now">📷</button>
+                    <button type="button" class="btn btn-ghost mm-snap" data-kind="video" title="Record a video now">🎥</button>
+                    <button type="button" class="btn btn-ghost mm-expand" aria-expanded="false" title="Notes + gallery">▸ more</button>
+                    <input type="file" class="mm-cam mm-cam-photo" accept="image/*" capture="environment" hidden>
+                    <input type="file" class="mm-cam mm-cam-video" accept="video/*" capture="environment" hidden>
+                </div>
+                <div class="mm-upmsg muted small"></div>
+                <div class="mm-detail" hidden>
+                    <label class="small mm-noteswrap">
+                        Notes <span class="muted">(where's the mould, which part peeled…)</span>
+                        <textarea class="mm-notes" rows="2"><?= e((string)($m['notes'] ?? '')) ?></textarea>
+                    </label>
+                    <label class="small">
+                        Upload from gallery
+                        <input type="file" class="mm-file" accept="image/*,video/*" multiple>
+                    </label>
+                    <a class="btn btn-ghost small" href="check.php?id=<?= $mid ?>&period=<?= e($period) ?>">full history →</a>
+                </div>
+            </div>
             <?php endforeach; ?>
-            </tbody>
-        </table>
         </div>
     </section>
     <?php endforeach; ?>
@@ -369,13 +390,14 @@ require __DIR__ . '/../includes/header.php';
     var CSRF   = form.querySelector('input[name="_csrf"]').value;
     var PERIOD = form.querySelector('input[name="period"]').value;
 
-    function rowEls(tr) {
+    function rowEls(item) {
         return {
-            cond:  tr.querySelector('.mm-cond'),
-            needs: tr.querySelector('.mm-needs'),
-            qty:   tr.querySelector('.mm-qty'),
-            status:tr.querySelector('.mm-status'),
-            detail:tr.nextElementSibling && tr.nextElementSibling.classList.contains('mm-detail') ? tr.nextElementSibling : null
+            cond:  item.querySelector('.mm-cond'),
+            needs: item.querySelector('.mm-needs'),
+            qty:   item.querySelector('.mm-qty'),
+            status:item.querySelector('.mm-status'),
+            detail:item.querySelector('.mm-detail'),
+            upmsg: item.querySelector('.mm-upmsg')
         };
     }
 
@@ -423,14 +445,14 @@ require __DIR__ . '/../includes/header.php';
     }
 
     // Undo browser form-restore: the server's saved value wins on load.
-    form.querySelectorAll('tr.mm-row').forEach(function (tr) {
-        var sel = tr.querySelector('.mm-cond');
-        if (sel && sel.value !== tr.dataset.saved) sel.value = tr.dataset.saved || '';
+    form.querySelectorAll('.mm-item').forEach(function (item) {
+        var sel = item.querySelector('.mm-cond');
+        if (sel && sel.value !== item.dataset.saved) sel.value = item.dataset.saved || '';
     });
 
     form.addEventListener('change', function (ev) {
         var t  = ev.target;
-        var tr = t.closest('tr.mm-row') || (t.closest('tr.mm-detail') && t.closest('tr.mm-detail').previousElementSibling);
+        var tr = t.closest('.mm-item');
         if (!tr) return;
         var el = rowEls(tr);
 
@@ -444,30 +466,36 @@ require __DIR__ . '/../includes/header.php';
         if (t.classList.contains('mm-needs') || t.classList.contains('mm-cond')) {
             el.qty.style.display = el.needs.checked ? '' : 'none';
         }
-        if (t.classList.contains('mm-file')) { uploadFiles(tr, t); return; }
+        if (t.classList.contains('mm-file') || t.classList.contains('mm-cam')) { uploadFiles(tr, t); return; }
         saveRow(tr);
     });
 
     // Retry buttons (delegated — they're created dynamically).
     form.addEventListener('click', function (ev) {
-        if (ev.target.classList.contains('mm-retry')) {
-            var tr = ev.target.closest('tr.mm-row') || ev.target.closest('td').closest('tr');
-            if (tr && !tr.classList.contains('mm-row')) tr = tr.previousElementSibling;
-            if (tr) saveRow(tr);
+        var btn = ev.target.closest('button');
+        if (!btn) return;
+        var tr = btn.closest('.mm-item');
+        if (btn.classList.contains('mm-retry') && tr) {
+            saveRow(tr);
         }
-        if (ev.target.classList.contains('mm-expand')) {
-            var tr = ev.target.closest('tr.mm-row');
-            var det = tr.nextElementSibling;
+        if (btn.classList.contains('mm-expand') && tr) {
+            var det = tr.querySelector('.mm-detail');
             var open = det.hidden;
             det.hidden = !open;
-            ev.target.textContent = (open ? '▾' : '▸') + ' note/photo';
-            ev.target.setAttribute('aria-expanded', open ? 'true' : 'false');
+            btn.textContent = (open ? '▾' : '▸') + ' more';
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        if (btn.classList.contains('mm-snap') && tr) {
+            // Fire the single-purpose capture input — opens the camera app
+            // directly on phones instead of a file chooser.
+            var input = tr.querySelector(btn.dataset.kind === 'video' ? '.mm-cam-video' : '.mm-cam-photo');
+            if (input) input.click();
         }
     });
 
     function uploadFiles(tr, input) {
         var el  = rowEls(tr);
-        var msg = el.detail.querySelector('.mm-upmsg');
+        var msg = el.upmsg;
         var files = Array.prototype.slice.call(input.files || []);
         if (!files.length) return;
         // The check row must exist first — save, then upload sequentially.
