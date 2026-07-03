@@ -112,10 +112,37 @@ try {
     if (!$rr || (int)$rr['replace_qty'] !== 2) $failures[] = "replacement list didn't reflect the flagged material";
 
     // ---- 5. Condition codes stable -------------------------------------
-    foreach (['good', 'starting', 'peeled', 'mold_low', 'mold_high', 'broken', 'bad'] as $code) {
+    foreach (['good', 'minor', 'starting', 'faded', 'peeled', 'mold_low', 'mold_high', 'broken', 'missing', 'bad'] as $code) {
         if (!isset(mm_conditions()[$code])) $failures[] = "condition code '$code' missing";
         if (mm_condition_label($code) === $code) $failures[] = "condition '$code' has no label";
     }
+
+    // ---- 5b. Photo-first helpers ----------------------------------------
+    // Latest media resolves across months; evidence gaps + shelf priorities
+    // see a flagged-without-photo material.
+    db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
+                   VALUES (:c, 'photo', 'h.jpg', :s, 'image/jpeg', 9)")
+        ->execute([':c' => $c1, ':s' => 'SMOKE-' . bin2hex(random_bytes(6)) . '.jpg']);
+    $lm = mm_latest_media([$matId]);
+    if (!isset($lm[$matId]) || $lm[$matId]['kind'] !== 'photo') $failures[] = 'mm_latest_media missed the material';
+
+    // A second flagged month with NO media → must appear as an evidence gap.
+    $p2 = '2099-02';
+    mm_save_check($matId, $p2, 'mold_high', true, 1, 'no photo yet', $adminId);
+    $gapIds = array_column(mm_evidence_gaps($p2), 'id');
+    if (!in_array($matId, array_map('intval', $gapIds), true)) $failures[] = 'mm_evidence_gaps missed a flagged material without media';
+    $prior = mm_shelf_priorities($p2);
+    $smokeShelf = null;
+    foreach ($prior as $row) if ($row['location'] === 'SMOKE-shelf') $smokeShelf = $row;
+    if (!$smokeShelf || (int)$smokeShelf['gaps'] !== 1) $failures[] = 'mm_shelf_priorities did not count the photo gap';
+
+    // Notes preservation: NULL keeps, string sets.
+    mm_save_check($matId, $p2, 'broken', true, 1, null, $adminId);
+    $kept = db()->query("SELECT notes FROM mm_condition_checks WHERE material_id = $matId AND period = '$p2'")->fetchColumn();
+    if ($kept !== 'no photo yet') $failures[] = "notes=null did not preserve existing notes (got '$kept')";
+    mm_save_check($matId, $p2, 'broken', true, 1, 'updated', $adminId);
+    $kept = db()->query("SELECT notes FROM mm_condition_checks WHERE material_id = $matId AND period = '$p2'")->fetchColumn();
+    if ($kept !== 'updated') $failures[] = 'posted notes did not overwrite';
 
     // ---- 6. Media FK cascade -------------------------------------------
     db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
@@ -149,4 +176,6 @@ echo "  - schema: materials + condition checks + media, (material,period) unique
 echo "  - catalogue seeded from the school sheet\n";
 echo "  - save records who/when; second mark edits in place (no duplicate)\n";
 echo "  - needs-replacement + qty drive the Kreedo replacement list\n";
+echo "  - latest-media, evidence-gap and shelf-priority helpers behave\n";
+echo "  - notes: null keeps existing, posted value overwrites\n";
 echo "  - condition codes + labels stable; media cascades with its material\n";

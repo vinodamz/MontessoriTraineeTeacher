@@ -59,20 +59,10 @@ if (($_GET['format'] ?? '') === 'stats') {
 
 $stats = mm_dash_stats($period);
 
-// Per-shelf progress.
-$shelves = db()->prepare("
-    SELECT m.location,
-           COUNT(*) AS total,
-           SUM(c.id IS NOT NULL) AS checked,
-           SUM(COALESCE(c.needs_replacement, 0)) AS to_replace
-    FROM mm_materials m
-    LEFT JOIN mm_condition_checks c ON c.material_id = m.id AND c.period = :p
-    WHERE m.is_active = 1
-    GROUP BY m.location
-    ORDER BY MIN(m.sort_order)
-");
-$shelves->execute([':p' => $period]);
-$shelves = $shelves->fetchAll();
+// Per-shelf progress, most urgent first (unchecked count, then photo gaps).
+$shelves = mm_shelf_priorities($period);
+// Flagged-for-replacement materials with no photo — Kreedo wants proof.
+$gaps = mm_evidence_gaps($period);
 
 // Media gallery for the month, grouped by material.
 $mediaRows = db()->prepare("
@@ -155,19 +145,50 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </section>
 
-<section class="card" style="margin-bottom:1rem;">
-    <h2 style="margin-top:0;">Per-shelf progress</h2>
+<?php if ($gaps): ?>
+<section class="card" style="margin-bottom:1rem; border-left:4px solid #b3261e;">
+    <h2 style="margin-top:0;">⚠ Flagged for replacement, but no photo (<?= count($gaps) ?>)</h2>
+    <p class="muted small">Kreedo will want proof — take a photo of these before sending the list.</p>
     <div class="table-scroll">
     <table class="admin-table">
-        <thead><tr><th>Shelf / group</th><th>Checked</th><th>To replace</th><th></th></tr></thead>
+        <thead><tr><th>Shelf</th><th>Material</th><th>Condition</th><th></th></tr></thead>
         <tbody>
-        <?php foreach ($shelves as $s): $pct = $s['total'] > 0 ? (int)round((int)$s['checked'] * 100 / (int)$s['total']) : 0; ?>
+        <?php foreach ($gaps as $g): ?>
             <tr>
+                <td><?= e($g['location']) ?></td>
+                <td><strong><?= e($g['name']) ?></strong></td>
+                <td><span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($g['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($g['condition_code'])) ?></span></td>
+                <td><a class="btn btn-ghost small" href="index.php?period=<?= e($period) ?>&q=<?= e(urlencode($g['name'])) ?>">open → 📷</a></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+</section>
+<?php endif; ?>
+
+<section class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">What's next <span class="muted small">· shelves ranked by what still needs doing</span></h2>
+    <div class="table-scroll">
+    <table class="admin-table">
+        <thead><tr><th></th><th>Shelf / group</th><th>Checked</th><th>Still to do</th><th></th></tr></thead>
+        <tbody>
+        <?php $rank = 0; foreach ($shelves as $s):
+            $pct = (int)$s['total'] > 0 ? (int)round((int)$s['checked'] * 100 / (int)$s['total']) : 0;
+            $todo = [];
+            if ((int)$s['unchecked'] > 0) $todo[] = '<strong>' . (int)$s['unchecked'] . ' unchecked</strong>';
+            if ((int)$s['gaps'] > 0)      $todo[] = '<strong style="color:#b3261e">' . (int)$s['gaps'] . ' flagged need a photo 📷</strong>';
+            if ((int)$s['flagged'] > 0)   $todo[] = (int)$s['flagged'] . ' to replace';
+            $isDone = (int)$s['unchecked'] === 0 && (int)$s['gaps'] === 0;
+            $rank++;
+        ?>
+            <tr style="<?= $isDone ? 'opacity:.6;' : '' ?>">
+                <td><?= (!$isDone && $rank === 1) ? '<span class="pill small" style="background:#fcebc6;color:#6c4612;">next ➜</span>' : '' ?></td>
                 <td><?= e($s['location']) ?></td>
                 <td><?= (int)$s['checked'] ?>/<?= (int)$s['total'] ?>
                     <div class="mmd-bar" style="max-width:120px;"><i style="width:<?= $pct ?>%"></i></div></td>
-                <td><?= (int)$s['to_replace'] > 0 ? '<strong style="color:#b3261e">' . (int)$s['to_replace'] . '</strong>' : '—' ?></td>
-                <td><a class="btn btn-ghost small" href="index.php?period=<?= e($period) ?>&loc=<?= e(urlencode($s['location'])) ?>">open</a></td>
+                <td class="small"><?= $todo ? implode(' · ', $todo) : '✓ all done' ?></td>
+                <td><a class="btn btn-ghost small" href="index.php?period=<?= e($period) ?>&loc=<?= e(urlencode($s['location'])) ?><?= (int)$s['unchecked'] > 0 ? '&only=pending' : '' ?>">open</a></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
