@@ -229,12 +229,14 @@ require __DIR__ . '/../includes/header.php';
                 <div class="mmd-gal">
                     <?php foreach ($items as $md): $url = '/materials/media.php?id=' . (int)$md['id']; ?>
                         <div class="mmd-card">
-                            <?php if ($md['kind'] === 'video'): ?>
+                            <?php if ($md['kind'] === 'audio'): ?>
+                                <div style="padding:.4rem;"><audio src="<?= e($url) ?>" controls preload="metadata" style="width:100%;"></audio></div>
+                            <?php elseif ($md['kind'] === 'video'): ?>
                                 <video src="<?= e($url) ?>" controls preload="metadata"></video>
                             <?php else: ?>
                                 <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>" alt="<?= e($first['material']) ?>" loading="lazy"></a>
                             <?php endif; ?>
-                            <div class="cap"><?= $md['kind'] === 'video' ? '🎥' : '📷' ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M, g:ia', strtotime($md['uploaded_at']))) ?></div>
+                            <div class="cap"><?= $md['kind'] === 'video' ? '🎥' : ($md['kind'] === 'audio' ? '🎙' : '📷') ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M, g:ia', strtotime($md['uploaded_at']))) ?></div>
                         </div>
                     <?php endforeach; ?>
                 </div>

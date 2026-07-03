@@ -331,6 +331,8 @@ require __DIR__ . '/../includes/header.php';
                            title="Latest <?= $lm['kind'] ?> · <?= e(date('j M Y', strtotime($lm['uploaded_at']))) ?> — tap for history">
                             <?php if ($lm['kind'] === 'video'): ?>
                                 <span class="mm-thumb-vid">🎥</span>
+                            <?php elseif ($lm['kind'] === 'audio'): ?>
+                                <span class="mm-thumb-vid">🎙</span>
                             <?php else: ?>
                                 <img src="<?= e($lmUrl) ?>" alt="" loading="lazy">
                             <?php endif; ?>
@@ -370,6 +372,7 @@ require __DIR__ . '/../includes/header.php';
                          old field opened the file picker instead of the camera). -->
                     <button type="button" class="btn btn-ghost mm-snap" data-kind="photo" title="Take a photo now">📷</button>
                     <button type="button" class="btn btn-ghost mm-snap" data-kind="video" title="Record a video now">🎥</button>
+                    <button type="button" class="btn btn-ghost mm-rec" title="Record a voice memo" hidden>⏺</button>
                     <button type="button" class="btn btn-ghost mm-expand" aria-expanded="false" title="Notes + gallery">▸ more</button>
                     <input type="file" class="mm-cam mm-cam-photo" accept="image/*" capture="environment" hidden>
                     <input type="file" class="mm-cam mm-cam-video" accept="video/*" capture="environment" hidden>
@@ -378,6 +381,7 @@ require __DIR__ . '/../includes/header.php';
                 <div class="mm-detail" hidden>
                     <label class="small mm-noteswrap">
                         Notes <span class="muted">(where's the mould, which part peeled…)</span>
+                        <button type="button" class="btn btn-ghost small mm-dictate" title="Dictate — speak, it types" hidden>🎤 dictate</button>
                         <textarea class="mm-notes" rows="2"><?= e((string)($m['notes'] ?? '')) ?></textarea>
                     </label>
                     <label class="small">
@@ -577,6 +581,117 @@ require __DIR__ . '/../includes/header.php';
 
     // Notes autosave on blur (change event covers it via delegation above —
     // textarea 'change' fires on blur when edited).
+
+    // ----- Voice memo (MediaRecorder) + dictation (SpeechRecognition) -----
+    // Both feature-detected: unsupported browsers simply never see the
+    // buttons, and everything else keeps working.
+    var canRecord  = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    var SR         = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (canRecord) form.querySelectorAll('.mm-rec').forEach(function (b) { b.hidden = false; });
+    if (SR)        form.querySelectorAll('.mm-dictate').forEach(function (b) { b.hidden = false; });
+
+    var activeRec = null;   // { recorder, stream, tr, btn, timer }
+
+    function stopRecording(save) {
+        if (!activeRec) return;
+        var a = activeRec;
+        activeRec = null;
+        clearTimeout(a.timer);
+        a.btn.textContent = '⏺';
+        a.btn.style.background = '';
+        a.saveOnStop = save;
+        if (a.recorder.state !== 'inactive') a.recorder.stop();
+        a.stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+
+    function startRecording(tr, btn) {
+        var el = rowEls(tr);
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+            var mime = '';
+            ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].some(function (t) {
+                if (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) { mime = t; return true; }
+                return false;
+            });
+            var rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+            var chunks = [];
+            rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+            rec.onstop = function () {
+                if (!chunks.length) return;
+                var type = (rec.mimeType || 'audio/webm').split(';')[0];
+                var ext  = type === 'audio/mp4' ? 'm4a' : (type === 'audio/ogg' ? 'ogg' : 'weba');
+                var blob = new Blob(chunks, { type: type });
+                var f;
+                try { f = new File([blob], 'voice-note.' + ext, { type: type }); }
+                catch (e) { f = blob; f.name = 'voice-note.' + ext; }
+                // The check must exist first; saveRow handles that.
+                saveRow(tr).then(function (ok) {
+                    if (!ok) { el.upmsg.textContent = 'pick a condition first'; return; }
+                    var fd = new FormData();
+                    fd.append('_csrf', CSRF);
+                    fd.append('op', 'ajax_media');
+                    fd.append('period', PERIOD);
+                    fd.append('material_id', tr.dataset.id);
+                    fd.append('media', f, 'voice-note.' + ext);
+                    el.upmsg.textContent = 'Uploading voice memo…';
+                    fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (!d.ok) throw new Error(d.error || 'upload failed');
+                            el.upmsg.textContent = '✓ voice memo attached';
+                            var pill = tr.querySelector('.mm-media-pill');
+                            var n = tr.querySelector('.mm-media-n');
+                            n.textContent = String((parseInt(n.textContent, 10) || 0) + 1);
+                            pill.hidden = false;
+                            var chip = tr.querySelector('.mm-nophoto');
+                            if (chip) chip.hidden = true;
+                        })
+                        .catch(function (err) {
+                            el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(err.message) + '</span>';
+                        });
+                });
+            };
+            rec.start();
+            btn.textContent = '■ stop';
+            btn.style.background = '#fbdcd8';
+            el.upmsg.textContent = 'Recording… tap ■ to finish (max 60s)';
+            activeRec = { recorder: rec, stream: stream, tr: tr, btn: btn,
+                          timer: setTimeout(function () { stopRecording(true); }, 60000) };
+        }).catch(function () {
+            el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ microphone permission needed</span>';
+        });
+    }
+
+    form.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('button');
+        if (!btn) return;
+        var tr = btn.closest('.mm-item');
+        if (btn.classList.contains('mm-rec') && tr) {
+            if (activeRec && activeRec.btn === btn) { stopRecording(true); }
+            else if (!activeRec) { startRecording(tr, btn); }
+            return;
+        }
+        if (btn.classList.contains('mm-dictate') && tr) {
+            var el = rowEls(tr);
+            var rec;
+            try { rec = new SR(); } catch (e) { btn.hidden = true; return; }
+            rec.lang = navigator.language || 'en-IN';
+            rec.interimResults = false;
+            rec.maxAlternatives = 1;
+            btn.textContent = '🎤 listening…';
+            rec.onresult = function (e) {
+                var text = e.results[0][0].transcript;
+                var ta = el.detail.querySelector('.mm-notes');
+                ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '') + text;
+                saveRow(tr);
+            };
+            rec.onend = function () { btn.textContent = '🎤 dictate'; };
+            rec.onerror = function () {
+                btn.textContent = '🎤 dictate';
+                el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ could not hear — try again closer to the phone</span>';
+            };
+            rec.start();
+        }
+    });
 })();
 </script>
 <?php endif; ?>

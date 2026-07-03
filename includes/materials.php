@@ -93,6 +93,14 @@ const MM_MEDIA_MIME_ALLOW = [
     'video/quicktime' => ['video', 'mov'],
     'video/webm'      => ['video', 'webm'],
     'video/3gpp'      => ['video', '3gp'],
+    // Voice memos (MediaRecorder: Chrome/Android → webm/opus, iOS → mp4/AAC).
+    'audio/webm'      => ['audio', 'weba'],
+    'audio/ogg'       => ['audio', 'ogg'],
+    'audio/mp4'       => ['audio', 'm4a'],
+    'audio/mpeg'      => ['audio', 'mp3'],
+    'audio/wav'       => ['audio', 'wav'],
+    'audio/x-m4a'     => ['audio', 'm4a'],
+    'audio/x-wav'     => ['audio', 'wav'],
 ];
 
 /**
@@ -112,7 +120,7 @@ function mm_media_store(array $file, int $checkId, int $userId): ?int
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime  = (string)$finfo->file($file['tmp_name']);
     if (!isset(MM_MEDIA_MIME_ALLOW[$mime])) {
-        throw new RuntimeException('Only photos (JPG/PNG/WebP/HEIC) or videos (MP4/MOV/WebM/3GP) are allowed.');
+        throw new RuntimeException('Only photos (JPG/PNG/WebP/HEIC), videos (MP4/MOV/WebM/3GP) or voice memos (WebM/M4A/MP3/WAV) are allowed.');
     }
     [$kind, $ext] = MM_MEDIA_MIME_ALLOW[$mime];
     $stored = 'mm_' . $checkId . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
