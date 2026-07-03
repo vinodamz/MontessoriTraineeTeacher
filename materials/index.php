@@ -76,6 +76,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($back);
     }
 
+    // ---- AJAX: autosave one row (condition + replace + qty + notes) --------
+    if ($op === 'ajax_mark') {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $mid  = (int)($_POST['material_id'] ?? 0);
+            $code = (string)($_POST['condition_code'] ?? '');
+            if ($mid <= 0 || !isset(mm_conditions()[$code])) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'pick a condition first']);
+                exit;
+            }
+            $needs = !empty($_POST['needs_replacement']);
+            $qty   = max(0, (int)($_POST['replace_qty'] ?? 0));
+            if ($needs && $qty === 0) $qty = 1;
+            mm_save_check($mid, $period, $code, $needs, $qty,
+                          trim((string)($_POST['notes'] ?? '')), (int)$user['id']);
+            echo json_encode([
+                'ok'    => true,
+                'label' => mm_condition_label($code),
+                'tone'  => mm_condition_tone($code),
+                'needs' => $needs, 'qty' => $qty,
+                'by'    => (string)$user['name'],
+                'at'    => date('j M, g:ia'),
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ---- AJAX: photo/video upload straight from the row --------------------
+    if ($op === 'ajax_media') {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $mid = (int)($_POST['material_id'] ?? 0);
+            $chk = db()->prepare("SELECT id FROM mm_condition_checks WHERE material_id = :m AND period = :p");
+            $chk->execute([':m' => $mid, ':p' => $period]);
+            $checkId = (int)$chk->fetchColumn();
+            if ($checkId <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'mark a condition first, then attach the photo']);
+                exit;
+            }
+            $id = mm_media_store($_FILES['media'] ?? [], $checkId, (int)$user['id']);
+            if ($id === null) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'no file received']);
+                exit;
+            }
+            $kind = db()->query("SELECT kind FROM mm_condition_media WHERE id = $id")->fetchColumn();
+            echo json_encode(['ok' => true, 'media_id' => $id, 'kind' => $kind, 'url' => '/materials/media.php?id=' . $id]);
+        } catch (Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     if ($op === 'bulk_good') {
         $scope = trim((string)($_POST['scope'] ?? ''));   // '' = everything
         $params = [':p' => $period];
@@ -155,6 +214,7 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="head-actions">
+        <a class="btn btn-ghost" href="manage.php">Manage materials</a>
         <a class="btn btn-primary" href="replacement.php?period=<?= e($period) ?>">Replacement list →</a>
     </div>
 </div>
@@ -214,42 +274,62 @@ require __DIR__ . '/../includes/header.php';
         </div>
         <div class="table-scroll">
         <table class="admin-table">
-            <thead><tr><th style="width:34%">Material</th><th>Saved</th><th>Change to</th><th>Marked by</th><th></th></tr></thead>
+            <thead><tr><th style="width:30%">Material</th><th>Condition</th><th>Replace?</th><th>Status</th><th></th></tr></thead>
             <tbody>
-            <?php foreach ($items as $m): $marked = $m['condition_code'] !== null; ?>
-                <tr id="m<?= (int)$m['id'] ?>">
+            <?php foreach ($items as $m): $marked = $m['condition_code'] !== null;
+                $mid = (int)$m['id'];
+                $suggests = $marked ? (mm_conditions()[$m['condition_code']]['suggests_replace'] ?? false) : false;
+            ?>
+                <tr id="m<?= $mid ?>" class="mm-row" data-id="<?= $mid ?>" data-saved="<?= e((string)$m['condition_code']) ?>">
                     <td>
                         <strong><?= e($m['name']) ?></strong>
-                        <?php if ((int)$m['media_count'] > 0): ?><span class="pill small" title="Has photos/videos">📎 <?= (int)$m['media_count'] ?></span><?php endif; ?>
-                        <?php if ($marked && $m['needs_replacement']): ?>
-                            <span class="pill small" style="background:#fbdcd8;color:#8b1c14;">replace<?= (int)$m['replace_qty'] > 0 ? ' ×' . (int)$m['replace_qty'] : '' ?></span>
-                        <?php endif; ?>
+                        <span class="pill small mm-media-pill" title="Photos/videos attached" <?= (int)$m['media_count'] > 0 ? '' : 'hidden' ?>>📎 <span class="mm-media-n"><?= (int)$m['media_count'] ?></span></span>
                     </td>
                     <td>
-                        <?php if ($marked): ?>
-                            <span class="pill" style="background:<?= $TONE_BG[mm_condition_tone($m['condition_code'])] ?? '' ?>">
-                                <?= e(mm_condition_label($m['condition_code'])) ?>
-                            </span>
-                        <?php else: ?>
-                            <span class="pill" style="background:#eee;color:#666;">not checked</span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <select name="cond[<?= (int)$m['id'] ?>]" class="mm-cond" data-saved="<?= e((string)$m['condition_code']) ?>">
-                            <option value=""><?= $marked ? '(keep as is)' : '— pick —' ?></option>
+                        <select name="cond[<?= $mid ?>]" class="mm-cond">
+                            <option value="">— pick —</option>
                             <?php foreach (mm_conditions() as $code => $meta): ?>
-                                <option value="<?= e($code) ?>"><?= e($meta['label']) ?></option>
+                                <option value="<?= e($code) ?>" <?= $m['condition_code'] === $code ? 'selected' : '' ?>
+                                        data-suggests="<?= $meta['suggests_replace'] ? '1' : '0' ?>"><?= e($meta['label']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </td>
-                    <td class="muted small">
+                    <td style="white-space:nowrap;">
+                        <label class="checkbox small" style="display:inline-flex; align-items:center; gap:.25rem;">
+                            <input type="checkbox" class="mm-needs" <?= !empty($m['needs_replacement']) ? 'checked' : '' ?>>
+                            <span>replace</span>
+                        </label>
+                        <input type="number" class="mm-qty" min="1" max="99"
+                               value="<?= max(1, (int)$m['replace_qty']) ?>"
+                               style="width:3.6rem; margin-left:.3rem; <?= !empty($m['needs_replacement']) ? '' : 'display:none;' ?>"
+                               title="How many to replace">
+                    </td>
+                    <td class="mm-status muted small" style="min-width:7.5rem;">
                         <?php if ($marked): ?>
-                            <?= e($m['checked_by'] ?? 'Unknown') ?><br><?= e(date('j M, g:ia', strtotime($m['checked_at']))) ?>
+                            ✓ <?= e($m['checked_by'] ?? 'Unknown') ?> · <?= e(date('j M, g:ia', strtotime($m['checked_at']))) ?>
                         <?php else: ?>
-                            —
+                            <span style="color:#b3261e">not checked</span>
                         <?php endif; ?>
                     </td>
-                    <td><a class="btn btn-ghost small" href="check.php?id=<?= (int)$m['id'] ?>&period=<?= e($period) ?>">qty / note / photo</a></td>
+                    <td style="white-space:nowrap;">
+                        <button type="button" class="btn btn-ghost small mm-expand" aria-expanded="false" title="Notes + photo">▸ note/photo</button>
+                    </td>
+                </tr>
+                <tr class="mm-detail" hidden>
+                    <td colspan="5" style="background:#fafaf7;">
+                        <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:start; padding:.3rem 0;">
+                            <label style="flex:2 1 260px;" class="small">
+                                Notes <span class="muted">(where's the mould, which part peeled…)</span>
+                                <textarea class="mm-notes" rows="2" style="width:100%;"><?= e((string)($m['notes'] ?? '')) ?></textarea>
+                            </label>
+                            <label style="flex:1 1 220px;" class="small">
+                                Photo / video
+                                <input type="file" class="mm-file" accept="image/*,video/*" capture="environment" multiple>
+                                <span class="mm-upmsg muted small"></span>
+                            </label>
+                            <a class="btn btn-ghost small" style="align-self:center;" href="check.php?id=<?= $mid ?>&period=<?= e($period) ?>">full history →</a>
+                        </div>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
@@ -258,10 +338,11 @@ require __DIR__ . '/../includes/header.php';
     </section>
     <?php endforeach; ?>
 
-    <!-- Sticky save bar: always in reach on a long list / phone. -->
+    <!-- Sticky bar: with JS every change autosaves; the button is the no-JS
+         fallback and the belt-and-braces "save anything that failed" path. -->
     <div class="no-print" style="position:sticky; bottom:0; background:var(--card-bg, #fff); border-top:2px solid #ddd; padding:.6rem .8rem; display:flex; gap:.7rem; align-items:center; z-index:50;">
         <button class="btn btn-primary" type="submit">Save all changes</button>
-        <span id="pendingCount" class="muted small">No changes yet — pick conditions above, then save once.</span>
+        <span id="pendingCount" class="muted small">Changes save automatically — this button is the backup.</span>
     </div>
 </form>
 
@@ -276,24 +357,147 @@ require __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
-// Live count of pending (changed, non-empty) selects so the sticky bar tells
-// the teacher exactly what one press of Save will write.
+// Autosave: any change on a row (condition / replace / qty / notes-blur)
+// POSTs that row via fetch. The status cell narrates every state — Saving…,
+// ✓ saved by-who-at-when, or a red "retry" — so a save can never silently
+// fail (the bug the first version had). The sticky "Save all" bulk-form
+// remains as the no-JS / it-still-failed fallback.
 (function () {
     var form = document.getElementById('bulkForm');
-    var out  = document.getElementById('pendingCount');
-    if (!form || !out) return;
-    function refresh() {
-        var n = 0;
-        form.querySelectorAll('select.mm-cond').forEach(function (s) {
-            if (s.value !== '' && s.value !== s.dataset.saved) n++;
-            s.style.background = (s.value !== '' && s.value !== s.dataset.saved) ? '#fff8dc' : '';
-        });
-        out.textContent = n === 0
-            ? 'No changes yet — pick conditions above, then save once.'
-            : n + ' change' + (n === 1 ? '' : 's') + ' ready to save.';
+    if (!form || !window.fetch) return;   // no-JS/no-fetch → bulk form still works
+    var CSRF   = form.querySelector('input[name="_csrf"]').value;
+    var PERIOD = form.querySelector('input[name="period"]').value;
+
+    function rowEls(tr) {
+        return {
+            cond:  tr.querySelector('.mm-cond'),
+            needs: tr.querySelector('.mm-needs'),
+            qty:   tr.querySelector('.mm-qty'),
+            status:tr.querySelector('.mm-status'),
+            detail:tr.nextElementSibling && tr.nextElementSibling.classList.contains('mm-detail') ? tr.nextElementSibling : null
+        };
     }
-    form.addEventListener('change', refresh);
-    refresh();
+
+    function saveRow(tr) {
+        var el = rowEls(tr);
+        if (!el.cond || el.cond.value === '') {
+            el.status.innerHTML = '<span style="color:#b3261e">pick a condition</span>';
+            return Promise.resolve(false);
+        }
+        var fd = new FormData();
+        fd.append('_csrf', CSRF);
+        fd.append('op', 'ajax_mark');
+        fd.append('period', PERIOD);
+        fd.append('material_id', tr.dataset.id);
+        fd.append('condition_code', el.cond.value);
+        if (el.needs.checked) fd.append('needs_replacement', '1');
+        fd.append('replace_qty', el.needs.checked ? (el.qty.value || '1') : '0');
+        fd.append('notes', el.detail ? el.detail.querySelector('.mm-notes').value : '');
+
+        el.status.textContent = 'Saving…';
+        return fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) throw new Error(d.error || 'save failed');
+                tr.dataset.saved = el.cond.value;
+                el.status.innerHTML = '✓ ' + escapeHtml(d.by) + ' · ' + escapeHtml(d.at);
+                el.status.style.color = '#2d6526';
+                return true;
+            })
+            .catch(function (err) {
+                el.status.innerHTML = '<button type="button" class="link-btn danger mm-retry">⚠ not saved — retry</button>';
+                console.error('autosave failed:', err);
+                return false;
+            });
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+        });
+    }
+
+    form.addEventListener('change', function (ev) {
+        var t  = ev.target;
+        var tr = t.closest('tr.mm-row') || (t.closest('tr.mm-detail') && t.closest('tr.mm-detail').previousElementSibling);
+        if (!tr) return;
+        var el = rowEls(tr);
+
+        if (t.classList.contains('mm-cond')) {
+            // Damage conditions pre-tick "replace" (teacher can untick — that
+            // fires another autosave with the corrected flag).
+            var opt = t.options[t.selectedIndex];
+            if (opt && opt.dataset.suggests === '1') { el.needs.checked = true; }
+            if (opt && opt.dataset.suggests === '0') { el.needs.checked = false; }
+        }
+        if (t.classList.contains('mm-needs') || t.classList.contains('mm-cond')) {
+            el.qty.style.display = el.needs.checked ? '' : 'none';
+        }
+        if (t.classList.contains('mm-file')) { uploadFiles(tr, t); return; }
+        saveRow(tr);
+    });
+
+    // Retry buttons (delegated — they're created dynamically).
+    form.addEventListener('click', function (ev) {
+        if (ev.target.classList.contains('mm-retry')) {
+            var tr = ev.target.closest('tr.mm-row') || ev.target.closest('td').closest('tr');
+            if (tr && !tr.classList.contains('mm-row')) tr = tr.previousElementSibling;
+            if (tr) saveRow(tr);
+        }
+        if (ev.target.classList.contains('mm-expand')) {
+            var tr = ev.target.closest('tr.mm-row');
+            var det = tr.nextElementSibling;
+            var open = det.hidden;
+            det.hidden = !open;
+            ev.target.textContent = (open ? '▾' : '▸') + ' note/photo';
+            ev.target.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+    });
+
+    function uploadFiles(tr, input) {
+        var el  = rowEls(tr);
+        var msg = el.detail.querySelector('.mm-upmsg');
+        var files = Array.prototype.slice.call(input.files || []);
+        if (!files.length) return;
+        // The check row must exist first — save, then upload sequentially.
+        saveRow(tr).then(function (ok) {
+            if (!ok) { msg.textContent = 'pick a condition first'; return; }
+            var done = 0;
+            function next() {
+                if (!files.length) {
+                    msg.textContent = '✓ ' + done + ' file' + (done === 1 ? '' : 's') + ' attached';
+                    var pill = tr.querySelector('.mm-media-pill');
+                    var n = tr.querySelector('.mm-media-n');
+                    n.textContent = String((parseInt(n.textContent, 10) || 0) + done);
+                    pill.hidden = false;
+                    input.value = '';
+                    return;
+                }
+                var f  = files.shift();
+                var fd = new FormData();
+                fd.append('_csrf', CSRF);
+                fd.append('op', 'ajax_media');
+                fd.append('period', PERIOD);
+                fd.append('material_id', tr.dataset.id);
+                fd.append('media', f);
+                msg.textContent = 'Uploading ' + f.name + '…';
+                fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d.ok) throw new Error(d.error || 'upload failed');
+                        done++;
+                        next();
+                    })
+                    .catch(function (err) {
+                        msg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(err.message) + '</span>';
+                    });
+            }
+            next();
+        });
+    }
+
+    // Notes autosave on blur (change event covers it via delegation above —
+    // textarea 'change' fires on blur when edited).
 })();
 </script>
 <?php endif; ?>
