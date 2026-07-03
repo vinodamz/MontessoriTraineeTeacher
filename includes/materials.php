@@ -17,11 +17,14 @@ function mm_conditions(): array
 {
     return [
         'good'       => ['label' => 'Good',                     'tone' => 'ok',   'suggests_replace' => false],
+        'minor'      => ['label' => 'Minor damage',             'tone' => 'warn', 'suggests_replace' => false],
         'starting'   => ['label' => 'Wear starting',            'tone' => 'warn', 'suggests_replace' => false],
+        'faded'      => ['label' => 'Colour faded',             'tone' => 'warn', 'suggests_replace' => false],
         'peeled'     => ['label' => 'Peeled off',               'tone' => 'warn', 'suggests_replace' => true],
         'mold_low'   => ['label' => 'Mould — low',              'tone' => 'warn', 'suggests_replace' => true],
         'mold_high'  => ['label' => 'Very high mould affected', 'tone' => 'bad',  'suggests_replace' => true],
         'broken'     => ['label' => 'Broken / parts missing',   'tone' => 'bad',  'suggests_replace' => true],
+        'missing'    => ['label' => 'Item missing',             'tone' => 'bad',  'suggests_replace' => true],
         'bad'        => ['label' => 'Bad / unusable',           'tone' => 'bad',  'suggests_replace' => true],
     ];
 }
@@ -147,12 +150,18 @@ function mm_media_delete(int $mediaId): void
  * Insert or update the condition check for (material, period). The month is
  * the unit of record — re-marking a material in the same month edits the same
  * row and re-stamps who/when. Returns the check id.
+ *
+ * $notes semantics: a string (even '') SETS the notes ('' clears them);
+ * NULL means "keep whatever is already there" — callers that don't carry a
+ * notes field (dashboard verdict edits, bulk saves) must not wipe a
+ * teacher's note as a side effect.
  */
-function mm_save_check(int $materialId, string $period, string $condition, bool $needsReplace, int $qty, string $notes, int $userId): int
+function mm_save_check(int $materialId, string $period, string $condition, bool $needsReplace, int $qty, ?string $notes, int $userId): int
 {
     if (!isset(mm_conditions()[$condition])) {
         throw new RuntimeException('Unknown condition code.');
     }
+    $keepNotes = $notes === null ? 1 : 0;
     db()->prepare("
         INSERT INTO mm_condition_checks
             (material_id, period, condition_code, needs_replacement, replace_qty, notes, checked_by_user_id, checked_at)
@@ -161,13 +170,14 @@ function mm_save_check(int $materialId, string $period, string $condition, bool 
             condition_code = VALUES(condition_code),
             needs_replacement = VALUES(needs_replacement),
             replace_qty = VALUES(replace_qty),
-            notes = VALUES(notes),
+            notes = IF(:keep = 1, notes, VALUES(notes)),
             checked_by_user_id = VALUES(checked_by_user_id),
             checked_at = NOW()
     ")->execute([
         ':m' => $materialId, ':p' => $period, ':c' => $condition,
         ':n' => $needsReplace ? 1 : 0, ':q' => max(0, $qty),
-        ':notes' => $notes !== '' ? $notes : null, ':u' => $userId,
+        ':notes' => ($notes !== null && $notes !== '') ? $notes : null,
+        ':keep'  => $keepNotes, ':u' => $userId,
     ]);
     $st = db()->prepare("SELECT id FROM mm_condition_checks WHERE material_id = :m AND period = :p");
     $st->execute([':m' => $materialId, ':p' => $period]);
