@@ -144,6 +144,23 @@ try {
     $kept = db()->query("SELECT notes FROM mm_condition_checks WHERE material_id = $matId AND period = '$p2'")->fetchColumn();
     if ($kept !== 'updated') $failures[] = 'posted notes did not overwrite';
 
+    // ---- 5c. Voice memos -------------------------------------------------
+    // kind enum accepts 'audio' (migration 041) and audio mimes are allowed.
+    $kindType = (string)db()->query("
+        SELECT COLUMN_TYPE FROM information_schema.columns
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'mm_condition_media' AND COLUMN_NAME = 'kind'
+    ")->fetchColumn();
+    if (strpos($kindType, "'audio'") === false) $failures[] = "mm_condition_media.kind enum lacks 'audio' (migration 041)";
+    if (!isset(MM_MEDIA_MIME_ALLOW['audio/mp4']) || MM_MEDIA_MIME_ALLOW['audio/mp4'][0] !== 'audio') {
+        $failures[] = 'audio mimes missing from MM_MEDIA_MIME_ALLOW';
+    }
+    db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
+                   VALUES (:c, 'audio', 'v.m4a', :s, 'audio/mp4', 7)")
+        ->execute([':c' => $c1, ':s' => 'SMOKE-' . bin2hex(random_bytes(6)) . '.m4a']);
+    $aud = (int)db()->query("SELECT COUNT(*) FROM mm_condition_media WHERE check_id = $c1 AND kind = 'audio'")->fetchColumn();
+    if ($aud !== 1) $failures[] = 'audio media row did not persist';
+
     // ---- 6. Media FK cascade -------------------------------------------
     db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
                    VALUES (:c, 'photo', 'x.jpg', :s, 'image/jpeg', 10)")
@@ -178,4 +195,5 @@ echo "  - save records who/when; second mark edits in place (no duplicate)\n";
 echo "  - needs-replacement + qty drive the Kreedo replacement list\n";
 echo "  - latest-media, evidence-gap and shelf-priority helpers behave\n";
 echo "  - notes: null keeps existing, posted value overwrites\n";
+echo "  - voice memos: audio kind + mimes accepted\n";
 echo "  - condition codes + labels stable; media cascades with its material\n";

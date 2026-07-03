@@ -194,7 +194,9 @@ require __DIR__ . '/../includes/header.php';
     <div style="display:flex; gap:.8rem; flex-wrap:wrap;">
         <?php foreach ($media as $md): ?>
             <div style="width:160px;">
-                <?php if ($md['kind'] === 'video'): ?>
+                <?php if ($md['kind'] === 'audio'): ?>
+                                <div style="padding:.4rem;"><audio src="<?= e($url) ?>" controls preload="metadata" style="width:100%;"></audio></div>
+                            <?php elseif ($md['kind'] === 'video'): ?>
                     <video src="/materials/media.php?id=<?= (int)$md['id'] ?>" controls style="width:100%; border-radius:8px; background:#000;"></video>
                 <?php else: ?>
                     <a href="/materials/media.php?id=<?= (int)$md['id'] ?>" target="_blank">
@@ -225,12 +227,14 @@ require __DIR__ . '/../includes/header.php';
             <div style="display:flex; gap:.8rem; flex-wrap:wrap;">
                 <?php foreach ($items as $md): $url = '/materials/media.php?id=' . (int)$md['id']; ?>
                     <div style="width:150px;">
-                        <?php if ($md['kind'] === 'video'): ?>
+                        <?php if ($md['kind'] === 'audio'): ?>
+                                <div style="padding:.4rem;"><audio src="<?= e($url) ?>" controls preload="metadata" style="width:100%;"></audio></div>
+                            <?php elseif ($md['kind'] === 'video'): ?>
                             <video src="<?= e($url) ?>" controls preload="metadata" style="width:100%; border-radius:8px; background:#000;"></video>
                         <?php else: ?>
                             <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>" alt="" loading="lazy" style="width:100%; border-radius:8px;"></a>
                         <?php endif; ?>
-                        <div class="muted small" style="margin-top:.15rem;"><?= $md['kind'] === 'video' ? '🎥' : '📷' ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M Y', strtotime($md['uploaded_at']))) ?></div>
+                        <div class="muted small" style="margin-top:.15rem;"><?= $md['kind'] === 'video' ? '🎥' : ($md['kind'] === 'audio' ? '🎙' : '📷') ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M Y', strtotime($md['uploaded_at']))) ?></div>
                     </div>
                 <?php endforeach; ?>
             </div>
