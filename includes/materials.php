@@ -180,7 +180,7 @@ function mm_latest_media(array $materialIds): array
 function mm_evidence_gaps(string $period): array
 {
     $st = db()->prepare("
-        SELECT m.id, m.name, m.location, c.condition_code, c.replace_qty
+        SELECT m.id, m.name, m.location, c.condition_code, c.replace_qty, c.notes
         FROM mm_condition_checks c
         JOIN mm_materials m ON m.id = c.material_id AND m.is_active = 1
         WHERE c.period = :p AND c.needs_replacement = 1
