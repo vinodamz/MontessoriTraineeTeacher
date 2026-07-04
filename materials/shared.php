@@ -137,7 +137,7 @@ h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; border-bottom: 2px solid #eee
             <span class="pill" style="background:<?= $TONE_BG[mm_condition_tone($r['condition_code'])] ?? '#eee' ?>"><?= $e(mm_condition_label($r['condition_code'])) ?></span>
             <span class="pill" style="background:#fbdcd8;color:#8b1c14;">qty <?= max(1, (int)$r['replace_qty']) ?></span>
             <?php if (trim((string)$r['notes']) !== ''): ?>
-                <div class="muted small" style="margin-top:.2rem;">“<?= $e($r['notes']) ?>”</div>
+                <div class="small" style="margin-top:.3rem; background:#fffbe7; border:1px solid #ead9a0; border-radius:8px; padding:.4rem .6rem;">📝 <?= $e($r['notes']) ?></div>
             <?php endif; ?>
             <?php $mm = $mediaByCheck[(int)$r['check_id']] ?? []; ?>
             <?php if ($mm): ?>

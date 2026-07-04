@@ -152,13 +152,14 @@ require __DIR__ . '/../includes/header.php';
     <p class="muted small">Kreedo will want proof — take a photo of these before sending the list.</p>
     <div class="table-scroll">
     <table class="admin-table">
-        <thead><tr><th>Shelf</th><th>Material</th><th>Condition</th><th></th></tr></thead>
+        <thead><tr><th>Shelf</th><th>Material</th><th>Condition</th><th>Note</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($gaps as $g): ?>
             <tr>
                 <td><?= e($g['location']) ?></td>
                 <td><strong><?= e($g['name']) ?></strong></td>
                 <td><span class="pill small" style="background:<?= $TONE_BG[mm_condition_tone($g['condition_code'])] ?? '#eee' ?>"><?= e(mm_condition_label($g['condition_code'])) ?></span></td>
+                <td class="muted small"><?= trim((string)($g['notes'] ?? '')) !== '' ? '📝 ' . e($g['notes']) : '—' ?></td>
                 <td><a class="btn btn-ghost small" href="index.php?period=<?= e($period) ?>&q=<?= e(urlencode($g['name'])) ?>">open → 📷</a></td>
             </tr>
         <?php endforeach; ?>
@@ -224,9 +225,8 @@ require __DIR__ . '/../includes/header.php';
                            style="width:4rem; <?= !empty($first['needs_replacement']) ? '' : 'display:none;' ?>">
                     <span class="mmd-rowstatus muted small"></span>
                 </div>
-                <?php if (trim((string)$first['notes']) !== ''): ?>
-                    <p class="muted small" style="margin:.1rem 0 .4rem;">“<?= e($first['notes']) ?>”</p>
-                <?php endif; ?>
+                <textarea class="mmd-notes" rows="1" placeholder="Add a note — what/where is the damage…"
+                          style="width:100%; max-width:34rem; margin:.1rem 0 .4rem; font-size:.85rem;"><?= e((string)($first['notes'] ?? '')) ?></textarea>
                 <div class="mmd-gal">
                     <?php foreach ($items as $md): $url = '/materials/media.php?id=' . (int)$md['id']; ?>
                         <div class="mmd-card">
@@ -300,9 +300,8 @@ require __DIR__ . '/../includes/header.php';
             fd.append('condition_code', cond.value);
             if (needs.checked) fd.append('needs_replacement', '1');
             fd.append('replace_qty', needs.checked ? (qty.value || '1') : '0');
-            // notes deliberately not sent from here — ajax_mark would blank
-            // them; the board/detail page owns notes. (Server keeps notes
-            // only when the field is posted, see index.php ajax_mark.)
+            var notes = mat.querySelector('.mmd-notes');
+            if (notes) fd.append('notes', notes.value);
             status.textContent = 'Saving…';
             fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
                 .then(function (r) { return r.json(); })
