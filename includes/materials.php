@@ -227,6 +227,84 @@ function mm_shelf_priorities(string $period): array
     return $rows;
 }
 
+// ---------- Thumbnails -------------------------------------------------------
+// Phone photos are 3–8 MB; rendering them as 44px board thumbs / 150px gallery
+// tiles is what made the pages crawl. We keep a 480px-max JPEG next to the
+// original (uploads/material_media/thumbs/) generated on first request.
+
+function mm_thumbs_dir(): string
+{
+    $dir = mm_media_dir() . '/thumbs';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    return $dir;
+}
+
+/**
+ * Filesystem path of the thumbnail for a stored photo, generating it on first
+ * use. Returns null when a thumb can't be made (video/audio/HEIC/GD failure) —
+ * caller falls back to the original file.
+ */
+function mm_thumb_for(string $storedFilename): ?string
+{
+    $src = mm_media_dir() . '/' . basename($storedFilename);
+    if (!is_file($src)) return null;
+    $dst = mm_thumbs_dir() . '/' . basename($storedFilename) . '.jpg';
+    if (is_file($dst)) return $dst;
+
+    $info = @getimagesize($src);
+    if ($info === false) return null;
+    [$w, $h] = $info;
+    $img = match ($info[2]) {
+        IMAGETYPE_JPEG => @imagecreatefromjpeg($src),
+        IMAGETYPE_PNG  => @imagecreatefrompng($src),
+        IMAGETYPE_GIF  => @imagecreatefromgif($src),
+        IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($src) : false,
+        default        => false,
+    };
+    if (!$img) return null;
+
+    $max = 480;
+    $scale = min(1.0, $max / max($w, $h, 1));
+    $tw = max(1, (int)round($w * $scale));
+    $th = max(1, (int)round($h * $scale));
+    $thumb = imagecreatetruecolor($tw, $th);
+    // White background so transparent PNGs don't go black in JPEG.
+    imagefill($thumb, 0, 0, imagecolorallocate($thumb, 255, 255, 255));
+    imagecopyresampled($thumb, $img, 0, 0, 0, 0, $tw, $th, $w, $h);
+    imagedestroy($img);
+    $ok = imagejpeg($thumb, $dst, 78);
+    imagedestroy($thumb);
+    if (!$ok) return null;
+    @chmod($dst, 0644);
+    return $dst;
+}
+
+// ---------- Share links (Kreedo) ---------------------------------------------
+
+/** Active share link row for a raw token, or null. */
+function mm_share_by_token(string $token): ?array
+{
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) return null;
+    $st = db()->prepare("SELECT * FROM mm_share_links WHERE token = :t AND is_active = 1");
+    $st->execute([':t' => $token]);
+    $row = $st->fetch();
+    return $row ?: null;
+}
+
+/** Log one view of a shared page. */
+function mm_share_log_view(int $shareId, string $viewerName): void
+{
+    db()->prepare("
+        INSERT INTO mm_share_views (share_id, viewer_name, ip, user_agent)
+        VALUES (:s, :n, :ip, :ua)
+    ")->execute([
+        ':s'  => $shareId,
+        ':n'  => mb_substr(trim($viewerName), 0, 120),
+        ':ip' => mb_substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+        ':ua' => mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+    ]);
+}
+
 /** Best-effort unlink + row delete for a media item. */
 function mm_media_delete(int $mediaId): void
 {
@@ -237,6 +315,8 @@ function mm_media_delete(int $mediaId): void
     db()->prepare("DELETE FROM mm_condition_media WHERE id = :id")->execute([':id' => $mediaId]);
     $p = mm_media_dir() . '/' . basename((string)$stored);
     if (is_file($p)) @unlink($p);
+    $t = mm_thumbs_dir() . '/' . basename((string)$stored) . '.jpg';
+    if (is_file($t)) @unlink($t);
 }
 
 /**

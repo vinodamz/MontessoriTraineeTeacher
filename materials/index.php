@@ -334,7 +334,7 @@ require __DIR__ . '/../includes/header.php';
                             <?php elseif ($lm['kind'] === 'audio'): ?>
                                 <span class="mm-thumb-vid">🎙</span>
                             <?php else: ?>
-                                <img src="<?= e($lmUrl) ?>" alt="" loading="lazy">
+                                <img src="<?= e($lmUrl) ?>&thumb=1" alt="" loading="lazy">
                             <?php endif; ?>
                         </a>
                     <?php endif; ?>
