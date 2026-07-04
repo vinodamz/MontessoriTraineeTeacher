@@ -30,13 +30,16 @@ require_once __DIR__ . '/../includes/materials.php';
 $user   = require_module('materials');
 $period = mm_current_period();
 
-/** Current check per material for a period: [material_id => condition_code]. */
+/** Current checks for a period: [material_id => row] for change detection. */
 function mm_existing_marks(string $period): array
 {
-    $st = db()->prepare("SELECT material_id, condition_code FROM mm_condition_checks WHERE period = :p");
+    $st = db()->prepare("
+        SELECT material_id, condition_code, needs_replacement, replace_qty, notes
+        FROM mm_condition_checks WHERE period = :p
+    ");
     $st->execute([':p' => $period]);
     $out = [];
-    foreach ($st as $r) $out[(int)$r['material_id']] = (string)$r['condition_code'];
+    foreach ($st as $r) $out[(int)$r['material_id']] = $r;
     return $out;
 }
 
@@ -55,23 +58,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $back = '/materials/index.php' . ($backQs ? '?' . $backQs : '');
 
     if ($op === 'bulk_mark') {
-        $conds    = $_POST['cond'] ?? [];
-        if (!is_array($conds)) $conds = [];
+        // The fallback "Save all" carries the FULL row state (condition,
+        // replace flag, qty, notes) — it used to post only conditions and
+        // silently dropped typed-but-unsaved notes, which read as lost data.
+        $conds    = is_array($_POST['cond']  ?? null) ? $_POST['cond']  : [];
+        $needsArr = is_array($_POST['needs'] ?? null) ? $_POST['needs'] : [];
+        $qtyArr   = is_array($_POST['qty']   ?? null) ? $_POST['qty']   : [];
+        $notesArr = is_array($_POST['notes'] ?? null) ? $_POST['notes'] : [];
         $existing = mm_existing_marks($period);
         $saved = 0;
         foreach ($conds as $mid => $code) {
             $mid  = (int)$mid;
             $code = (string)$code;
             if ($mid <= 0 || $code === '' || !isset(mm_conditions()[$code])) continue;
+            $needs = !empty($needsArr[$mid]);
+            $qty   = max(0, (int)($qtyArr[$mid] ?? 0));
+            if ($needs && $qty === 0) $qty = 1;
+            $notesPosted = array_key_exists($mid, $notesArr);
+            $notes = $notesPosted ? trim((string)$notesArr[$mid]) : null;
+
             // Only touch rows that actually changed — a bulk save must not
             // re-stamp every untouched row with today's user + time.
-            if (($existing[$mid] ?? '') === $code) continue;
-            mm_save_check($mid, $period, $code,
-                mm_conditions()[$code]['suggests_replace'], 0, null, (int)$user['id']);
+            $ex = $existing[$mid] ?? null;
+            $same = $ex !== null
+                && (string)$ex['condition_code'] === $code
+                && (int)$ex['needs_replacement'] === ($needs ? 1 : 0)
+                && (int)$ex['replace_qty'] === ($needs ? $qty : (int)$ex['replace_qty'])
+                && (!$notesPosted || trim((string)($ex['notes'] ?? '')) === $notes);
+            if ($same) continue;
+            mm_save_check($mid, $period, $code, $needs, $qty, $notes, (int)$user['id']);
             $saved++;
         }
         flash_set('ok', $saved > 0
-            ? "Saved $saved mark" . ($saved === 1 ? '' : 's') . '. Damaged ones are pre-flagged for replacement — open a row to add qty, notes or a photo.'
+            ? "Saved $saved mark" . ($saved === 1 ? '' : 's') . ' (condition, replacement and notes).'
             : 'Nothing changed.');
         redirect($back);
     }
@@ -360,10 +379,10 @@ require __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                     <label class="mm-rep">
-                        <input type="checkbox" class="mm-needs" <?= !empty($m['needs_replacement']) ? 'checked' : '' ?>>
+                        <input type="checkbox" class="mm-needs" name="needs[<?= $mid ?>]" value="1" <?= !empty($m['needs_replacement']) ? 'checked' : '' ?>>
                         <span>replace</span>
                     </label>
-                    <input type="number" class="mm-qty" min="1" max="99" inputmode="numeric"
+                    <input type="number" class="mm-qty" name="qty[<?= $mid ?>]" min="1" max="99" inputmode="numeric"
                            value="<?= max(1, (int)$m['replace_qty']) ?>"
                            style="<?= !empty($m['needs_replacement']) ? '' : 'display:none;' ?>"
                            title="How many to replace">
@@ -382,7 +401,7 @@ require __DIR__ . '/../includes/header.php';
                     <label class="small mm-noteswrap">
                         Notes <span class="muted">(where's the mould, which part peeled…)</span>
                         <button type="button" class="btn btn-ghost small mm-dictate" title="Dictate — speak, it types" hidden>🎤 dictate</button>
-                        <textarea class="mm-notes" rows="2"><?= e((string)($m['notes'] ?? '')) ?></textarea>
+                        <textarea class="mm-notes" name="notes[<?= $mid ?>]" rows="2"><?= e((string)($m['notes'] ?? '')) ?></textarea>
                     </label>
                     <label class="small">
                         Upload from gallery
@@ -400,7 +419,7 @@ require __DIR__ . '/../includes/header.php';
          fallback and the belt-and-braces "save anything that failed" path. -->
     <div class="no-print" style="position:sticky; bottom:0; background:var(--card-bg, #fff); border-top:2px solid #ddd; padding:.6rem .8rem; display:flex; gap:.7rem; align-items:center; z-index:50;">
         <button class="btn btn-primary" type="submit">Save all changes</button>
-        <span id="pendingCount" class="muted small">Changes save automatically — this button is the backup.</span>
+        <span id="pendingCount" class="muted small">All changes saved automatically.</span>
     </div>
 </form>
 
@@ -437,12 +456,41 @@ require __DIR__ . '/../includes/header.php';
         };
     }
 
-    function saveRow(tr) {
+    // ----- Draft safety net -------------------------------------------------
+    // Every edit is journaled to localStorage the moment it happens; the
+    // draft is cleared only on a CONFIRMED save. Close the app mid-audit,
+    // lose signal, forget entirely — next open restores and re-saves.
+    function draftKey(tr) { return 'mmdraft:' + PERIOD + ':' + tr.dataset.id; }
+    function serializeRow(tr) {
         var el = rowEls(tr);
-        if (!el.cond || el.cond.value === '') {
-            el.status.innerHTML = '<span style="color:#b3261e">pick a condition</span>';
-            return Promise.resolve(false);
-        }
+        return JSON.stringify({
+            c: el.cond ? el.cond.value : '',
+            n: el.needs && el.needs.checked ? 1 : 0,
+            q: el.qty ? (el.qty.value || '1') : '1',
+            t: el.detail ? el.detail.querySelector('.mm-notes').value : ''
+        });
+    }
+    function writeDraft(tr) {
+        try { localStorage.setItem(draftKey(tr), serializeRow(tr)); } catch (e) {}
+        pending[tr.dataset.id] = true;
+        refreshPending();
+    }
+    function clearDraft(tr) {
+        try { localStorage.removeItem(draftKey(tr)); } catch (e) {}
+        delete pending[tr.dataset.id];
+        refreshPending();
+    }
+    var pending = {};
+    function refreshPending() {
+        var n = Object.keys(pending).length;
+        var out = document.getElementById('pendingCount');
+        if (out) out.textContent = n === 0
+            ? 'All changes saved automatically.'
+            : n + ' change' + (n === 1 ? '' : 's') + ' not confirmed saved yet — kept safe on this phone; they retry automatically.';
+    }
+
+    function buildRowFormData(tr) {
+        var el = rowEls(tr);
         var fd = new FormData();
         fd.append('_csrf', CSRF);
         fd.append('op', 'ajax_mark');
@@ -452,6 +500,21 @@ require __DIR__ . '/../includes/header.php';
         if (el.needs.checked) fd.append('needs_replacement', '1');
         fd.append('replace_qty', el.needs.checked ? (el.qty.value || '1') : '0');
         fd.append('notes', el.detail ? el.detail.querySelector('.mm-notes').value : '');
+        return fd;
+    }
+
+    function saveRow(tr) {
+        var el = rowEls(tr);
+        if (!el.cond || el.cond.value === '') {
+            el.status.innerHTML = '<span style="color:#b3261e">pick a condition — the note is kept safe until you do</span>';
+            return Promise.resolve(false);
+        }
+        var state = serializeRow(tr);
+        if (tr.dataset.lastSaved === state) {   // nothing new — don't restamp
+            clearDraft(tr);
+            return Promise.resolve(true);
+        }
+        var fd = buildRowFormData(tr);
 
         el.status.textContent = 'Saving…';
         return fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
@@ -459,6 +522,8 @@ require __DIR__ . '/../includes/header.php';
             .then(function (d) {
                 if (!d.ok) throw new Error(d.error || 'save failed');
                 tr.dataset.saved = el.cond.value;
+                tr.dataset.lastSaved = state;
+                clearDraft(tr);
                 el.cond.value = tr.dataset.saved;   // pin against browser form-restore
                 var toneBg = {ok:'#dff1d3;color:#2d6526', warn:'#fcebc6;color:#6c4612', bad:'#fbdcd8;color:#8b1c14'}[d.tone] || '#eee';
                 var needsPhoto = d.needs && d.media === 0;
@@ -484,10 +549,68 @@ require __DIR__ . '/../includes/header.php';
         });
     }
 
-    // Undo browser form-restore: the server's saved value wins on load.
+    // Undo browser form-restore: the server's saved value wins on load…
     form.querySelectorAll('.mm-item').forEach(function (item) {
         var sel = item.querySelector('.mm-cond');
         if (sel && sel.value !== item.dataset.saved) sel.value = item.dataset.saved || '';
+        item.dataset.lastSaved = serializeRow(item);
+    });
+    // …then any unsaved DRAFT wins over both: restore it into the fields and
+    // push it to the server. This is what rescues "forgot to save yesterday".
+    form.querySelectorAll('.mm-item').forEach(function (item) {
+        var raw = null;
+        try { raw = localStorage.getItem(draftKey(item)); } catch (e) {}
+        if (!raw || raw === item.dataset.lastSaved) {
+            if (raw) { try { localStorage.removeItem(draftKey(item)); } catch (e) {} }
+            return;
+        }
+        var d; try { d = JSON.parse(raw); } catch (e) { return; }
+        var el = rowEls(item);
+        if (d.c) el.cond.value = d.c;
+        el.needs.checked = !!d.n;
+        el.qty.value = d.q || '1';
+        el.qty.style.display = el.needs.checked ? '' : 'none';
+        if (el.detail && typeof d.t === 'string') {
+            el.detail.querySelector('.mm-notes').value = d.t;
+            if (d.t !== '') { el.detail.hidden = false; }
+        }
+        pending[item.dataset.id] = true;
+        el.status.innerHTML = '<span style="color:#6c4612">restoring unsaved change…</span>';
+        saveRow(item);
+    });
+    refreshPending();
+
+    // Journal every keystroke/toggle; notes also save 1.2s after typing stops
+    // (blur alone lost notes when the app was closed mid-typing).
+    var noteTimers = {};
+    form.addEventListener('input', function (ev) {
+        var tr = ev.target.closest('.mm-item');
+        if (!tr) return;
+        writeDraft(tr);
+        if (ev.target.classList.contains('mm-notes')) {
+            clearTimeout(noteTimers[tr.dataset.id]);
+            noteTimers[tr.dataset.id] = setTimeout(function () { saveRow(tr); }, 1200);
+        }
+    });
+
+    // Last-chance flush when the app is backgrounded or the page is left:
+    // sendBeacon survives page teardown. Drafts stay until confirmed, so
+    // even a failed beacon is recovered on the next visit.
+    function flushPending() {
+        Object.keys(pending).forEach(function (id) {
+            var tr = document.getElementById('m' + id);
+            if (!tr) return;
+            var el = rowEls(tr);
+            if (!el.cond || el.cond.value === '') return;
+            if (tr.dataset.lastSaved === serializeRow(tr)) return;
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/materials/index.php', buildRowFormData(tr));
+            }
+        });
+    }
+    window.addEventListener('pagehide', flushPending);
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flushPending();
     });
 
     form.addEventListener('change', function (ev) {
