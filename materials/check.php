@@ -200,7 +200,7 @@ require __DIR__ . '/../includes/header.php';
                     <video src="/materials/media.php?id=<?= (int)$md['id'] ?>" controls style="width:100%; border-radius:8px; background:#000;"></video>
                 <?php else: ?>
                     <a href="/materials/media.php?id=<?= (int)$md['id'] ?>" target="_blank">
-                        <img src="/materials/media.php?id=<?= (int)$md['id'] ?>" alt="condition" style="width:100%; border-radius:8px;">
+                        <img src="/materials/media.php?id=<?= (int)$md['id'] ?>&thumb=1" alt="condition" loading="lazy" style="width:100%; border-radius:8px;">
                     </a>
                 <?php endif; ?>
                 <form method="post" onsubmit="return confirm('Remove this attachment?')" style="margin-top:.25rem;">
@@ -232,7 +232,7 @@ require __DIR__ . '/../includes/header.php';
                             <?php elseif ($md['kind'] === 'video'): ?>
                             <video src="<?= e($url) ?>" controls preload="metadata" style="width:100%; border-radius:8px; background:#000;"></video>
                         <?php else: ?>
-                            <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>" alt="" loading="lazy" style="width:100%; border-radius:8px;"></a>
+                            <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>&thumb=1" alt="" loading="lazy" style="width:100%; border-radius:8px;"></a>
                         <?php endif; ?>
                         <div class="muted small" style="margin-top:.15rem;"><?= $md['kind'] === 'video' ? '🎥' : ($md['kind'] === 'audio' ? '🎙' : '📷') ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M Y', strtotime($md['uploaded_at']))) ?></div>
                     </div>

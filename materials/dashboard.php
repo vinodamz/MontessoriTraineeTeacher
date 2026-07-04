@@ -110,6 +110,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <div class="head-actions">
         <a class="btn btn-ghost" href="index.php?period=<?= e($period) ?>">Audit board</a>
+        <a class="btn" href="share.php?period=<?= e($period) ?>">Share with Kreedo</a>
         <a class="btn" href="replacement.php?period=<?= e($period) ?>&format=csv">CSV</a>
         <a class="btn btn-primary" href="export.php?period=<?= e($period) ?>" title="Report + every photo and video, foldered by shelf">Export ZIP (with photos/videos)</a>
     </div>
@@ -234,7 +235,7 @@ require __DIR__ . '/../includes/header.php';
                             <?php elseif ($md['kind'] === 'video'): ?>
                                 <video src="<?= e($url) ?>" controls preload="metadata"></video>
                             <?php else: ?>
-                                <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>" alt="<?= e($first['material']) ?>" loading="lazy"></a>
+                                <a href="<?= e($url) ?>" target="_blank"><img src="<?= e($url) ?>&thumb=1" alt="<?= e($first['material']) ?>" loading="lazy"></a>
                             <?php endif; ?>
                             <div class="cap"><?= $md['kind'] === 'video' ? '🎥' : ($md['kind'] === 'audio' ? '🎙' : '📷') ?> <?= e($md['by_name'] ?? 'Unknown') ?> · <?= e(date('j M, g:ia', strtotime($md['uploaded_at']))) ?></div>
                         </div>
