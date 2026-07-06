@@ -138,6 +138,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // app_name() when blank.
         $crmName = trim((string)($_POST['crm_school_name'] ?? ''));
         $upsert->execute([':k' => 'crm_school_name', ':v' => substr($crmName, 0, 160)]);
+        // Google Drive backup (materials audits). Key is a service-account
+        // JSON; validate its shape so a paste accident fails loudly here,
+        // not at upload time. Empty clears the integration.
+        $gjson = trim((string)($_POST['gdrive_service_json'] ?? ''));
+        if ($gjson !== '') {
+            $gd = json_decode($gjson, true);
+            if (!is_array($gd) || empty($gd['client_email']) || empty($gd['private_key'])) {
+                flash_set('error', 'That does not look like a Google service-account JSON key (needs client_email + private_key). Settings NOT saved.');
+                redirect('/admin.php');
+            }
+        }
+        $upsert->execute([':k' => 'gdrive_service_json', ':v' => $gjson]);
+        $gfolder = trim((string)($_POST['gdrive_folder_id'] ?? ''));
+        // Accept a pasted folder URL too — extract the ID.
+        if (preg_match('#folders/([A-Za-z0-9_-]{10,})#', $gfolder, $gm)) $gfolder = $gm[1];
+        $upsert->execute([':k' => 'gdrive_folder_id', ':v' => substr($gfolder, 0, 120)]);
+        $upsert->execute([':k' => 'gdrive_token_cache', ':v' => '']);   // creds changed → drop cached token
         app_setting_clear_cache();
         // External app endpoints — admin can change these without a code
         // deploy. Empty string clears the integration.
@@ -304,6 +321,19 @@ require __DIR__ . '/includes/header.php';
                 <label>WhatsApp school name</label>
                 <input name="crm_school_name" value="<?= e((string)app_setting('crm_school_name', '')) ?>" maxlength="160" placeholder="e.g. The Little Graduates Playschool, Kaloor, Kochi">
                 <span class="muted small">Long-form identity that substitutes for <code>{school_name}</code> in every CRM WhatsApp template + intro. Blank falls back to the Display name above — but spelling out the location helps cold parents recognise who's writing.</span>
+            </div>
+        </div>
+        <h3 style="margin:.8rem 0 .4rem;">Google Drive backup (materials audits)</h3>
+        <div class="form-grid">
+            <div class="field" style="flex: 2 1 100%;">
+                <label>Service-account key (JSON)</label>
+                <textarea name="gdrive_service_json" rows="3" placeholder='Paste the whole .json key file here — {"type":"service_account", …}' style="font-family:monospace; font-size:.78rem;"><?= e((string)app_setting('gdrive_service_json', '')) ?></textarea>
+                <span class="muted small">Setup steps are on <a href="/materials/gdrive_push.php">Materials → Google Drive backup</a>. Blank = integration off.</span>
+            </div>
+            <div class="field" style="flex: 2 1 100%;">
+                <label>Drive folder (ID or URL)</label>
+                <input name="gdrive_folder_id" value="<?= e((string)app_setting('gdrive_folder_id', '')) ?>" maxlength="200" placeholder="e.g. 1AbC… or the folder's URL">
+                <span class="muted small">Must be shared with the service account's <code>client_email</code> as Editor.</span>
             </div>
         </div>
         <h3 style="margin:.8rem 0 .4rem;">External app URLs</h3>
