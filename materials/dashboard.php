@@ -57,12 +57,28 @@ if (($_GET['format'] ?? '') === 'stats') {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'fix_inconsistent') {
+    csrf_check();
+    $fixed = 0;
+    foreach (mm_inconsistent_flags($period) as $row) {
+        mm_save_check((int)$row['id'], $period, $row['condition_code'], true, 1, null, (int)$user['id']);
+        $fixed++;
+    }
+    flash_set('ok', $fixed > 0
+        ? "Flagged $fixed material" . ($fixed === 1 ? '' : 's') . " for replacement — condition and quantity kept, only the flag changed."
+        : 'Nothing to fix.');
+    redirect('/materials/dashboard.php?period=' . urlencode($period));
+}
+
 $stats = mm_dash_stats($period);
 
 // Per-shelf progress, most urgent first (unchecked count, then photo gaps).
 $shelves = mm_shelf_priorities($period);
 // Flagged-for-replacement materials with no photo — Kreedo wants proof.
 $gaps = mm_evidence_gaps($period);
+// Damage condition but NOT flagged — inconsistent, and exactly what a
+// since-fixed autosave race could leave behind. Offer a one-click repair.
+$inconsistent = mm_inconsistent_flags($period);
 
 // Media gallery for the month, grouped by material.
 $mediaRows = db()->prepare("
@@ -126,6 +142,24 @@ require __DIR__ . '/../includes/header.php';
     </label>
     <noscript><button class="btn">Go</button></noscript>
 </form>
+
+<?php if ($inconsistent): ?>
+<section class="card" style="margin-bottom:1rem; border-left:4px solid #b3261e; background:#fffaf7;">
+    <h2 style="margin-top:0;">⚠ <?= count($inconsistent) ?> material<?= count($inconsistent) === 1 ? '' : 's' ?> marked damaged but not flagged for replacement</h2>
+    <p class="muted small">These have a damage condition (e.g. mould, broken, missing) but "replace" isn't ticked — an inconsistent state a since-fixed autosave bug could have caused. Review below, or fix them all in one click (only the replace flag changes; condition and notes are untouched).</p>
+    <ul style="margin:.4rem 0; padding-left:1.2rem;">
+        <?php foreach ($inconsistent as $row): ?>
+            <li><strong><?= e($row['name']) ?></strong> <span class="muted small">(<?= e($row['location']) ?>)</span> — <?= e(mm_condition_label($row['condition_code'])) ?></li>
+        <?php endforeach; ?>
+    </ul>
+    <form method="post" onsubmit="return confirm('Flag all <?= count($inconsistent) ?> listed materials for replacement?')">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="fix_inconsistent">
+        <input type="hidden" name="period" value="<?= e($period) ?>">
+        <button class="btn btn-primary">Fix all <?= count($inconsistent) ?></button>
+    </form>
+</section>
+<?php endif; ?>
 
 <div class="mmd-tiles" id="mmdTiles">
     <div class="mmd-tile"><span class="v" data-k="checked"><?= $stats['checked'] ?></span><span class="l">checked of <span data-k="total"><?= $stats['total'] ?></span></span>

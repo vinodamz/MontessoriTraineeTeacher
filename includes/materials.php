@@ -305,6 +305,30 @@ function mm_share_log_view(int $shareId, string $viewerName): void
     ]);
 }
 
+/**
+ * Materials whose condition implies replacement (a "damage" code) but which
+ * are NOT flagged needs_replacement — an internally inconsistent state that's
+ * always worth a second look, and specifically what a since-fixed autosave
+ * race could produce (a damage condition saved with the replace flag
+ * silently cleared). Surfaced on the dashboard with a one-click repair.
+ */
+function mm_inconsistent_flags(string $period): array
+{
+    $damageCodes = array_keys(array_filter(mm_conditions(), fn($c) => $c['suggests_replace']));
+    if (!$damageCodes) return [];
+    $place = implode(',', array_fill(0, count($damageCodes), '?'));
+    $st = db()->prepare("
+        SELECT m.id, m.name, m.location, c.condition_code
+        FROM mm_condition_checks c
+        JOIN mm_materials m ON m.id = c.material_id AND m.is_active = 1
+        WHERE c.period = ? AND c.needs_replacement = 0
+          AND c.condition_code IN ($place)
+        ORDER BY m.location, m.sort_order, m.name
+    ");
+    $st->execute(array_merge([$period], $damageCodes));
+    return $st->fetchAll();
+}
+
 /** Best-effort unlink + row delete for a media item. */
 function mm_media_delete(int $mediaId): void
 {
