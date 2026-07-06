@@ -72,6 +72,7 @@ function login_by_pin(string $pin, ?string $module = null): ?array
         $_SESSION['_pin_tries']      = 0;
         $_SESSION['_pin_lock_until'] = 0;
         session_regenerate_id(true);
+        remember_issue((int)$row['id']);
         unset($row['pin_hash']);
         $row['modules'] = $modules;
         return $row;
@@ -84,6 +85,106 @@ function login_by_pin(string $pin, ?string $module = null): ?array
         $_SESSION['_pin_tries'] = 0;
     }
     return null;
+}
+
+// ---------- "Remember this device" ------------------------------------------
+// Shared-hosting PHP sessions die after ~24 idle minutes and phone browsers
+// drop session cookies when the app closes — which read as "always asks for
+// login". A 30-day selector/validator cookie re-establishes the session
+// transparently. Validator is stored hashed and rotated on every use.
+
+const REMEMBER_COOKIE = 'LG_REMEMBER';
+const REMEMBER_DAYS   = 30;
+
+function remember_issue(int $userId): void
+{
+    try {
+        $selector  = bin2hex(random_bytes(12));
+        $validator = bin2hex(random_bytes(32));
+        db()->prepare("
+            INSERT INTO auth_tokens (user_id, selector, validator_hash, expires_at, user_agent)
+            VALUES (:u, :s, :h, DATE_ADD(NOW(), INTERVAL :d DAY), :ua)
+        ")->execute([
+            ':u' => $userId, ':s' => $selector,
+            ':h' => hash('sha256', $validator),
+            ':d' => REMEMBER_DAYS,
+            ':ua' => mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 190),
+        ]);
+        // Keep at most 8 devices per user (old phones age out).
+        db()->prepare("
+            DELETE FROM auth_tokens WHERE user_id = :u AND id NOT IN (
+                SELECT id FROM (SELECT id FROM auth_tokens WHERE user_id = :u2 ORDER BY id DESC LIMIT 8) keep
+            )
+        ")->execute([':u' => $userId, ':u2' => $userId]);
+        setcookie(REMEMBER_COOKIE, $selector . ':' . $validator, [
+            'expires'  => time() + 86400 * REMEMBER_DAYS,
+            'path'     => '/',
+            'secure'   => !empty($_SERVER['HTTPS']),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } catch (Throwable $e) {
+        // Table not migrated yet / cookie failure — login still works, it
+        // just won't persist. Never block the login on this.
+    }
+}
+
+function remember_clear(): void
+{
+    $raw = (string)($_COOKIE[REMEMBER_COOKIE] ?? '');
+    if ($raw !== '' && str_contains($raw, ':')) {
+        [$selector] = explode(':', $raw, 2);
+        try {
+            db()->prepare("DELETE FROM auth_tokens WHERE selector = :s")->execute([':s' => $selector]);
+        } catch (Throwable $e) { /* best effort */ }
+    }
+    setcookie(REMEMBER_COOKIE, '', [
+        'expires' => time() - 42000, 'path' => '/',
+        'secure' => !empty($_SERVER['HTTPS']), 'httponly' => true, 'samesite' => 'Lax',
+    ]);
+}
+
+/** Try to log in from the remember cookie. Returns the user id or null. */
+function remember_login(): ?int
+{
+    $raw = (string)($_COOKIE[REMEMBER_COOKIE] ?? '');
+    if ($raw === '' || !str_contains($raw, ':')) return null;
+    [$selector, $validator] = explode(':', $raw, 2);
+    if (!preg_match('/^[a-f0-9]{24}$/', $selector) || !preg_match('/^[a-f0-9]{64}$/', $validator)) return null;
+    try {
+        $st = db()->prepare("
+            SELECT t.id, t.user_id, t.validator_hash, u.active
+            FROM auth_tokens t JOIN users u ON u.id = t.user_id
+            WHERE t.selector = :s AND t.expires_at > NOW()
+        ");
+        $st->execute([':s' => $selector]);
+        $row = $st->fetch();
+        if (!$row || !(int)$row['active']) return null;
+        if (!hash_equals((string)$row['validator_hash'], hash('sha256', $validator))) {
+            // Cookie theft signature (right selector, wrong validator) —
+            // burn every token for this user.
+            db()->prepare("DELETE FROM auth_tokens WHERE user_id = :u")->execute([':u' => (int)$row['user_id']]);
+            return null;
+        }
+        // Rotate the validator on every use; expiry slides 30 days.
+        $newValidator = bin2hex(random_bytes(32));
+        db()->prepare("
+            UPDATE auth_tokens
+            SET validator_hash = :h, last_used_at = NOW(),
+                expires_at = DATE_ADD(NOW(), INTERVAL :d DAY)
+            WHERE id = :id
+        ")->execute([':h' => hash('sha256', $newValidator), ':d' => REMEMBER_DAYS, ':id' => (int)$row['id']]);
+        setcookie(REMEMBER_COOKIE, $selector . ':' . $newValidator, [
+            'expires'  => time() + 86400 * REMEMBER_DAYS,
+            'path'     => '/',
+            'secure'   => !empty($_SERVER['HTTPS']),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        return (int)$row['user_id'];
+    } catch (Throwable $e) {
+        return null;   // pre-migration DB etc. — behave as before
+    }
 }
 
 function user_modules_from_row(array $row): array
@@ -149,6 +250,7 @@ function users_table_exists(): bool
 function logout(): void
 {
     start_session_once();
+    remember_clear();
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
         $p = session_get_cookie_params();
@@ -162,7 +264,14 @@ function current_user(): ?array
 {
     start_session_once();
     if (empty($_SESSION['user_id'])) {
-        return null;
+        // Session expired or the phone browser dropped it — the remember
+        // cookie re-establishes it without bothering the teacher.
+        $uid = remember_login();
+        if ($uid === null) {
+            return null;
+        }
+        $_SESSION['user_id'] = $uid;
+        session_regenerate_id(true);
     }
     $uid = (int)$_SESSION['user_id'];
 
