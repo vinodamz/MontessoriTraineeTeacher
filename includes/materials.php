@@ -172,9 +172,9 @@ function mm_media_store(array $file, int $checkId, int $userId): ?int
 }
 
 /**
- * Latest media item per material — across ALL months, so the board can always
- * show "how this material last looked" even before this month's photo exists.
- * Returns [material_id => ['id' => …, 'kind' => …, 'uploaded_at' => …]].
+ * Latest media PER KIND per material — across ALL months, so every board row
+ * can show both the last photo AND the last video/voice memo ever taken.
+ * Returns [material_id => [kind => ['id' => …, 'uploaded_at' => …]]].
  */
 function mm_latest_media(array $materialIds): array
 {
@@ -186,17 +186,17 @@ function mm_latest_media(array $materialIds): array
         FROM mm_condition_media md
         JOIN mm_condition_checks c ON c.id = md.check_id
         JOIN (
-            SELECT c2.material_id, MAX(md2.id) AS max_id
+            SELECT c2.material_id, md2.kind, MAX(md2.id) AS max_id
             FROM mm_condition_media md2
             JOIN mm_condition_checks c2 ON c2.id = md2.check_id
             WHERE c2.material_id IN ($place)
-            GROUP BY c2.material_id
+            GROUP BY c2.material_id, md2.kind
         ) latest ON latest.max_id = md.id
     ");
     $st->execute($materialIds);
     $out = [];
     foreach ($st as $r) {
-        $out[(int)$r['material_id']] = ['id' => (int)$r['id'], 'kind' => $r['kind'], 'uploaded_at' => $r['uploaded_at']];
+        $out[(int)$r['material_id']][$r['kind']] = ['id' => (int)$r['id'], 'uploaded_at' => $r['uploaded_at']];
     }
     return $out;
 }

@@ -123,8 +123,12 @@ try {
     db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
                    VALUES (:c, 'photo', 'h.jpg', :s, 'image/jpeg', 9)")
         ->execute([':c' => $c1, ':s' => 'SMOKE-' . bin2hex(random_bytes(6)) . '.jpg']);
+    db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
+                   VALUES (:c, 'video', 'v.mp4', :s, 'video/mp4', 11)")
+        ->execute([':c' => $c1, ':s' => 'SMOKE-' . bin2hex(random_bytes(6)) . '.mp4']);
     $lm = mm_latest_media([$matId]);
-    if (!isset($lm[$matId]) || $lm[$matId]['kind'] !== 'photo') $failures[] = 'mm_latest_media missed the material';
+    if (!isset($lm[$matId]['photo'])) $failures[] = 'mm_latest_media missed the latest photo';
+    if (!isset($lm[$matId]['video'])) $failures[] = 'mm_latest_media missed the latest video (per-kind)';
 
     // A second flagged month with NO media → must appear as an evidence gap.
     $p2 = '2099-02';

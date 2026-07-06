@@ -360,19 +360,19 @@ require __DIR__ . '/../includes/header.php';
             ?>
             <div class="mm-item" id="m<?= $mid ?>" data-id="<?= $mid ?>" data-saved="<?= e((string)$m['condition_code']) ?>">
                 <div class="mm-top">
-                    <?php $lm = $latestMedia[$mid] ?? null; ?>
-                    <?php if ($lm): $lmUrl = '/materials/media.php?id=' . $lm['id']; ?>
+                    <?php foreach (['photo' => null, 'video' => '🎥', 'audio' => '🎙'] as $mk => $icon):
+                        $lm = $latestMedia[$mid][$mk] ?? null;
+                        if (!$lm) continue;
+                    ?>
                         <a class="mm-thumb" href="check.php?id=<?= $mid ?>&period=<?= e($period) ?>#history"
-                           title="Latest <?= $lm['kind'] ?> · <?= e(date('j M Y', strtotime($lm['uploaded_at']))) ?> — tap for history">
-                            <?php if ($lm['kind'] === 'video'): ?>
-                                <span class="mm-thumb-vid">🎥</span>
-                            <?php elseif ($lm['kind'] === 'audio'): ?>
-                                <span class="mm-thumb-vid">🎙</span>
+                           title="Latest <?= $mk ?> · <?= e(date('j M Y', strtotime($lm['uploaded_at']))) ?> — tap for full history">
+                            <?php if ($icon !== null): ?>
+                                <span class="mm-thumb-vid"><?= $icon ?></span>
                             <?php else: ?>
-                                <img src="<?= e($lmUrl) ?>&thumb=1" alt="" loading="lazy">
+                                <img src="/materials/media.php?id=<?= (int)$lm['id'] ?>&thumb=1" alt="" loading="lazy">
                             <?php endif; ?>
                         </a>
-                    <?php endif; ?>
+                    <?php endforeach; ?>
                     <strong class="mm-name"><?= e($m['name']) ?></strong>
                     <span class="pill small mm-media-pill" title="Photos/videos attached" <?= (int)$m['media_count'] > 0 ? '' : 'hidden' ?>>📎 <span class="mm-media-n"><?= (int)$m['media_count'] ?></span></span>
                     <span class="pill small mm-nophoto" style="background:#fbdcd8;color:#8b1c14;"
@@ -545,7 +545,8 @@ require __DIR__ . '/../includes/header.php';
                 flushWaiting(tr);   // photos shot before the condition upload now
                 el.cond.value = tr.dataset.saved;   // pin against browser form-restore
                 var toneBg = {ok:'#dff1d3;color:#2d6526', warn:'#fcebc6;color:#6c4612', bad:'#fbdcd8;color:#8b1c14'}[d.tone] || '#eee';
-                var needsPhoto = d.needs && d.media === 0;
+                var hasPendingMedia = !!tr.querySelector('.mm-pending');
+                var needsPhoto = d.needs && d.media === 0 && !hasPendingMedia;
                 el.status.innerHTML =
                     '<span class="pill small" style="background:' + toneBg + '">' + escapeHtml(d.label) + '</span><br>' +
                     '✓ ' + escapeHtml(d.by) + ' · ' + escapeHtml(d.at) +
@@ -766,6 +767,8 @@ require __DIR__ . '/../includes/header.php';
     // flow once the server confirms.
     function showPendingPreview(tr, item) {
         removePendingPreview(tr, item.obId);
+        var chip = tr.querySelector('.mm-nophoto');
+        if (chip) chip.hidden = true;   // there IS a photo — it just hasn't landed yet
         var f = item.file;
         var holder = document.createElement('span');
         holder.className = 'mm-pending';
