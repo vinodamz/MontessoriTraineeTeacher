@@ -127,6 +127,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="head-actions">
         <a class="btn btn-ghost" href="index.php?period=<?= e($period) ?>">Audit board</a>
         <a class="btn" href="share.php?period=<?= e($period) ?>">Share with Kreedo</a>
+        <a class="btn" href="gdrive_push.php?period=<?= e($period) ?>">Google Drive</a>
         <a class="btn" href="replacement.php?period=<?= e($period) ?>&format=csv">CSV</a>
         <a class="btn btn-primary" href="export.php?period=<?= e($period) ?>" title="Report + every photo and video, foldered by shelf">Export ZIP (with photos/videos)</a>
     </div>
