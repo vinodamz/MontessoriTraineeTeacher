@@ -568,6 +568,13 @@ require __DIR__ . '/../includes/header.php';
         var el = rowEls(item);
         if (d.c) el.cond.value = d.c;
         el.needs.checked = !!d.n;
+        // Belt-and-braces: a draft written by an OLDER build of this page
+        // could have journaled the condition BEFORE the "damage conditions
+        // default to replace" rule applied to it (a timing bug, since
+        // fixed below). Re-apply the rule now so a stale draft can never
+        // silently restore a damage condition with replace unchecked.
+        var optNow = el.cond.options[el.cond.selectedIndex];
+        if (optNow && optNow.dataset.suggests === '1') el.needs.checked = true;
         el.qty.value = d.q || '1';
         el.qty.style.display = el.needs.checked ? '' : 'none';
         if (el.detail && typeof d.t === 'string') {
@@ -582,8 +589,18 @@ require __DIR__ . '/../includes/header.php';
 
     // Journal every keystroke/toggle; notes also save 1.2s after typing stops
     // (blur alone lost notes when the app was closed mid-typing).
+    //
+    // mm-cond is deliberately EXCLUDED here: for a <select>, the browser
+    // fires 'input' BEFORE 'change', and the "damage conditions default to
+    // replace" rule below runs in the 'change' handler. Journaling on
+    // 'input' would capture the condition together with the OLD, pre-rule
+    // replace flag — and if the save that follows ever failed, that WRONG
+    // snapshot was what got restored and re-saved later, silently clearing
+    // a replacement flag the teacher never touched. mm-cond's own 'change'
+    // handler journals the corrected state instead (see below).
     var noteTimers = {};
     form.addEventListener('input', function (ev) {
+        if (ev.target.classList.contains('mm-cond')) return;
         var tr = ev.target.closest('.mm-item');
         if (!tr) return;
         writeDraft(tr);
@@ -630,6 +647,9 @@ require __DIR__ . '/../includes/header.php';
             el.qty.style.display = el.needs.checked ? '' : 'none';
         }
         if (t.classList.contains('mm-file') || t.classList.contains('mm-cam')) { uploadFiles(tr, t); return; }
+        // Journal the CORRECTED state (post auto-tick) so that if the save
+        // below fails, whatever survives in the draft is the right one.
+        writeDraft(tr);
         saveRow(tr);
     });
 

@@ -161,6 +161,19 @@ try {
     $aud = (int)db()->query("SELECT COUNT(*) FROM mm_condition_media WHERE check_id = $c1 AND kind = 'audio'")->fetchColumn();
     if ($aud !== 1) $failures[] = 'audio media row did not persist';
 
+    // ---- 5d. Inconsistent-flag detector -----------------------------------
+    // A damage condition saved with needs_replacement=0 is always suspicious
+    // (and is exactly what the fixed autosave race could leave behind) —
+    // the dashboard's repair tool must find it.
+    $p3 = '2099-03';
+    mm_save_check($matId, $p3, 'broken', false, 0, null, $adminId);   // simulate the corruption directly
+    $incIds = array_column(mm_inconsistent_flags($p3), 'id');
+    if (!in_array($matId, array_map('intval', $incIds), true)) $failures[] = 'mm_inconsistent_flags missed a damage condition with replace unticked';
+    // A consistent row (good condition, not flagged) must NOT show up.
+    mm_save_check($matId, $p3, 'good', false, 0, null, $adminId);
+    $incIds2 = array_column(mm_inconsistent_flags($p3), 'id');
+    if (in_array($matId, array_map('intval', $incIds2), true)) $failures[] = 'mm_inconsistent_flags false-positived on a Good condition';
+
     // ---- 6. Media FK cascade -------------------------------------------
     db()->prepare("INSERT INTO mm_condition_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
                    VALUES (:c, 'photo', 'x.jpg', :s, 'image/jpeg', 10)")
@@ -196,4 +209,5 @@ echo "  - needs-replacement + qty drive the Kreedo replacement list\n";
 echo "  - latest-media, evidence-gap and shelf-priority helpers behave\n";
 echo "  - notes: null keeps existing, posted value overwrites\n";
 echo "  - voice memos: audio kind + mimes accepted\n";
+echo "  - inconsistent-flag detector: catches damage-condition-without-replace\n";
 echo "  - condition codes + labels stable; media cascades with its material\n";
