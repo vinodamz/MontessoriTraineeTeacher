@@ -271,6 +271,11 @@ require __DIR__ . '/../includes/header.php';
 .mm-upmsg { margin-top: .25rem; }
 .mm-upbar { display: block; max-width: 20rem; height: 8px; border-radius: 5px; background: #eee; overflow: hidden; margin-top: .25rem; }
 .mm-upbar i { display: block; height: 100%; background: #2d6ba0; transition: width .2s; }
+.mm-pending { position: relative; width: 44px; height: 44px; border-radius: 8px; overflow: hidden;
+              border: 2px solid #e0a020; display: inline-flex; align-items: center; justify-content: center;
+              background: #fff8e6; font-size: 1.1rem; }
+.mm-pending img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .85; }
+.mm-pending i { position: absolute; right: 1px; bottom: 0; font-style: normal; font-size: .75rem; }
 @media (pointer: coarse), (max-width: 640px) {
     /* Fat-finger sizes: WCAG-ish 44px targets for the walk-the-shelf flow. */
     .mm-controls .mm-cond, .mm-qty { min-height: 44px; font-size: 1rem; }
@@ -537,6 +542,7 @@ require __DIR__ . '/../includes/header.php';
                 tr.dataset.saved = el.cond.value;
                 tr.dataset.lastSaved = state;
                 clearDraft(tr);
+                flushWaiting(tr);   // photos shot before the condition upload now
                 el.cond.value = tr.dataset.saved;   // pin against browser form-restore
                 var toneBg = {ok:'#dff1d3;color:#2d6526', warn:'#fcebc6;color:#6c4612', bad:'#fbdcd8;color:#8b1c14'}[d.tone] || '#eee';
                 var needsPhoto = d.needs && d.media === 0;
@@ -697,6 +703,92 @@ require __DIR__ . '/../includes/header.php';
     // mid-upload now warns first.
     var upQueue = [], upActive = null;
 
+    // ----- Outbox: every file is saved ON THE PHONE (IndexedDB) before we
+    // even try to upload, and deleted only after the server confirms. Photos
+    // taken with the in-app camera are NOT in the phone's camera roll, so
+    // this is their only copy until upload succeeds. On page load, anything
+    // still in the outbox is shown on its row as a visible 'not uploaded
+    // yet' preview and re-queued automatically.
+    var obDB = null;
+    function obOpen() {
+        return new Promise(function (res) {
+            if (obDB) return res(obDB);
+            if (!window.indexedDB) return res(null);
+            try {
+                var rq = indexedDB.open('mm_outbox', 1);
+                rq.onupgradeneeded = function () { rq.result.createObjectStore('files', { keyPath: 'id' }); };
+                rq.onsuccess = function () { obDB = rq.result; res(obDB); };
+                rq.onerror = function () { res(null); };
+            } catch (e) { res(null); }
+        });
+    }
+    function obPut(rec) {
+        return obOpen().then(function (db) {
+            return new Promise(function (res) {
+                if (!db) return res(false);
+                try {
+                    var tx = db.transaction('files', 'readwrite');
+                    tx.objectStore('files').put(rec);
+                    tx.oncomplete = function () { res(true); };
+                    tx.onerror = function () { res(false); };
+                } catch (e) { res(false); }
+            });
+        });
+    }
+    function obDel(id) {
+        return obOpen().then(function (db) {
+            return new Promise(function (res) {
+                if (!db) return res(false);
+                try {
+                    var tx = db.transaction('files', 'readwrite');
+                    tx.objectStore('files').delete(id);
+                    tx.oncomplete = function () { res(true); };
+                    tx.onerror = function () { res(false); };
+                } catch (e) { res(false); }
+            });
+        });
+    }
+    function obAll() {
+        return obOpen().then(function (db) {
+            return new Promise(function (res) {
+                if (!db) return res([]);
+                try {
+                    var rq = db.transaction('files', 'readonly').objectStore('files').getAll();
+                    rq.onsuccess = function () { res(rq.result || []); };
+                    rq.onerror = function () { res([]); };
+                } catch (e) { res([]); }
+            });
+        });
+    }
+
+    // Visible proof the photo exists even though it isn't uploaded yet:
+    // an amber-ringed preview thumb on the row, replaced by the normal
+    // flow once the server confirms.
+    function showPendingPreview(tr, item) {
+        removePendingPreview(tr, item.obId);
+        var f = item.file;
+        var holder = document.createElement('span');
+        holder.className = 'mm-pending';
+        holder.dataset.obId = item.obId;
+        holder.title = 'On this phone, not uploaded yet';
+        if ((f.type || '').indexOf('image') === 0) {
+            var img = document.createElement('img');
+            try { img.src = URL.createObjectURL(f); } catch (e) {}
+            holder.appendChild(img);
+        } else {
+            holder.textContent = (f.type || '').indexOf('video') === 0 ? '🎥' : '🎙';
+        }
+        var badge = document.createElement('i');
+        badge.textContent = '⏳';
+        holder.appendChild(badge);
+        tr.querySelector('.mm-top').appendChild(holder);
+    }
+    function removePendingPreview(tr, obId) {
+        tr.querySelectorAll('.mm-pending').forEach(function (el) {
+            if (!obId || el.dataset.obId === String(obId)) el.remove();
+        });
+    }
+
     function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
     function kindLabel(f) {
         var t = (f.type || '');
@@ -720,7 +812,15 @@ require __DIR__ . '/../includes/header.php';
                     + ' — over the ' + fmtMB(UPLOAD_LIMIT) + ' limit. Record a shorter clip.</span>';
                 return;
             }
-            upQueue.push({ tr: tr, file: f, tries: 0 });
+            var item = {
+                tr: tr, file: f, tries: 0,
+                obId: 'ob_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
+            };
+            // Phone-side copy FIRST — the upload is allowed to fail now.
+            obPut({ id: item.obId, material_id: tr.dataset.id, period: PERIOD,
+                    blob: f, name: f.name || '', type: f.type || '', ts: Date.now() });
+            showPendingPreview(tr, item);
+            upQueue.push(item);
             accepted++;
         });
         if (accepted > 0) {
@@ -730,16 +830,35 @@ require __DIR__ . '/../includes/header.php';
         refreshUploadBar();
     }
 
+    // Files shot before a condition exists wait here (per material) and are
+    // flushed automatically the moment that row's condition save succeeds —
+    // taking the photo FIRST is a perfectly fine order of work.
+    var waitingForCondition = {};
+
+    function parkForCondition(item) {
+        var id = item.tr.dataset.id;
+        (waitingForCondition[id] = waitingForCondition[id] || []).push(item);
+        rowEls(item.tr).upmsg.innerHTML =
+            '📷 kept safe on this phone — <strong>pick a condition</strong> and it uploads itself';
+    }
+    function flushWaiting(tr) {
+        var id = tr.dataset.id;
+        var list = waitingForCondition[id];
+        if (!list || !list.length) return;
+        delete waitingForCondition[id];
+        list.forEach(function (item) { upQueue.push(item); });
+        pumpUploads(); refreshUploadBar();
+    }
+
     function pumpUploads() {
         if (upActive || !upQueue.length) return;
         var item = upActive = upQueue.shift();
         refreshUploadBar();
         // The check row must exist before media can attach.
         saveRow(item.tr).then(function (ok) {
-            var el = rowEls(item.tr);
             if (!ok) {
                 upActive = null;
-                el.upmsg.innerHTML = '<span style="color:#b3261e">pick a condition first — then retap the photo</span>';
+                parkForCondition(item);
                 pumpUploads(); refreshUploadBar();
                 return;
             }
@@ -771,6 +890,7 @@ require __DIR__ . '/../includes/header.php';
             upActive = null;
             var d = null; try { d = JSON.parse(xhr.responseText); } catch (e) {}
             if (xhr.status === 200 && d && d.ok) {
+                if (item.obId) { obDel(item.obId); removePendingPreview(tr, item.obId); }
                 el.upmsg.textContent = '✓ ' + label + ' attached';
                 var pill = tr.querySelector('.mm-media-pill');
                 var n = tr.querySelector('.mm-media-n');
@@ -781,6 +901,12 @@ require __DIR__ . '/../includes/header.php';
                 var hint = tr.querySelector('.mm-status strong');
                 if (hint) hint.remove();
                 pumpUploads(); refreshUploadBar();
+            } else if (xhr.status === 413 || xhr.status === 400) {
+                // The server will never accept this file — keep the preview
+                // (the teacher can still see what was rejected) but stop
+                // retrying it on every page load.
+                if (item.obId) obDel(item.obId);
+                uploadFailed(item, (d && d.error) ? d.error : ('rejected: ' + xhr.status), true);
             } else {
                 uploadFailed(item, (d && d.error) ? d.error : ('server error ' + xhr.status));
             }
@@ -803,31 +929,64 @@ require __DIR__ . '/../includes/header.php';
         uploadFailed(item, why);
     }
 
-    function uploadFailed(item, err) {
+    function uploadFailed(item, err, permanent) {
         upActive = null;
         var el = rowEls(item.tr);
         item.tries = 0;
         el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(kindLabel(item.file)) + ' NOT uploaded (' + escapeHtml(err) + ')</span> ';
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn small';
-        btn.textContent = 'retry upload';
-        btn.addEventListener('click', function () {
-            upQueue.unshift(item);
-            el.upmsg.textContent = '⬆ retrying…';
-            pumpUploads(); refreshUploadBar();
-        });
-        el.upmsg.appendChild(btn);
+        if (!permanent) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn small';
+            btn.textContent = 'retry upload';
+            btn.addEventListener('click', function () {
+                upQueue.unshift(item);
+                el.upmsg.textContent = '⬆ retrying…';
+                pumpUploads(); refreshUploadBar();
+            });
+            el.upmsg.appendChild(btn);
+            // Kept safe on the phone — next page open re-queues it too.
+            var note = document.createElement('span');
+            note.className = 'muted small';
+            note.textContent = ' (photo is saved on this phone — it retries next time too)';
+            el.upmsg.appendChild(note);
+        }
         pumpUploads(); refreshUploadBar();
     }
 
-    // Leaving mid-upload loses the file — make the browser ask first.
+    // Leaving mid-upload pauses the transfer — the file itself is safe in
+    // the outbox, but finishing now is still better than later.
     window.addEventListener('beforeunload', function (e) {
         if (upActive || upQueue.length) {
             e.preventDefault();
-            e.returnValue = 'Photos are still uploading — leaving now will lose them.';
+            e.returnValue = 'Photos are still uploading — they are saved on this phone, but stay a moment to finish.';
             return e.returnValue;
         }
+    });
+
+    // On load: anything still in the outbox for THIS month gets its preview
+    // back and re-queues — a photo that never uploaded is visible on its row
+    // and sends itself the moment the connection allows.
+    obAll().then(function (list) {
+        var restored = 0;
+        list.forEach(function (rec) {
+            if (rec.period !== PERIOD) return;   // other months restore on their own board
+            var tr = document.getElementById('m' + rec.material_id);
+            if (!tr) { obDel(rec.id); return; }  // material gone — drop the orphan
+            var f = rec.blob;
+            if (f && !f.name) { try { f = new File([rec.blob], rec.name || 'photo.jpg', { type: rec.type || 'image/jpeg' }); } catch (e) {} }
+            var item = { tr: tr, file: f, tries: 0, obId: rec.id };
+            showPendingPreview(tr, item);
+            var hasCond = tr.querySelector('.mm-cond') && tr.querySelector('.mm-cond').value !== '';
+            if (hasCond) {
+                rowEls(tr).upmsg.textContent = '⏳ found a photo that never uploaded — sending now…';
+                upQueue.push(item);
+            } else {
+                parkForCondition(item);
+            }
+            restored++;
+        });
+        if (restored > 0) { pumpUploads(); refreshUploadBar(); }
     });
 
     function uploadFiles(tr, input) {
