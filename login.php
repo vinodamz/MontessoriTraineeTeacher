@@ -79,6 +79,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['user_modules'] = user_modules_from_row($u);
     $_SESSION['_pin_tries']      = 0;
     $_SESSION['_pin_lock_until'] = 0;
+    // 30-day "remember this device" cookie so shared-hosting session GC and
+    // phone-browser restarts stop demanding a fresh login every time.
+    remember_issue((int)$u['id']);
 
     echo json_encode(['ok' => true, 'redirect' => '/index.php']);
     exit;
