@@ -45,6 +45,15 @@ function mm_existing_marks(string $period): array
 
 // ---- POST: bulk save --------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // A body over post_max_size reaches PHP with $_POST and $_FILES EMPTY —
+    // csrf_check() would then reject it as 'Bad CSRF token', which reads as
+    // a random failure. Name the real problem instead.
+    if (empty($_POST) && empty($_FILES) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(413);
+        echo json_encode(['ok' => false, 'error' => 'file too large for the server (limit ' . ini_get('post_max_size') . ') — record a shorter video']);
+        exit;
+    }
     csrf_check();
     $op = $_POST['op'] ?? '';
 
@@ -260,6 +269,8 @@ require __DIR__ . '/../includes/header.php';
 .mm-noteswrap textarea { width: 100%; }
 .mm-upmsg:empty { display: none; }
 .mm-upmsg { margin-top: .25rem; }
+.mm-upbar { display: block; max-width: 20rem; height: 8px; border-radius: 5px; background: #eee; overflow: hidden; margin-top: .25rem; }
+.mm-upbar i { display: block; height: 100%; background: #2d6ba0; transition: width .2s; }
 @media (pointer: coarse), (max-width: 640px) {
     /* Fat-finger sizes: WCAG-ish 44px targets for the walk-the-shelf flow. */
     .mm-controls .mm-cond, .mm-qty { min-height: 44px; font-size: 1rem; }
@@ -420,6 +431,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="no-print" style="position:sticky; bottom:0; background:var(--card-bg, #fff); border-top:2px solid #ddd; padding:.6rem .8rem; display:flex; gap:.7rem; align-items:center; z-index:50;">
         <button class="btn btn-primary" type="submit">Save all changes</button>
         <span id="pendingCount" class="muted small">All changes saved automatically.</span>
+        <span id="uploadCount" class="small" style="color:#2d6ba0;"></span>
     </div>
 </form>
 
@@ -444,6 +456,7 @@ require __DIR__ . '/../includes/header.php';
     if (!form || !window.fetch) return;   // no-JS/no-fetch → bulk form still works
     var CSRF   = form.querySelector('input[name="_csrf"]').value;
     var PERIOD = form.querySelector('input[name="period"]').value;
+    var UPLOAD_LIMIT = <?= mm_effective_upload_limit() ?>;   // bytes — app cap ∩ php.ini
 
     function rowEls(item) {
         return {
@@ -676,50 +689,151 @@ require __DIR__ . '/../includes/header.php';
         }
     });
 
-    function uploadFiles(tr, input) {
-        var el  = rowEls(tr);
-        var msg = el.upmsg;
-        var files = Array.prototype.slice.call(input.files || []);
-        if (!files.length) return;
-        // The check row must exist first — save, then upload sequentially.
-        saveRow(tr).then(function (ok) {
-            if (!ok) { msg.textContent = 'pick a condition first'; return; }
-            var done = 0;
-            function next() {
-                if (!files.length) {
-                    msg.textContent = '✓ ' + done + ' file' + (done === 1 ? '' : 's') + ' attached';
-                    var pill = tr.querySelector('.mm-media-pill');
-                    var n = tr.querySelector('.mm-media-n');
-                    n.textContent = String((parseInt(n.textContent, 10) || 0) + done);
-                    pill.hidden = false;
-                    var chip = tr.querySelector('.mm-nophoto');
-                    if (chip) chip.hidden = true;
-                    var hint = tr.querySelector('.mm-status strong');
-                    if (hint) hint.remove();
-                    input.value = '';
-                    return;
-                }
-                var f  = files.shift();
-                var fd = new FormData();
-                fd.append('_csrf', CSRF);
-                fd.append('op', 'ajax_media');
-                fd.append('period', PERIOD);
-                fd.append('material_id', tr.dataset.id);
-                fd.append('media', f);
-                msg.textContent = 'Uploading ' + f.name + '…';
-                fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-                    .then(function (r) { return r.json(); })
-                    .then(function (d) {
-                        if (!d.ok) throw new Error(d.error || 'upload failed');
-                        done++;
-                        next();
-                    })
-                    .catch(function (err) {
-                        msg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(err.message) + '</span>';
-                    });
+    // ----- Upload queue: progress %, auto-retry, never-silent ---------------
+    // The old fetch() uploader had NO progress events and no leave-guard: a
+    // teacher shooting 5 photos saw nothing moving, walked to the next shelf,
+    // the phone killed the page, and the photos were gone. XHR gives real
+    // upload progress; the queue survives per-file failures; leaving the page
+    // mid-upload now warns first.
+    var upQueue = [], upActive = null;
+
+    function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+    function kindLabel(f) {
+        var t = (f.type || '');
+        return t.indexOf('video') === 0 ? 'video' : (t.indexOf('audio') === 0 ? 'voice memo' : 'photo');
+    }
+
+    function refreshUploadBar() {
+        var n = (upActive ? 1 : 0) + upQueue.length;
+        var out = document.getElementById('uploadCount');
+        if (out) out.textContent = n > 0
+            ? '⬆ uploading ' + n + ' file' + (n === 1 ? '' : 's') + ' — keep this page open'
+            : '';
+    }
+
+    function queueUploads(tr, files) {
+        var el = rowEls(tr);
+        var accepted = 0;
+        files.forEach(function (f) {
+            if (f.size > UPLOAD_LIMIT) {
+                el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(f.name || 'file') + ' is ' + fmtMB(f.size)
+                    + ' — over the ' + fmtMB(UPLOAD_LIMIT) + ' limit. Record a shorter clip.</span>';
+                return;
             }
-            next();
+            upQueue.push({ tr: tr, file: f, tries: 0 });
+            accepted++;
         });
+        if (accepted > 0) {
+            el.upmsg.textContent = '⬆ queued ' + accepted + ' file' + (accepted === 1 ? '' : 's') + '…';
+            pumpUploads();
+        }
+        refreshUploadBar();
+    }
+
+    function pumpUploads() {
+        if (upActive || !upQueue.length) return;
+        var item = upActive = upQueue.shift();
+        refreshUploadBar();
+        // The check row must exist before media can attach.
+        saveRow(item.tr).then(function (ok) {
+            var el = rowEls(item.tr);
+            if (!ok) {
+                upActive = null;
+                el.upmsg.innerHTML = '<span style="color:#b3261e">pick a condition first — then retap the photo</span>';
+                pumpUploads(); refreshUploadBar();
+                return;
+            }
+            sendUpload(item);
+        });
+    }
+
+    function sendUpload(item) {
+        var tr = item.tr, el = rowEls(tr);
+        var label = kindLabel(item.file);
+        var fd = new FormData();
+        fd.append('_csrf', CSRF);
+        fd.append('op', 'ajax_media');
+        fd.append('period', PERIOD);
+        fd.append('material_id', tr.dataset.id);
+        fd.append('media', item.file, item.file.name || (label.replace(' ', '-') + '.bin'));
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/materials/index.php');
+        xhr.timeout = 300000;   // 5 min — slow school wifi + 40 MB video
+        xhr.upload.onprogress = function (e) {
+            if (!e.lengthComputable) return;
+            var pct = Math.round(e.loaded * 100 / e.total);
+            el.upmsg.innerHTML = '⬆ Uploading ' + label + ' (' + fmtMB(e.total) + ') — <strong>' + pct + '%</strong>'
+                + (upQueue.length ? ' · ' + upQueue.length + ' more waiting' : '')
+                + '<span class="mm-upbar"><i style="width:' + pct + '%"></i></span>';
+        };
+        xhr.onload = function () {
+            upActive = null;
+            var d = null; try { d = JSON.parse(xhr.responseText); } catch (e) {}
+            if (xhr.status === 200 && d && d.ok) {
+                el.upmsg.textContent = '✓ ' + label + ' attached';
+                var pill = tr.querySelector('.mm-media-pill');
+                var n = tr.querySelector('.mm-media-n');
+                n.textContent = String((parseInt(n.textContent, 10) || 0) + 1);
+                pill.hidden = false;
+                var chip = tr.querySelector('.mm-nophoto');
+                if (chip) chip.hidden = true;
+                var hint = tr.querySelector('.mm-status strong');
+                if (hint) hint.remove();
+                pumpUploads(); refreshUploadBar();
+            } else {
+                uploadFailed(item, (d && d.error) ? d.error : ('server error ' + xhr.status));
+            }
+        };
+        xhr.onerror   = function () { uploadRetryOrFail(item, 'connection lost'); };
+        xhr.ontimeout = function () { uploadRetryOrFail(item, 'timed out'); };
+        xhr.send(fd);
+    }
+
+    function uploadRetryOrFail(item, why) {
+        upActive = null;
+        if (item.tries < 2) {   // two automatic retries before bothering anyone
+            item.tries++;
+            rowEls(item.tr).upmsg.textContent = '⚠ ' + why + ' — retrying (' + item.tries + '/2)…';
+            upQueue.unshift(item);
+            setTimeout(pumpUploads, 2000 * item.tries);
+            refreshUploadBar();
+            return;
+        }
+        uploadFailed(item, why);
+    }
+
+    function uploadFailed(item, err) {
+        upActive = null;
+        var el = rowEls(item.tr);
+        item.tries = 0;
+        el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(kindLabel(item.file)) + ' NOT uploaded (' + escapeHtml(err) + ')</span> ';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn small';
+        btn.textContent = 'retry upload';
+        btn.addEventListener('click', function () {
+            upQueue.unshift(item);
+            el.upmsg.textContent = '⬆ retrying…';
+            pumpUploads(); refreshUploadBar();
+        });
+        el.upmsg.appendChild(btn);
+        pumpUploads(); refreshUploadBar();
+    }
+
+    // Leaving mid-upload loses the file — make the browser ask first.
+    window.addEventListener('beforeunload', function (e) {
+        if (upActive || upQueue.length) {
+            e.preventDefault();
+            e.returnValue = 'Photos are still uploading — leaving now will lose them.';
+            return e.returnValue;
+        }
+    });
+
+    function uploadFiles(tr, input) {
+        var files = Array.prototype.slice.call(input.files || []);
+        input.value = '';   // queue holds the File objects; free the input
+        if (files.length) queueUploads(tr, files);
     }
 
     // Notes autosave on blur (change event covers it via delegation above —
@@ -766,32 +880,8 @@ require __DIR__ . '/../includes/header.php';
                 var f;
                 try { f = new File([blob], 'voice-note.' + ext, { type: type }); }
                 catch (e) { f = blob; f.name = 'voice-note.' + ext; }
-                // The check must exist first; saveRow handles that.
-                saveRow(tr).then(function (ok) {
-                    if (!ok) { el.upmsg.textContent = 'pick a condition first'; return; }
-                    var fd = new FormData();
-                    fd.append('_csrf', CSRF);
-                    fd.append('op', 'ajax_media');
-                    fd.append('period', PERIOD);
-                    fd.append('material_id', tr.dataset.id);
-                    fd.append('media', f, 'voice-note.' + ext);
-                    el.upmsg.textContent = 'Uploading voice memo…';
-                    fetch('/materials/index.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-                        .then(function (r) { return r.json(); })
-                        .then(function (d) {
-                            if (!d.ok) throw new Error(d.error || 'upload failed');
-                            el.upmsg.textContent = '✓ voice memo attached';
-                            var pill = tr.querySelector('.mm-media-pill');
-                            var n = tr.querySelector('.mm-media-n');
-                            n.textContent = String((parseInt(n.textContent, 10) || 0) + 1);
-                            pill.hidden = false;
-                            var chip = tr.querySelector('.mm-nophoto');
-                            if (chip) chip.hidden = true;
-                        })
-                        .catch(function (err) {
-                            el.upmsg.innerHTML = '<span style="color:#b3261e">⚠ ' + escapeHtml(err.message) + '</span>';
-                        });
-                });
+                // Same queue as photos/videos: progress, retries, leave-guard.
+                queueUploads(tr, [f]);
             };
             rec.start();
             btn.textContent = '■ stop';
