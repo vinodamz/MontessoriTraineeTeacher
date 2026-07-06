@@ -74,6 +74,35 @@ function mm_period_options(int $back = 12): array
     return $keys;
 }
 
+/** Parse a php.ini shorthand size ('40M', '2G') to bytes. */
+function mm_ini_bytes(string $v): int
+{
+    $v = trim($v);
+    if ($v === '' || $v === '-1') return PHP_INT_MAX;   // unlimited
+    $n = (float)$v;
+    switch (strtoupper(substr($v, -1))) {
+        case 'G': $n *= 1024;   // fall through
+        case 'M': $n *= 1024;
+        case 'K': $n *= 1024;
+    }
+    return (int)$n;
+}
+
+/**
+ * The size a media upload can ACTUALLY be: the app's cap bounded by the
+ * server's php.ini limits. The client pre-checks against this so a teacher
+ * gets "video too big" instantly instead of a dead upload — files silently
+ * over post_max_size were a real photos-lost cause.
+ */
+function mm_effective_upload_limit(): int
+{
+    return min(
+        MM_MEDIA_MAX_BYTES,
+        mm_ini_bytes((string)ini_get('upload_max_filesize')),
+        mm_ini_bytes((string)ini_get('post_max_size'))
+    );
+}
+
 /** Filesystem dir for condition media (gitignored, served via media.php). */
 function mm_media_dir(): string
 {
