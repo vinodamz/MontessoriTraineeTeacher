@@ -118,7 +118,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                 <span class="who-avatar"><?= e(user_initials($user['name'])) ?></span>
                 <span>
                     <span class="who-name"><?= e(first_name($user['name'])) ?></span><br>
-                    <span class="who-role"><?= e($user['role']) ?></span>
+                    <span class="who-role"><?= e(role_label($user['role'])) ?></span>
                 </span>
             </span>
             <a href="/logout.php" class="who-out">Log out</a>

@@ -172,7 +172,7 @@ $users = db()->query("
                         <span class="profile-avatar"><?= e(user_initials($u['name'])) ?></span>
                         <span class="profile-meta">
                             <span class="profile-name"><?= e($u['name']) ?></span>
-                            <span class="profile-role"><?= e($u['role']) ?></span>
+                            <span class="profile-role"><?= e(role_label($u['role'])) ?></span>
                         </span>
                     </button>
                 </li>

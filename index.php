@@ -71,7 +71,7 @@ $hasN8n       = user_has_module($user, 'n8n');
 // Quick-checkin: show for anyone in the staff roster (teachers, admins,
 // or anyone with the staff module). Pulls today's attendance row so the
 // card knows whether they've checked in / out.
-$inStaffRoster = ($user['role'] === 'admin') || ($user['role'] === 'teacher') || user_has_module($user, 'staff');
+$inStaffRoster = in_array($user['role'], ['admin', 'teacher', 'non_teaching'], true) || user_has_module($user, 'staff');
 $todayAttendance = null;
 if ($inStaffRoster) {
     try {

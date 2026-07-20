@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($op === 'create') {
         $name    = trim($_POST['name'] ?? '');
         $pin     = preg_replace('/\D/', '', $_POST['pin'] ?? '');
-        $role    = ($_POST['role'] ?? 'teacher') === 'admin' ? 'admin' : 'teacher';
+        $role    = in_array($_POST['role'] ?? '', assignable_roles(), true) ? $_POST['role'] : 'teacher';
         $modules = modules_from_post($_POST);
 
         if ($name === '' || strlen($pin) < 4 || strlen($pin) > 6) {
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($op === 'update') {
         $id      = (int)($_POST['id'] ?? 0);
         $name    = trim($_POST['name'] ?? '');
-        $role    = ($_POST['role'] ?? 'teacher') === 'admin' ? 'admin' : 'teacher';
+        $role    = in_array($_POST['role'] ?? '', assignable_roles(), true) ? $_POST['role'] : 'teacher';
         $active  = !empty($_POST['active']) ? 1 : 0;
         $modules = modules_from_post($_POST);
         $newPin  = preg_replace('/\D/', '', $_POST['pin'] ?? '');
@@ -385,8 +385,9 @@ require __DIR__ . '/includes/header.php';
             <div class="field">
                 <label>Role</label>
                 <select name="role">
-                    <option value="teacher">Teacher</option>
-                    <option value="admin">Admin</option>
+                    <?php foreach (assignable_roles() as $r): ?>
+                        <option value="<?= e($r) ?>"><?= e(role_label($r)) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="field">
@@ -451,7 +452,7 @@ require __DIR__ . '/includes/header.php';
             <div>
                 <div class="team-name"><?= e($u['name']) ?></div>
                 <div class="team-meta">
-                    <?= e($u['role']) ?>
+                    <?= e(role_label($u['role'])) ?>
                     · <?= $u['active'] ? 'active' : 'inactive' ?>
                     <?php if ($u['role'] !== 'admin'): ?>
                         · modules: <?= $mods ? e(implode(', ', $mods)) : '<em>none</em>' ?>
@@ -464,8 +465,9 @@ require __DIR__ . '/includes/header.php';
             <div class="team-edit">
                 <input form="<?= $fid ?>" name="name" value="<?= e($u['name']) ?>" maxlength="120" aria-label="Name">
                 <select form="<?= $fid ?>" name="role" aria-label="Role">
-                    <option value="teacher" <?= $u['role'] === 'teacher' ? 'selected' : '' ?>>Teacher</option>
-                    <option value="admin"   <?= $u['role'] === 'admin'   ? 'selected' : '' ?>>Admin</option>
+                    <?php foreach (assignable_roles() as $r): ?>
+                        <option value="<?= e($r) ?>" <?= $u['role'] === $r ? 'selected' : '' ?>><?= e(role_label($r)) ?></option>
+                    <?php endforeach; ?>
                 </select>
                 <label class="checkbox" title="Assessment module">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="montessori" <?= $hasA ? 'checked' : '' ?>>

@@ -10,16 +10,17 @@
  */
 
 /**
- * Roster — every user who can appear in the staff module. Admins + anyone
- * with role=teacher OR the 'staff' module enabled. Inactive users are still
- * listed so historic records remain attributable.
+ * Roster — every user who can appear in the staff module. Admins, teaching
+ * and non-teaching staff (by role) plus anyone with the 'staff' module
+ * enabled. Inactive users are still listed so historic records remain
+ * attributable.
  */
 function staff_roster(bool $activeOnly = false): array
 {
     $sql = "
         SELECT id, name, role, active, modules
         FROM users
-        WHERE role IN ('admin','teacher')
+        WHERE role IN ('admin','teacher','non_teaching')
            OR FIND_IN_SET('staff', modules) > 0
     ";
     if ($activeOnly) $sql .= " AND active = 1";
@@ -34,7 +35,7 @@ function staff_member(int $userId)
         SELECT id, name, role, active, modules
         FROM users
         WHERE id = :id
-          AND (role IN ('admin','teacher') OR FIND_IN_SET('staff', modules) > 0)
+          AND (role IN ('admin','teacher','non_teaching') OR FIND_IN_SET('staff', modules) > 0)
     ");
     $stmt->execute([':id' => $userId]);
     return $stmt->fetch();
