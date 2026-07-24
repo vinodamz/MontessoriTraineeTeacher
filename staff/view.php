@@ -12,10 +12,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/staff.php';
+require_once __DIR__ . '/../includes/staff_form.php';
 
 $user = require_module('staff');
 
-$id = (int)($_GET['id'] ?? $user['id']);
+$id = (int)($_POST['id'] ?? $_GET['id'] ?? $user['id']);
 if (!staff_can_view($user, $id)) {
     http_response_code(403); echo 'Forbidden.'; exit;
 }
@@ -25,6 +26,24 @@ if (!$staff) { http_response_code(404); echo 'Staff member not found.'; exit; }
 $isAdmin = staff_is_admin($user);
 $isSelf  = (int)$user['id'] === $id;
 $canEdit = $isAdmin || $isSelf;   // who may upload documents to this record
+
+// Admin-only: generate / revoke the public application-form link.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAdmin) {
+    csrf_check();
+    $op = $_POST['op'] ?? '';
+    if ($op === 'staff_generate_form_token') {
+        staff_revoke_active_form_tokens($id);
+        staff_generate_form_token($id, (int)$user['id']);
+        flash_set('ok', 'Application-form link generated. Share it with ' . $staff['name'] . '.');
+        redirect('/staff/view.php?id=' . $id . '#applink');
+    } elseif ($op === 'staff_revoke_form_token') {
+        $tid = (int)($_POST['token_id'] ?? 0);
+        if ($tid > 0) staff_revoke_form_token($tid);
+        flash_set('ok', 'Link revoked.');
+        redirect('/staff/view.php?id=' . $id . '#applink');
+    }
+}
+$activeFormToken = $isAdmin ? staff_active_form_token($id) : null;
 $photo   = staff_latest_photo($id);
 $profile = staff_profile($id);
 $year    = (int)date('Y');
@@ -176,6 +195,48 @@ $relRelation = $profile['relative_relation'] !== '' ? (staff_relations()[$profil
         </div>
     <?php endif; ?>
 </div>
+
+<?php if ($isAdmin): ?>
+<div class="card" id="applink">
+    <h3 style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+        <span>Application form link</span>
+        <?php if ($activeFormToken): ?>
+            <form method="post" style="margin:0;" onsubmit="return confirm('Revoke this link? The staff member will see \'Link not active\'.');">
+                <input type="hidden" name="_csrf"    value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="id"       value="<?= $id ?>">
+                <input type="hidden" name="op"       value="staff_revoke_form_token">
+                <input type="hidden" name="token_id" value="<?= (int)$activeFormToken['id'] ?>">
+                <button class="btn btn-ghost" type="submit">Revoke</button>
+            </form>
+        <?php else: ?>
+            <form method="post" style="margin:0;">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="id"    value="<?= $id ?>">
+                <input type="hidden" name="op"    value="staff_generate_form_token">
+                <button class="btn btn-primary" type="submit">Generate link</button>
+            </form>
+        <?php endif; ?>
+    </h3>
+    <?php if ($activeFormToken): $url = staff_form_url((string)$activeFormToken['token']); ?>
+        <p class="muted small" style="margin:0 0 .4rem;">Share this with <?= e($staff['name']) ?> — no school login needed. They can fill in their details and upload their photo, ID proofs, certificates and experience letter.</p>
+        <div style="display:flex; gap:.4rem; align-items:center; margin:.3rem 0; flex-wrap:wrap;">
+            <input id="applink-url" type="text" readonly value="<?= e($url) ?>"
+                   style="flex:1 1 260px; padding:.4rem; border:1px solid var(--line); border-radius:5px; font-family:monospace; font-size:.85rem;">
+            <button type="button" class="btn btn-ghost"
+                    onclick="navigator.clipboard.writeText(document.getElementById('applink-url').value).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500);});">Copy</button>
+            <a class="btn btn-ghost" target="_blank" rel="noopener" href="<?= e($url) ?>">Open</a>
+        </div>
+        <p class="muted small" style="margin:.3rem 0 0;">
+            Created <?= e(date('j M Y', strtotime((string)$activeFormToken['created_at']))) ?>
+            <?php if (!empty($activeFormToken['last_saved_at'])): ?> · Last saved <?= e(date('j M Y', strtotime((string)$activeFormToken['last_saved_at']))) ?><?php endif; ?>
+            <?php if (!empty($activeFormToken['last_accessed_at'])): ?> · Last opened <?= e(date('j M Y', strtotime((string)$activeFormToken['last_accessed_at']))) ?>
+            <?php else: ?> · Not opened yet<?php endif; ?>
+        </p>
+    <?php else: ?>
+        <p class="muted small">No active link. Generating one creates a unique URL <?= e($staff['name']) ?> can use to fill in their application without logging in. Revoke it anytime.</p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 1 1 280px;">
