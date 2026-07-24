@@ -51,6 +51,26 @@ function app_short_name(): string
 }
 
 /**
+ * Human label for a users.role value. Falls back to a title-cased version of
+ * the raw code so an unknown role never renders as an ugly snake_case string.
+ */
+function role_label(string $role): string
+{
+    static $labels = [
+        'admin'        => 'Admin',
+        'teacher'      => 'Teacher',
+        'non_teaching' => 'Non-teaching staff',
+    ];
+    return $labels[$role] ?? ucwords(str_replace('_', ' ', $role));
+}
+
+/** The role values an admin may assign, in display order. */
+function assignable_roles(): array
+{
+    return ['teacher', 'non_teaching', 'admin'];
+}
+
+/**
  * Central registry of external apps the school plugs into MTT. One entry
  * per integration — the same shape drives the home-dashboard tile, the
  * nav link, and the admin module checkbox.
