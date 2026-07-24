@@ -164,11 +164,56 @@ function staff_doc_kinds(): array
     return [
         'id_proof'      => 'ID proof',
         'contract'      => 'Contract / offer',
-        'certification' => 'Certification',
+        'certification' => 'Certificate',
+        'experience'    => 'Previous experience certificate',
         'medical'       => 'Medical',
         'reference'     => 'Reference',
+        'photo'         => 'Photo',
         'other'         => 'Other',
     ];
+}
+
+/**
+ * The most recent 'photo' document for a staff member, or null. Used to render
+ * their profile avatar. Returns the row (id / stored_name / mime_type) so the
+ * caller can link it through /staff/download.php (auth-gated).
+ */
+function staff_latest_photo(int $userId): ?array
+{
+    try {
+        $s = db()->prepare("
+            SELECT id, stored_name, mime_type
+            FROM staff_documents
+            WHERE user_id = :u AND kind = 'photo'
+            ORDER BY id DESC LIMIT 1
+        ");
+        $s->execute([':u' => $userId]);
+        $r = $s->fetch();
+        return $r ?: null;
+    } catch (Throwable $e) {
+        // Pre-migration DB where 'photo' isn't a valid enum value yet.
+        return null;
+    }
+}
+
+/**
+ * Map of user_id → newest photo document id, for the whole roster in one query.
+ * `MAX(id)` is the newest because id is a monotonic AUTO_INCREMENT.
+ */
+function staff_photo_id_map(): array
+{
+    $map = [];
+    try {
+        foreach (db()->query("
+            SELECT user_id, MAX(id) AS id
+            FROM staff_documents WHERE kind = 'photo' GROUP BY user_id
+        ") as $r) {
+            $map[(int)$r['user_id']] = (int)$r['id'];
+        }
+    } catch (Throwable $e) {
+        // Pre-migration DB — no photos yet.
+    }
+    return $map;
 }
 
 const STAFF_DOC_MAX_BYTES  = 8 * 1024 * 1024; // 8 MB

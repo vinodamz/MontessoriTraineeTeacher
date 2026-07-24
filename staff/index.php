@@ -19,9 +19,10 @@ if (!staff_is_admin($user)) {
     redirect('/staff/view.php?id=' . (int)$user['id']);
 }
 
-$roster = staff_roster();
-$year   = (int)date('Y');
-$month  = (int)date('n');
+$roster   = staff_roster();
+$photoMap = staff_photo_id_map();   // user_id → newest photo document id
+$year     = (int)date('Y');
+$month    = (int)date('n');
 
 // Aggregate widgets in one shot, keyed by user_id.
 $pendingByUser = [];
@@ -87,8 +88,18 @@ require __DIR__ . '/../includes/header.php';
             <?php foreach ($roster as $s): ?>
                 <?php $uid = (int)$s['id']; ?>
                 <tr>
-                    <td><a href="/staff/view.php?id=<?= $uid ?>"><?= e($s['name']) ?></a></td>
-                    <td><?= e(ucfirst((string)$s['role'])) ?></td>
+                    <td>
+                        <span style="display:inline-flex; align-items:center; gap:.5rem;">
+                            <?php if (!empty($photoMap[$uid])): ?>
+                                <img src="/staff/download.php?id=<?= (int)$photoMap[$uid] ?>" alt=""
+                                     style="width:28px; height:28px; border-radius:50%; object-fit:cover; flex:0 0 auto;">
+                            <?php else: ?>
+                                <span class="team-dot" style="width:28px; height:28px; font-size:.7rem;"><?= e(user_initials($s['name'])) ?></span>
+                            <?php endif; ?>
+                            <a href="/staff/view.php?id=<?= $uid ?>"><?= e($s['name']) ?></a>
+                        </span>
+                    </td>
+                    <td><?= e(role_label((string)$s['role'])) ?></td>
                     <td>
                         <?php if ((int)$s['active'] === 1): ?>
                             <span class="pill pill-status-present">Active</span>

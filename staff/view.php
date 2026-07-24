@@ -24,6 +24,8 @@ if (!$staff) { http_response_code(404); echo 'Staff member not found.'; exit; }
 
 $isAdmin = staff_is_admin($user);
 $isSelf  = (int)$user['id'] === $id;
+$canEdit = $isAdmin || $isSelf;   // who may upload documents to this record
+$photo   = staff_latest_photo($id);
 $year    = (int)date('Y');
 $month   = (int)date('n');
 
@@ -80,13 +82,21 @@ require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-head">
-    <div>
-        <h1><?= e($staff['name']) ?></h1>
-        <p class="muted">
-            <?php if ($isAdmin): ?><a href="/staff/index.php">← Roster</a> · <?php endif; ?>
-            <?= e(ucfirst((string)$staff['role'])) ?>
-            · <?= (int)$staff['active'] === 1 ? 'Active' : 'Inactive' ?>
-        </p>
+    <div style="display:flex; align-items:center; gap:1rem;">
+        <?php if ($photo): ?>
+            <img src="/staff/download.php?id=<?= (int)$photo['id'] ?>" alt="Photo of <?= e($staff['name']) ?>"
+                 style="width:72px; height:72px; border-radius:50%; object-fit:cover; flex:0 0 auto;">
+        <?php else: ?>
+            <span class="who-avatar" style="width:72px; height:72px; font-size:1.6rem; flex:0 0 auto;"><?= e(user_initials($staff['name'])) ?></span>
+        <?php endif; ?>
+        <div>
+            <h1><?= e($staff['name']) ?></h1>
+            <p class="muted">
+                <?php if ($isAdmin): ?><a href="/staff/index.php">← Roster</a> · <?php endif; ?>
+                <?= e(role_label((string)$staff['role'])) ?>
+                · <?= (int)$staff['active'] === 1 ? 'Active' : 'Inactive' ?>
+            </p>
+        </div>
     </div>
     <div class="actionbar">
         <?php if ($isSelf): ?>
@@ -206,7 +216,12 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="card" id="documents">
     <h3>Documents</h3>
-    <?php if ($isAdmin): ?>
+    <?php if ($canEdit): ?>
+        <p class="muted small">
+            Upload certificates, ID proofs, previous-experience certificates and a
+            profile photo. PDF, DOC/DOCX, JPG or PNG · 8&nbsp;MB max.
+            <?php if ($isSelf && !$isAdmin): ?> You can remove anything you upload here yourself.<?php endif; ?>
+        </p>
         <form id="staff-upload-form" class="row" enctype="multipart/form-data">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="user_id" value="<?= $id ?>">
@@ -232,8 +247,14 @@ require __DIR__ . '/../includes/header.php';
     <?php else: ?>
         <ul class="team-list">
             <?php foreach ($docs as $d): ?>
+                <?php $canDeleteDoc = $isAdmin || ($isSelf && (int)$d['uploaded_by'] === (int)$user['id']); ?>
                 <li class="team-row">
-                    <div class="team-dot">📄</div>
+                    <?php if ($d['kind'] === 'photo'): ?>
+                        <img class="team-dot" src="/staff/download.php?id=<?= (int)$d['id'] ?>" alt=""
+                             style="object-fit:cover;">
+                    <?php else: ?>
+                        <div class="team-dot">📄</div>
+                    <?php endif; ?>
                     <div>
                         <div class="team-name">
                             <a href="/staff/download.php?id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener">
@@ -247,7 +268,7 @@ require __DIR__ . '/../includes/header.php';
                             <?php if ($d['by_name']): ?> · by <?= e($d['by_name']) ?><?php endif; ?>
                         </div>
                     </div>
-                    <?php if ($isAdmin): ?>
+                    <?php if ($canDeleteDoc): ?>
                         <form method="post" action="/staff/upload.php" class="timeline-del"
                               onsubmit="return confirm('Delete this document?')">
                             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
@@ -297,7 +318,7 @@ require __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if ($isAdmin): ?>
+<?php if ($canEdit): ?>
 <script>
 document.getElementById('staff-upload-form')?.addEventListener('submit', async (ev) => {
     ev.preventDefault();
