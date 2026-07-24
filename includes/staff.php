@@ -216,6 +216,127 @@ function staff_photo_id_map(): array
     return $map;
 }
 
+// ---- Personal-details profile (the "joining application") ---------------
+
+/** Gender options → labels. */
+function staff_genders(): array
+{
+    return [
+        'female'      => 'Female',
+        'male'        => 'Male',
+        'other'       => 'Other',
+        'prefer_not'  => 'Prefer not to say',
+    ];
+}
+
+/** Blood-group options (value === label). */
+function staff_blood_groups(): array
+{
+    $g = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+    return array_combine($g, $g);
+}
+
+/** Relation options for the father / spouse block. */
+function staff_relations(): array
+{
+    return [
+        'father'   => 'Father',
+        'spouse'   => 'Spouse',
+        'mother'   => 'Mother',
+        'guardian' => 'Guardian',
+        'other'    => 'Other',
+    ];
+}
+
+/**
+ * The personal-details row for a user. Always returns an array keyed by every
+ * column (empty strings when unset / pre-migration) so callers/templates can
+ * read fields without isset() noise. `_exists` flags whether a row is on file.
+ */
+function staff_profile(int $userId): array
+{
+    $blank = [
+        'date_of_birth' => '', 'gender' => '', 'blood_group' => '',
+        'home_address' => '', 'emergency_contact_name' => '', 'emergency_phone' => '',
+        'relative_relation' => '', 'relative_name' => '', 'relative_email' => '', 'relative_phone' => '',
+        'highest_qualification' => '', 'previous_employer' => '',
+        '_exists' => false,
+    ];
+    try {
+        $s = db()->prepare("SELECT * FROM staff_profiles WHERE user_id = :u");
+        $s->execute([':u' => $userId]);
+        $row = $s->fetch();
+    } catch (Throwable $e) {
+        return $blank;   // pre-migration DB
+    }
+    if (!$row) return $blank;
+    // Normalise NULLs to '' for the templates.
+    foreach ($blank as $k => $_) {
+        if ($k === '_exists') continue;
+        $row[$k] = $row[$k] ?? '';
+    }
+    $row['_exists'] = true;
+    return $row;
+}
+
+/**
+ * Upsert a staff member's personal details. Only the known columns are written;
+ * values are validated/normalised against the option maps above. Empty strings
+ * are stored as NULL.
+ */
+function staff_profile_save(int $userId, array $in): void
+{
+    $nn = static fn($v) => ($v === '' || $v === null) ? null : $v;
+
+    $gender = in_array($in['gender'] ?? '', array_keys(staff_genders()), true) ? $in['gender'] : null;
+    $blood  = in_array($in['blood_group'] ?? '', array_keys(staff_blood_groups()), true) ? $in['blood_group'] : null;
+    $rel    = in_array($in['relative_relation'] ?? '', array_keys(staff_relations()), true) ? $in['relative_relation'] : null;
+
+    $dob = null;
+    if (!empty($in['date_of_birth']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $in['date_of_birth'])) {
+        $dob = $in['date_of_birth'];
+    }
+
+    $params = [
+        ':u'   => $userId,
+        ':dob' => $dob,
+        ':gen' => $gender,
+        ':bg'  => $blood,
+        ':addr'=> $nn(trim((string)($in['home_address'] ?? ''))),
+        ':ecn' => $nn(trim((string)($in['emergency_contact_name'] ?? ''))),
+        ':ep'  => $nn(trim((string)($in['emergency_phone'] ?? ''))),
+        ':rr'  => $rel,
+        ':rn'  => $nn(trim((string)($in['relative_name'] ?? ''))),
+        ':re'  => $nn(trim((string)($in['relative_email'] ?? ''))),
+        ':rp'  => $nn(trim((string)($in['relative_phone'] ?? ''))),
+        ':hq'  => $nn(trim((string)($in['highest_qualification'] ?? ''))),
+        ':pe'  => $nn(trim((string)($in['previous_employer'] ?? ''))),
+    ];
+
+    db()->prepare("
+        INSERT INTO staff_profiles
+            (user_id, date_of_birth, gender, blood_group, home_address,
+             emergency_contact_name, emergency_phone, relative_relation,
+             relative_name, relative_email, relative_phone,
+             highest_qualification, previous_employer)
+        VALUES
+            (:u, :dob, :gen, :bg, :addr, :ecn, :ep, :rr, :rn, :re, :rp, :hq, :pe)
+        ON DUPLICATE KEY UPDATE
+            date_of_birth = VALUES(date_of_birth),
+            gender = VALUES(gender),
+            blood_group = VALUES(blood_group),
+            home_address = VALUES(home_address),
+            emergency_contact_name = VALUES(emergency_contact_name),
+            emergency_phone = VALUES(emergency_phone),
+            relative_relation = VALUES(relative_relation),
+            relative_name = VALUES(relative_name),
+            relative_email = VALUES(relative_email),
+            relative_phone = VALUES(relative_phone),
+            highest_qualification = VALUES(highest_qualification),
+            previous_employer = VALUES(previous_employer)
+    ")->execute($params);
+}
+
 const STAFF_DOC_MAX_BYTES  = 8 * 1024 * 1024; // 8 MB
 const STAFF_DOC_MIME_ALLOW = [
     'application/pdf'                                                            => 'pdf',

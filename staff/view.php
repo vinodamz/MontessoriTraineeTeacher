@@ -26,6 +26,7 @@ $isAdmin = staff_is_admin($user);
 $isSelf  = (int)$user['id'] === $id;
 $canEdit = $isAdmin || $isSelf;   // who may upload documents to this record
 $photo   = staff_latest_photo($id);
+$profile = staff_profile($id);
 $year    = (int)date('Y');
 $month   = (int)date('n');
 
@@ -99,6 +100,9 @@ require __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="actionbar">
+        <?php if ($canEdit): ?>
+            <a class="btn" href="/staff/profile.php?id=<?= $id ?>">Edit details</a>
+        <?php endif; ?>
         <?php if ($isSelf): ?>
             <a class="btn btn-primary" href="/staff/attendance.php#self">Check-in / out</a>
             <a class="btn" href="/staff/leave.php?user_id=<?= $id ?>#apply">Apply leave</a>
@@ -112,6 +116,65 @@ require __DIR__ . '/../includes/header.php';
             <a class="btn" href="/staff/issues.php?user_id=<?= $id ?>">Log issue</a>
         <?php endif; ?>
     </div>
+</div>
+
+<?php
+// Read-only view of a profile value, or a muted em-dash when blank.
+$pv = static function (?string $v): string {
+    $v = trim((string)$v);
+    return $v === '' ? '<span class="muted">—</span>' : e($v);
+};
+$dobNice = '';
+if (!empty($profile['date_of_birth'])) {
+    $ts = strtotime((string)$profile['date_of_birth']);
+    if ($ts) {
+        $age = (int)((new DateTime('today'))->diff(new DateTime($profile['date_of_birth']))->y);
+        $dobNice = date('j M Y', $ts) . ' · ' . $age . ' yrs';
+    }
+}
+$relRelation = $profile['relative_relation'] !== '' ? (staff_relations()[$profile['relative_relation']] ?? '') : '';
+?>
+<div class="card" id="personal">
+    <h3>Personal details</h3>
+    <div class="row" style="align-items: flex-start;">
+        <div style="flex: 1 1 240px;">
+            <h4 class="muted small">Profile</h4>
+            <dl class="dl-grid">
+                <dt>Date of birth</dt><dd><?= $dobNice !== '' ? e($dobNice) : '<span class="muted">—</span>' ?></dd>
+                <dt>Gender</dt><dd><?= $profile['gender'] !== '' ? e(staff_genders()[$profile['gender']] ?? $profile['gender']) : '<span class="muted">—</span>' ?></dd>
+                <dt>Blood group</dt><dd><?= $pv($profile['blood_group']) ?></dd>
+            </dl>
+            <h4 class="muted small section-h-spaced">Education</h4>
+            <dl class="dl-grid">
+                <dt>Highest qualification</dt><dd><?= $pv($profile['highest_qualification']) ?></dd>
+            </dl>
+        </div>
+        <div style="flex: 1 1 240px;">
+            <h4 class="muted small">Address &amp; emergency</h4>
+            <dl class="dl-grid">
+                <dt>Home address</dt><dd style="white-space:pre-wrap;"><?= $pv($profile['home_address']) ?></dd>
+                <dt>Emergency contact</dt><dd><?= $pv($profile['emergency_contact_name']) ?></dd>
+                <dt>Emergency phone</dt><dd><?= $pv($profile['emergency_phone']) ?></dd>
+            </dl>
+        </div>
+        <div style="flex: 1 1 240px;">
+            <h4 class="muted small"><?= $relRelation !== '' ? e($relRelation) : 'Father / Spouse' ?> details</h4>
+            <dl class="dl-grid">
+                <dt>Name</dt><dd><?= $pv($profile['relative_name']) ?></dd>
+                <dt>Email id</dt><dd><?= $pv($profile['relative_email']) ?></dd>
+                <dt>Phone no.</dt><dd><?= $pv($profile['relative_phone']) ?></dd>
+            </dl>
+            <h4 class="muted small section-h-spaced">Experience</h4>
+            <dl class="dl-grid">
+                <dt>Previous employer</dt><dd style="white-space:pre-wrap;"><?= $pv($profile['previous_employer']) ?></dd>
+            </dl>
+        </div>
+    </div>
+    <?php if ($canEdit): ?>
+        <div class="actions section-h-spaced">
+            <a class="btn btn-ghost" href="/staff/profile.php?id=<?= $id ?>"><?= $profile['_exists'] ? 'Edit details' : 'Add details' ?></a>
+        </div>
+    <?php endif; ?>
 </div>
 
 <div class="row" style="align-items: stretch;">
