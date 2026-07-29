@@ -167,6 +167,78 @@ function child_report_age(?string $dob): string
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The rating actually awarded most often across a list of codes.
+ *
+ * Reporting the modal awarded rating keeps the summary in the school's own
+ * vocabulary and never invents a level: rounding an average would have to
+ * pick between codes that share a numeric value (this school has both
+ * D "Developed" and M "Mastered" at 5). Ties break toward the higher
+ * numeric value, then alphabetically, so the result is deterministic.
+ */
+function child_report_mode(array $codes, array $ratings): ?string
+{
+    $codes = array_filter($codes, fn($c) => (string)$c !== '');
+    if (!$codes) return null;
+
+    $counts = array_count_values(array_map('strval', $codes));
+    $best = null; $bestCount = -1; $bestVal = -1;
+    foreach ($counts as $code => $n) {
+        $val = (int)($ratings[$code]['numeric_value'] ?? 0);
+        if ($n > $bestCount
+            || ($n === $bestCount && $val > $bestVal)
+            || ($n === $bestCount && $val === $bestVal && strcmp((string)$code, (string)$best) < 0)) {
+            $best = (string)$code; $bestCount = $n; $bestVal = $val;
+        }
+    }
+    return $best;
+}
+
+/** Nearest rating code to a numeric average — the fallback when no per-indicator data exists. */
+function child_report_code_for_value(float $value, array $ratings): ?string
+{
+    $best = null; $bestDiff = null;
+    foreach ($ratings as $code => $cfg) {
+        $diff = abs((float)$cfg['numeric_value'] - $value);
+        if ($bestDiff === null || $diff < $bestDiff) { $bestDiff = $diff; $best = (string)$code; }
+    }
+    return $best;
+}
+
+/** Every rating code a child was given in one area in one month. */
+function child_report_codes_for(array $d, string $category, string $month): array
+{
+    $out = [];
+    foreach ($d['indicators'][$category] ?? [] as $ind) {
+        if (isset($ind['ratings'][$month])) $out[] = (string)$ind['ratings'][$month];
+    }
+    return $out;
+}
+
+/**
+ * The level to show for one area in one month: the modal awarded rating, or
+ * the nearest code to the stored category average when the per-indicator rows
+ * aren't there. Returns null when that cell has no data at all.
+ */
+function child_report_level(array $d, string $category, string $month): ?string
+{
+    $code = child_report_mode(child_report_codes_for($d, $category, $month), $d['ratings']);
+    if ($code !== null) return $code;
+    if (isset($d['catAvg'][$month][$category]) && $d['ratings']) {
+        return child_report_code_for_value((float)$d['catAvg'][$month][$category], $d['ratings']);
+    }
+    return null;
+}
+
+/** Chip + label, as shown in the summary table. */
+function child_report_level_cell(?string $code, array $ratings): string
+{
+    if ($code === null || $code === '') return '';
+    $label = $ratings[$code]['label'] ?? $code;
+    return child_report_chip($code, $ratings)
+         . '<span class="cr-lvl">' . e((string)$label) . '</span>';
+}
+
 /** A coloured rating chip for one code. */
 function child_report_chip(string $code, array $ratings): string
 {
@@ -198,11 +270,17 @@ function child_report_chart(array $d): string
     $palette = ['#2D6BA0', '#5BA547', '#EC407A', '#F5B342', '#7E57C2', '#5DA8A2', '#E07A5F', '#A05C7B'];
     $svg  = '<svg class="cr-chart" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="Category averages over time">';
 
-    // Gridlines 1–5.
+    // Gridlines, labelled with the school's rating codes rather than 1–5.
+    $axis = [];
+    foreach (($d['ratings'] ?? []) as $code => $cfg) {
+        $v = (int)$cfg['numeric_value'];
+        if ($v >= 1 && $v <= 5 && !isset($axis[$v])) $axis[$v] = (string)$code;
+    }
     for ($v = 1; $v <= 5; $v++) {
         $gy = round($y((float)$v), 1);
         $svg .= '<line x1="' . $padL . '" y1="' . $gy . '" x2="' . ($w - $padR) . '" y2="' . $gy . '" stroke="#e3e3e3" stroke-width="1"/>';
-        $svg .= '<text x="' . ($padL - 8) . '" y="' . ($gy + 4) . '" font-size="11" fill="#888" text-anchor="end">' . $v . '</text>';
+        $svg .= '<text x="' . ($padL - 8) . '" y="' . ($gy + 4) . '" font-size="11" fill="#888" text-anchor="end">'
+              . e($axis[$v] ?? '') . '</text>';
     }
     // Month labels.
     foreach ($months as $i => $m) {
@@ -375,34 +453,50 @@ function child_report_render(array $d): void
                     </thead>
                     <tbody>
                         <?php foreach ($d['categories'] as $cat):
-                            $first = $d['catAvg'][$firstMonth][$cat] ?? null;
-                            $last  = $d['catAvg'][$lastMonth][$cat]  ?? null;
-                            // Fall back to the earliest/latest month this category actually has.
-                            if ($first === null) foreach ($months as $m) { if (isset($d['catAvg'][$m][$cat])) { $first = $d['catAvg'][$m][$cat]; break; } }
-                            if ($last === null)  foreach (array_reverse($months) as $m) { if (isset($d['catAvg'][$m][$cat])) { $last = $d['catAvg'][$m][$cat]; break; } }
-                            $delta = ($first !== null && $last !== null) ? round($last - $first, 2) : null;
+                            // Level per month, then compare the first and last month
+                            // that this area actually has data for.
+                            $levels = [];
+                            foreach ($months as $m) $levels[$m] = child_report_level($d, $cat, $m);
+                            $seen = array_values(array_filter($levels, fn($c) => $c !== null));
+                            $firstCode = $seen ? $seen[0] : null;
+                            $lastCode  = $seen ? $seen[count($seen) - 1] : null;
+                            $moved = null;
+                            if (count($seen) > 1) {
+                                $moved = (int)($d['ratings'][$lastCode]['numeric_value'] ?? 0)
+                                       <=> (int)($d['ratings'][$firstCode]['numeric_value'] ?? 0);
+                            }
                         ?>
                             <tr>
                                 <td class="cr-rowhead"><?= e($cat) ?></td>
                                 <?php foreach ($months as $m): ?>
-                                    <td><?= isset($d['catAvg'][$m][$cat]) ? e(number_format((float)$d['catAvg'][$m][$cat], 2)) : '' ?></td>
+                                    <td><?= child_report_level_cell($levels[$m], $d['ratings']) ?></td>
                                 <?php endforeach; ?>
                                 <td>
-                                    <?php if ($delta !== null && abs($delta) > 0.001): ?>
-                                        <span class="cr-delta <?= $delta > 0 ? 'up' : 'down' ?>">
-                                            <?= $delta > 0 ? '▲' : '▼' ?> <?= e(number_format(abs($delta), 2)) ?>
-                                        </span>
-                                    <?php elseif ($delta !== null): ?>
-                                        <span class="cr-muted">–</span>
+                                    <?php if ($moved === 1): ?>
+                                        <span class="cr-delta up">▲ Moved up</span>
+                                    <?php elseif ($moved === -1): ?>
+                                        <span class="cr-delta down">▼ Slipped</span>
+                                    <?php elseif ($moved === 0): ?>
+                                        <span class="cr-muted">Steady</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                        <?php if ($d['monthAvg']): ?>
+                        <?php
+                        // Overall = the modal rating across every area that month.
+                        $overallLevels = [];
+                        foreach ($months as $m) {
+                            $all = [];
+                            foreach ($d['categories'] as $cat) {
+                                $all = array_merge($all, child_report_codes_for($d, $cat, $m));
+                            }
+                            $overallLevels[$m] = child_report_mode($all, $d['ratings']);
+                        }
+                        if (array_filter($overallLevels, fn($c) => $c !== null)): ?>
                             <tr class="cr-total">
                                 <td class="cr-rowhead">Overall</td>
                                 <?php foreach ($months as $m): ?>
-                                    <td><strong><?= isset($d['monthAvg'][$m]) ? e(number_format((float)$d['monthAvg'][$m], 2)) : '' ?></strong></td>
+                                    <td><?= child_report_level_cell($overallLevels[$m], $d['ratings']) ?></td>
                                 <?php endforeach; ?>
                                 <td></td>
                             </tr>
@@ -410,7 +504,7 @@ function child_report_render(array $d): void
                     </tbody>
                 </table>
             </div>
-            <p class="cr-muted cr-small">Scores are averages on a 1–5 scale (see the key at the end).</p>
+            <p class="cr-muted cr-small">Each area shows the level <?= e((string)$s['first_name']) ?> worked at most often that month — see the key at the end.</p>
         </section>
     <?php endif; ?>
 
@@ -511,7 +605,6 @@ function child_report_render(array $d): void
                     <li>
                         <span class="cr-chip" style="background:<?= e((string)$cfg['color']) ?>;"><?= e((string)$code) ?></span>
                         <strong><?= e((string)$cfg['label']) ?></strong>
-                        <span class="cr-muted">· <?= (int)$cfg['numeric_value'] ?></span>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -551,6 +644,7 @@ function child_report_styles(): string
            color: #fff; font-size: .75rem; font-weight: 700; text-align: center; }
 .cr-tag { display: inline-block; margin-left: .35rem; padding: 0 .35rem; border-radius: 4px;
           background: #eee; color: #666; font-size: .68rem; text-transform: uppercase; }
+.cr-lvl { display: inline-block; margin-left: .35rem; font-size: .84rem; white-space: nowrap; }
 .cr-delta.up { color: #2c7a2c; font-weight: 600; }
 .cr-delta.down { color: #b3402c; font-weight: 600; }
 .cr-chart { width: 100%; height: auto; }
