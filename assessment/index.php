@@ -137,6 +137,9 @@ require __DIR__ . '/../includes/header.php';
                 <?php if (!$hasBl): ?>
                     <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>">Add first assessment</a>
                 <?php endif; ?>
+                <?php if ($editUrl = student_edit_url($user, $sid)): ?>
+                    <a class="btn btn-ghost" href="<?= e($editUrl) ?>" title="Correct name, grade or other details">Edit</a>
+                <?php endif; ?>
             </div>
         </li>
     <?php endforeach; ?>

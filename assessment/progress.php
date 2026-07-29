@@ -105,6 +105,9 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn" href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Assess this month</a>
         <a class="btn btn-ghost" href="baseline.php?student_id=<?= $studentId ?>"><?= $baseline ? 'Edit baseline' : 'Add baseline' ?></a>
         <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
+        <?php if ($editUrl = student_edit_url($user, $studentId)): ?>
+            <a class="btn btn-ghost" href="<?= e($editUrl) ?>" title="Correct name, grade or other details">Edit details</a>
+        <?php endif; ?>
         <a class="btn btn-primary" href="report.php?student_id=<?= $studentId ?>">Detailed report</a>
         <button type="button" class="btn btn-ghost" onclick="window.print()">Print</button>
     </div>
