@@ -46,7 +46,8 @@ function child_report_data(int $studentId): ?array
         'catAvg'     => [],   // [month][category] => float
         'monthAvg'   => [],   // [month] => float (across categories)
         'indicators' => [],   // [category][] => ['text'=>, 'ratings'=>[month=>code]]
-        'comments'   => [],   // [month][category|''] => [text, …]
+        'comments'   => [],   // [month][category|''] => [text, …]  (for rendering)
+        'comment_rows' => [], // flat rows with ids (for the admin editor)
         'attendance' => [],
         'ratings'    => [],
     ];
@@ -127,15 +128,28 @@ function child_report_data(int $studentId): ?array
     // Teacher comments, per month → per category ('' = overall).
     try {
         $s = db()->prepare("
-            SELECT month_year, category, comment
+            SELECT id, month_year, category, comment
             FROM assessment_comments WHERE student_id = :s
             ORDER BY category IS NULL DESC, category, id
         ");
         $s->execute([':s' => $studentId]);
         foreach ($s->fetchAll() as $r) {
+            // Rendering shape: plain strings, unchanged.
             $d['comments'][$r['month_year']][(string)($r['category'] ?? '')][] = (string)$r['comment'];
+            // Editor shape: keeps the row id so a single note can be targeted.
+            $d['comment_rows'][] = [
+                'id'       => (int)$r['id'],
+                'month'    => (string)$r['month_year'],
+                'category' => (string)($r['category'] ?? ''),
+                'text'     => (string)$r['comment'],
+            ];
         }
         uksort($d['comments'], fn($a, $b) => compare_month_year($b, $a));
+        // Newest month first; within a month, the overall note ('') before areas.
+        usort($d['comment_rows'], function (array $a, array $b): int {
+            $m = compare_month_year($b['month'], $a['month']);
+            return $m !== 0 ? $m : strcmp($a['category'], $b['category']);
+        });
     } catch (Throwable $e) {}
 
     // Attendance tally.

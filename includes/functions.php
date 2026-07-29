@@ -71,6 +71,23 @@ function assignable_roles(): array
 }
 
 /**
+ * Where this user should go to correct a child's details (name, grade, etc.),
+ * or null when they aren't allowed to edit anyone.
+ *
+ * Deliberately mirrors students/edit.php's own gate rather than widening it —
+ * this only surfaces an existing capability from pages that had no link to it
+ * (the assessment flow), it doesn't grant anyone new access.
+ */
+function student_edit_url(array $user, int $studentId): ?string
+{
+    if ($studentId <= 0) return null;
+    if (($user['role'] ?? '') === 'admin' || user_has_module($user, 'students')) {
+        return '/students/edit.php?id=' . $studentId;
+    }
+    return null;
+}
+
+/**
  * Central registry of external apps the school plugs into MTT. One entry
  * per integration — the same shape drives the home-dashboard tile, the
  * nav link, and the admin module checkbox.
