@@ -53,26 +53,78 @@ jobs:
           echo "::add-mask::${HOST}"
           echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
 
-      - name: 1/2 — cPanel git fetch + reset to main
+      # Hostgator fronts cPanel with bot protection that intermittently serves
+      # a JS "Please wait while your request is being verified..." challenge
+      # page instead of the UAPI JSON — the runner IP simply looks like a bot
+      # that minute. A single unlucky call used to fail the whole deploy while
+      # main sat undeployed (that is exactly what happened to the detailed
+      # report). Retry with backoff, and name the challenge explicitly so the
+      # log says what happened instead of dumping obfuscated JS.
+      - name: Prepare cPanel UAPI helper (retry + challenge detection)
+        run: |
+          cat > /tmp/uapi.sh <<'SH'
+          # uapi_post <url> <out-file> [curl args…]
+          uapi_post() {
+            local url="$1"; local out="$2"; shift 2
+            local attempt=1 max=5 delay=10 http reason
+            while : ; do
+              http=$(curl -sS -o "$out" -w '%{http_code}' -X POST "$url" \
+                       -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+                       --connect-timeout 15 --max-time 120 "$@" || echo "000")
+
+              if [ "$http" = "200" ] && jq -e '.status == 1' "$out" >/dev/null 2>&1; then
+                echo "✓ cPanel API OK (attempt ${attempt}/${max})"
+                jq -c '{status, errors}' "$out" 2>/dev/null || true
+                return 0
+              fi
+
+              if grep -qiE '<html|being verified|wsidchk|cloudflare' "$out" 2>/dev/null; then
+                reason="bot-protection challenge page instead of JSON (HTTP ${http})"
+              elif [ "$http" = "000" ]; then
+                reason="connection failed"
+              elif jq -e '.status == 0' "$out" >/dev/null 2>&1; then
+                # A real API-level refusal (bad token, wrong repo path). Retrying
+                # will not help, so surface it immediately.
+                echo "::error::cPanel API refused the request:"
+                jq -r '.errors // .' "$out" 2>/dev/null | head -20
+                return 1
+              else
+                reason="unexpected response (HTTP ${http})"
+              fi
+
+              echo "attempt ${attempt}/${max} failed: ${reason}"
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::cPanel API still failing after ${max} attempts — ${reason}."
+                echo "::error::This is the host's WAF, not the app. Re-run this workflow, or deploy from cPanel → Git Version Control → Manage → Update from Remote → Deploy HEAD."
+                echo "--- first 500 bytes of last response ---"
+                head -c 500 "$out"; echo
+                return 1
+              fi
+              attempt=$((attempt + 1))
+              echo "retrying in ${delay}s…"
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
+          SH
+          echo "helper written"
+
+      - name: 1/3 — cPanel git fetch + reset to main
         run: |
           set -e
-          curl -sS --fail-with-body -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControl/update" \
-            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+          . /tmp/uapi.sh
+          uapi_post "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControl/update" \
+            /tmp/pull.json \
             --data-urlencode "repository_root=${REPO_ROOT}" \
-            --data-urlencode "branch=main" \
-            | tee /tmp/pull.json
-          jq -e '.status == 1' /tmp/pull.json > /dev/null || (cat /tmp/pull.json; exit 1)
+            --data-urlencode "branch=main"
 
       - name: 2/3 — cPanel run .cpanel.yml (rsync into docroot)
         run: |
           set -e
-          curl -sS --fail-with-body -X POST \
-            "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControlDeployment/create" \
-            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-            --data-urlencode "repository_root=${REPO_ROOT}" \
-            | tee /tmp/deploy.json
-          jq -e '.status == 1' /tmp/deploy.json > /dev/null || (cat /tmp/deploy.json; exit 1)
+          . /tmp/uapi.sh
+          uapi_post "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControlDeployment/create" \
+            /tmp/deploy.json \
+            --data-urlencode "repository_root=${REPO_ROOT}"
 
       - name: 3/3 — Self-test the unified login URL
         run: |
