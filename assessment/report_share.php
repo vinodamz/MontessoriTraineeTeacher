@@ -24,6 +24,12 @@ $d     = $row ? child_report_data((int)$row['student_id']) : null;
 
 $appName = function_exists('app_name') ? app_name() : 'Little Graduates';
 
+// ?format=pdf → the same report as a real PDF download. Still read-only.
+if ($d && ($_GET['format'] ?? '') === 'pdf') {
+    require_once __DIR__ . '/../includes/child_report_pdf.php';
+    child_report_pdf_stream($d, $appName);
+}
+
 if (!$d) {
     http_response_code(404);
     $title = 'Link not active';
@@ -49,8 +55,9 @@ if (!$d) {
                      text-transform: uppercase; letter-spacing: .5px; }
   header.cr-top p { margin: .15rem 0 0; font-size: .8rem; color: #66bb6a; font-weight: 600; }
   main { max-width: 880px; margin: 0 auto; padding: 1.2rem; }
-  .cr-print-btn { padding: .5rem .9rem; border: 0; border-radius: 6px; background: #e91e63;
-                  color: #fff; font-size: .9rem; font-weight: 600; cursor: pointer; }
+  .cr-print-btn { display: inline-block; padding: .5rem .9rem; border: 0; border-radius: 6px;
+                  background: #e91e63; color: #fff; font-size: .9rem; font-weight: 600;
+                  cursor: pointer; text-decoration: none; }
   .cr-dead { background: #fff; border: 1px solid #e3d9c8; border-radius: 10px; padding: 1.2rem; }
 <?= child_report_styles() ?>
   @media print { header.cr-top { border-bottom: 1px solid #999; } .cr-print-btn { display: none; } body { background: #fff; } }
@@ -64,7 +71,7 @@ if (!$d) {
         <p>Progress report</p>
     </div>
     <?php if ($d): ?>
-        <button type="button" class="cr-print-btn" onclick="window.print()">Print / Save PDF</button>
+        <a class="cr-print-btn" href="/assessment/report_share.php?token=<?= e($token) ?>&amp;format=pdf">Download PDF</a>
     <?php endif; ?>
 </header>
 <main>
