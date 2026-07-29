@@ -62,7 +62,8 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <div class="head-actions">
         <a class="btn btn-ghost" href="/assessment/assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Assess this month</a>
-        <button type="button" class="btn btn-primary" onclick="window.print()">Print / Save PDF</button>
+        <a class="btn btn-primary" href="/assessment/report_pdf.php?student_id=<?= $studentId ?>">Download PDF</a>
+        <button type="button" class="btn btn-ghost" onclick="window.print()">Print</button>
     </div>
 </div>
 
