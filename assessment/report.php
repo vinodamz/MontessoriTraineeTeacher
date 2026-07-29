@@ -115,4 +115,75 @@ require __DIR__ . '/../includes/header.php';
 
 <?php child_report_render($d); ?>
 
+<?php if ($isAdmin): ?>
+<section class="card no-print" id="notes">
+    <h3>Edit teacher notes</h3>
+    <p class="muted small">
+        Corrections to what appears under <em>Teacher's remarks</em> and against each area.
+        Teachers write these when they assess a month; as an admin you can fix or add one here
+        without re-doing that month's assessment. Clearing a note removes it.
+    </p>
+
+    <?php if (!empty($d['comment_rows'])): ?>
+        <?php foreach ($d['comment_rows'] as $row): ?>
+            <form method="post" action="/assessment/comment_edit.php" class="card" style="margin:.6rem 0; padding:.75rem .9rem;">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="op" value="update">
+                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                <input type="hidden" name="student_id" value="<?= $studentId ?>">
+                <div class="muted small" style="margin-bottom:.3rem;">
+                    <strong><?= e(month_year_label($row['month'])) ?></strong>
+                    · <?= $row['category'] === '' ? 'Overall remark' : e($row['category']) ?>
+                </div>
+                <div class="field">
+                    <label class="sr-only" for="c<?= (int)$row['id'] ?>">Note</label>
+                    <textarea id="c<?= (int)$row['id'] ?>" name="comment" rows="2"><?= e($row['text']) ?></textarea>
+                </div>
+                <div class="actions">
+                    <button class="btn" type="submit">Save</button>
+                    <?php /* Distinct name — relying on a second "op" field would depend on
+                             which duplicate the parser keeps. */ ?>
+                    <button class="btn btn-ghost" type="submit" name="do_delete" value="1"
+                            onclick="return confirm('Delete this note?');">Delete</button>
+                </div>
+            </form>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
+    <?php if (!empty($d['months'])): ?>
+        <form method="post" action="/assessment/comment_edit.php" class="card" style="margin:.6rem 0; padding:.75rem .9rem;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="add">
+            <input type="hidden" name="student_id" value="<?= $studentId ?>">
+            <div class="row">
+                <div class="field">
+                    <label for="nm">Month</label>
+                    <select id="nm" name="month">
+                        <?php foreach (array_reverse($d['months']) as $m): ?>
+                            <option value="<?= e($m) ?>"><?= e(month_year_label($m)) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="nc">Applies to</label>
+                    <select id="nc" name="category">
+                        <option value="">Overall remark</option>
+                        <?php foreach ($d['categories'] as $cat): ?>
+                            <option value="<?= e($cat) ?>"><?= e($cat) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <div class="field">
+                <label for="nb">New note</label>
+                <textarea id="nb" name="comment" rows="2" placeholder="What you want the report to say…"></textarea>
+            </div>
+            <div class="actions"><button class="btn btn-primary" type="submit">Add note</button></div>
+        </form>
+    <?php elseif (empty($d['comment_rows'])): ?>
+        <p class="muted">Notes can be added once this child has been assessed for a month.</p>
+    <?php endif; ?>
+</section>
+<?php endif; ?>
+
 <?php require __DIR__ . '/../includes/footer.php'; ?>
