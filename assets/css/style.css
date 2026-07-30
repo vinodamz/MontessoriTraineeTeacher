@@ -1659,3 +1659,27 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
     .card { padding: .95rem 1rem; border-radius: 14px; }
     .admin-tile .tile-value { font-size: 1.4rem; }
 }
+
+/* =========================================================
+   Daycare attendance — one-screen check-in/out sheet. Built
+   for a track user on a phone or tablet, so targets are big
+   and each row's state is readable at a glance.
+   ========================================================= */
+.dc-scroll { overflow-x: auto; }
+.dc-table { width: 100%; }
+.dc-table td { vertical-align: middle; }
+.dc-name { font-weight: 500; min-width: 9rem; }
+.dc-cell { white-space: nowrap; min-width: 7.5rem; }
+.dc-act { display: inline-block; margin: 0; }
+.dc-btn { min-width: 6.2rem; min-height: 40px; }        /* comfortable tap target */
+.dc-time { display: inline-block; min-width: 3.2rem; font-weight: 700;
+           font-variant-numeric: tabular-nums; }
+.dc-comment { min-width: 13rem; }
+.dc-note { display: flex; gap: .35rem; align-items: center; margin: 0; }
+.dc-note input { flex: 1 1 auto; min-width: 7rem; }
+.dc-save { padding: .35rem .6rem; }
+/* Row state: in the building vs. gone home. */
+.dc-table tr.dc-present td { background: #f2fbf3; }
+.dc-table tr.dc-present .dc-name { box-shadow: inset 3px 0 0 #45a049; }
+.dc-table tr.dc-left td { background: #f7f7f8; color: #6b6b6b; }
+.dc-datepick { display: flex; gap: .4rem; align-items: center; margin: 0; }

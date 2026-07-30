@@ -67,6 +67,7 @@ $hasInventory = user_has_module($user, 'inventory');
 $hasMaterials = user_has_module($user, 'materials');
 $hasWacrm     = user_has_module($user, 'wacrm');
 $hasN8n       = user_has_module($user, 'n8n');
+$hasDaycare   = user_has_module($user, 'daycare');
 
 // Quick-checkin: show for anyone in the staff roster (teachers, admins,
 // or anyone with the staff module). Pulls today's attendance row so the
@@ -82,7 +83,7 @@ if ($inStaffRoster) {
 }
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n + (int)$hasDaycare;
 if ($moduleCount === 1) {
     if ($hasTasks)     redirect('/tasks/index.php');
     if ($hasMontess)   redirect('/assessment/index.php');
@@ -97,6 +98,7 @@ if ($moduleCount === 1) {
     if ($hasMaterials) redirect('/materials/index.php');
     if ($hasWacrm)     redirect('/wacrm/index.php');
     if ($hasN8n)       redirect('/n8n/index.php');
+    if ($hasDaycare)   redirect('/daycare/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
