@@ -17,11 +17,18 @@
  */
 function staff_roster(bool $activeOnly = false): array
 {
+    // The role/module test MUST stay parenthesised. Without the brackets,
+    // appending "AND active = 1" binds only to the FIND_IN_SET branch —
+    // SQL's AND binds tighter than OR — so the query read
+    //     role IN (...) OR (module AND active)
+    // and returned every inactive admin, teacher and non-teaching user even
+    // when $activeOnly was set. That leaked deactivated people into the staff
+    // attendance roster, the leave picker, the daycare sheet and payroll.
     $sql = "
         SELECT id, name, role, active, modules
         FROM users
-        WHERE role IN ('admin','teacher','non_teaching')
-           OR FIND_IN_SET('staff', modules) > 0
+        WHERE (role IN ('admin','teacher','non_teaching')
+               OR FIND_IN_SET('staff', modules) > 0)
     ";
     if ($activeOnly) $sql .= " AND active = 1";
     $sql .= " ORDER BY active DESC, name";
