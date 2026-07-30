@@ -115,17 +115,29 @@ function daycare_mark_child(int $studentId, string $date, string $which, int $by
     return $now;
 }
 
-/** Same for a staff member, against staff_attendance. */
+/**
+ * Same for a staff member, against staff_attendance.
+ *
+ * A staff check-in also decides present vs late, measured against that person's
+ * own shift start plus the grace period (staff_arrival_status). Staff with no
+ * shift on file are recorded 'present' — the track user tapping a button must
+ * never manufacture a late mark out of a blank setting.
+ */
 function daycare_mark_staff(int $userId, string $date, string $which, int $byUserId): string
 {
     $now = date('H:i:s');
     if ($which === 'in') {
+        $status = 'present';
+        if (function_exists('staff_arrival_status')) {
+            $shift  = staff_shift($userId);
+            $status = staff_arrival_status($shift['start'] ?? null, $now);
+        }
         db()->prepare("
             INSERT INTO staff_attendance
                 (user_id, att_date, status, check_in, marked_by)
-            VALUES (:u, :d, 'present', :t, :by)
-            ON DUPLICATE KEY UPDATE check_in = VALUES(check_in), status = 'present'
-        ")->execute([':u' => $userId, ':d' => $date, ':t' => $now, ':by' => $byUserId]);
+            VALUES (:u, :d, :st, :t, :by)
+            ON DUPLICATE KEY UPDATE check_in = VALUES(check_in), status = VALUES(status)
+        ")->execute([':u' => $userId, ':d' => $date, ':st' => $status, ':t' => $now, ':by' => $byUserId]);
     } else {
         db()->prepare("
             INSERT INTO staff_attendance

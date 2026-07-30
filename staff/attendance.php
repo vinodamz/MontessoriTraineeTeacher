@@ -4,8 +4,9 @@
  *
  *   GET                       Admin: full roster grid for the given date.
  *                             Non-admin: own row only, self check-in/out form.
- *   POST op=self_in           Stamp own check_in NOW() for today (status defaults
- *                             to 'present' or 'late' >9:15 grace).
+ *   POST op=self_in           Stamp own check_in NOW() for today (status is
+ *                             'present', or 'late' past that person's own shift
+ *                             start plus the grace period — see /staff/shifts.php).
  *   POST op=self_out          Stamp own check_out NOW() for today.
  *   POST op=mark              Admin: upsert a row for (user_id, att_date) with
  *                             explicit status / times / notes.
@@ -42,8 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existing = $stmt->fetch();
 
         if ($op === 'self_in') {
-            $now    = date('H:i:s');
-            $late   = ($now > '09:15:00') ? 'late' : 'present';
+            $now = date('H:i:s');
+            // Lateness is per person: the school runs shifts, so a single
+            // cutoff for everyone marked the early aaya on time at 09:10 and
+            // would have marked the late shift late before their day started.
+            // No shift on file → always 'present'.
+            $late = staff_arrival_status(staff_shift($uid)['start'], $now);
             if ($existing) {
                 db()->prepare("
                     UPDATE staff_attendance
@@ -134,6 +139,8 @@ if ($isAdmin) {
     if ($r = $stmt->fetch()) $byUser[(int)$user['id']] = $r;
 }
 
+$shiftMap   = staff_shift_map();
+$grace      = staff_late_grace_minutes();
 $today      = date('Y-m-d');
 $myTodayRow = null;
 if ($date === $today) {
@@ -160,6 +167,14 @@ require __DIR__ . '/../includes/header.php';
 <?php if ($date === $today): ?>
 <div class="card" id="self">
     <h3>My check-in</h3>
+    <?php
+    $myShift  = $shiftMap[(int)$user['id']] ?? ['start' => null, 'end' => null];
+    $myCutoff = staff_late_cutoff($myShift['start'], $grace);
+    if ($myCutoff !== null): ?>
+        <p class="muted small" style="margin-top:0;">
+            Shift <?= e(staff_shift_label($myShift)) ?> · late after <?= e(staff_time_label($myCutoff)) ?>
+        </p>
+    <?php endif; ?>
     <?php if (!$myTodayRow): ?>
         <p class="muted">Not checked in yet today.</p>
         <form method="post" style="display:inline;">
@@ -201,16 +216,26 @@ require __DIR__ . '/../includes/header.php';
 
     <table class="admin-table">
         <thead>
-            <tr><th>Name</th><th>Status</th><th>In</th><th>Out</th><th>Notes</th><th></th></tr>
+            <tr><th>Name</th><th>Shift</th><th>Status</th><th>In</th><th>Out</th><th>Notes</th><th></th></tr>
         </thead>
         <tbody>
             <?php foreach ($roster as $s):
                 $uid = (int)$s['id'];
-                $row = $byUser[$uid] ?? null;
-                $fid = 'att-' . $uid;
+                $row    = $byUser[$uid] ?? null;
+                $fid    = 'att-' . $uid;
+                $shift  = $shiftMap[$uid] ?? ['start' => null, 'end' => null];
+                $cutoff = staff_late_cutoff($shift['start'], $grace);
             ?>
                 <tr>
                     <td><a href="/staff/view.php?id=<?= $uid ?>"><?= e($s['name']) ?></a></td>
+                    <td class="muted small">
+                        <?php if ($cutoff !== null): ?>
+                            <?= e(staff_shift_label($shift)) ?><br>
+                            late after <?= e(staff_time_label($cutoff)) ?>
+                        <?php else: ?>
+                            <a href="/staff/shifts.php">set</a>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <select form="<?= $fid ?>" name="status">
                             <?php foreach (staff_attendance_statuses() as $code => $label): ?>

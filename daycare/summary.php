@@ -169,8 +169,16 @@ require __DIR__ . '/../includes/header.php';
             row add up to the days recorded rather than being folded into one of the four.</li>
         <li><strong>Hours</strong> — from check-in and check-out times, counting only days where both
             were recorded.</li>
-        <li>Checking someone in on the daily sheet marks them <strong>present</strong>. Absent, late
-            and leave come from the attendance and leave pages elsewhere in the app, so a child
+        <li><strong>Late</strong> — for staff, a check-in later than their own working-hours start
+            plus <?= (int)staff_late_grace_minutes() ?> minutes' grace
+            (<?php // The track user holds only the daycare module — don't send them
+                   // to a page they'd be refused.
+            if ($user['role'] === 'admin' || user_has_module($user, 'staff')): ?>
+                <a href="/staff/shifts.php">set per person</a><?php else: ?>set per person<?php endif; ?>;
+            staff with no shift on file are never marked late). Children have no shift, so a
+            late child comes only from a teacher marking one.</li>
+        <li>Checking a child in on the daily sheet marks them <strong>present</strong>. Absent and
+            leave come from the attendance and leave pages elsewhere in the app, so a child
             who simply never arrived shows under <strong>Not marked</strong> rather than Absent.</li>
     </ul>
 </div>

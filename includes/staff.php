@@ -267,6 +267,9 @@ function staff_profile(int $userId): array
         'home_address' => '', 'emergency_contact_name' => '', 'emergency_phone' => '',
         'relative_relation' => '', 'relative_name' => '', 'relative_email' => '', 'relative_phone' => '',
         'highest_qualification' => '', 'previous_employer' => '',
+        // Admin-only (see staff_shift_save) — read here, never written by
+        // staff_profile_save.
+        'work_start' => '', 'work_end' => '',
         '_exists' => false,
     ];
     try {
@@ -342,6 +345,153 @@ function staff_profile_save(int $userId, array $in): void
             highest_qualification = VALUES(highest_qualification),
             previous_employer = VALUES(previous_employer)
     ")->execute($params);
+}
+
+// ---- Working hours & lateness -------------------------------------------
+//
+// The school runs shifts, so "late" is meaningless as a single clock time:
+// 09:10 is on time for a 09:30 start and 40 minutes late for an 08:30 one.
+// Each staff member gets their own work_start / work_end (staff_profiles,
+// migrate_053) and lateness is measured against their own start plus a grace
+// period — 5 minutes by default, i.e. a 09:00 start starts counting late at
+// 09:05.
+//
+// Deliberate rule: a staff member with no shift on file is NEVER marked late.
+// A blank field must not invent a disciplinary record for someone.
+
+/** Default grace, used when the setting row is missing or nonsense. */
+const STAFF_LATE_GRACE_DEFAULT = 5;
+
+/** Grace period in minutes, from app_settings. Clamped to 0–120. */
+function staff_late_grace_minutes(): int
+{
+    $raw = function_exists('app_setting')
+        ? app_setting('staff_late_grace_minutes', (string)STAFF_LATE_GRACE_DEFAULT)
+        : (string)STAFF_LATE_GRACE_DEFAULT;
+    if ($raw === null || !preg_match('/^\d+$/', trim((string)$raw))) {
+        return STAFF_LATE_GRACE_DEFAULT;
+    }
+    return max(0, min(120, (int)$raw));
+}
+
+/**
+ * Normalise a time from a form or the database to 'HH:MM:SS'.
+ * Accepts 'HH:MM' and 'HH:MM:SS'; returns null for anything else (including
+ * '' and null), so callers can treat "no shift" and "junk input" the same.
+ */
+function staff_time_norm($t): ?string
+{
+    $t = trim((string)$t);
+    if ($t === '') return null;
+    if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/', $t, $m)) return null;
+    return sprintf('%s:%s:%s', $m[1], $m[2], $m[3] ?? '00');
+}
+
+/** 'HH:MM:SS' → '9:00 AM'. '' when unset. */
+function staff_time_label(?string $t): string
+{
+    $t = staff_time_norm($t);
+    return $t === null ? '' : date('g:i A', strtotime('2000-01-01 ' . $t));
+}
+
+/**
+ * The clock time from which arrivals count as late, for a given start.
+ * Returns null when there's no start time.
+ *
+ * A start late enough that start+grace would cross midnight is clamped to
+ * 23:59:59 rather than wrapping — a wrapped cutoff would compare as *earlier*
+ * than every check-in and mark a whole night shift late.
+ */
+function staff_late_cutoff(?string $workStart, ?int $graceMinutes = null): ?string
+{
+    $start = staff_time_norm($workStart);
+    if ($start === null) return null;
+    $grace = $graceMinutes ?? staff_late_grace_minutes();
+    $secs  = (int)substr($start, 0, 2) * 3600
+           + (int)substr($start, 3, 2) * 60
+           + (int)substr($start, 6, 2)
+           + max(0, $grace) * 60;
+    if ($secs > 86399) $secs = 86399;
+    return sprintf('%02d:%02d:%02d', intdiv($secs, 3600), intdiv($secs % 3600, 60), $secs % 60);
+}
+
+/**
+ * The attendance status an arrival at $checkIn earns: 'late' or 'present'.
+ * 'present' whenever no shift is on file, or the time is unreadable.
+ */
+function staff_arrival_status(?string $workStart, ?string $checkIn, ?int $graceMinutes = null): string
+{
+    $cutoff = staff_late_cutoff($workStart, $graceMinutes);
+    $at     = staff_time_norm($checkIn);
+    if ($cutoff === null || $at === null) return 'present';
+    return $at > $cutoff ? 'late' : 'present';
+}
+
+/** Shift for one user: ['start' => 'HH:MM:SS'|null, 'end' => 'HH:MM:SS'|null]. */
+function staff_shift(int $userId): array
+{
+    try {
+        $s = db()->prepare("SELECT work_start, work_end FROM staff_profiles WHERE user_id = :u");
+        $s->execute([':u' => $userId]);
+        $row = $s->fetch();
+    } catch (Throwable $e) {
+        return ['start' => null, 'end' => null];   // pre-migration DB
+    }
+    if (!$row) return ['start' => null, 'end' => null];
+    return [
+        'start' => staff_time_norm($row['work_start'] ?? null),
+        'end'   => staff_time_norm($row['work_end'] ?? null),
+    ];
+}
+
+/** Every defined shift, keyed by user_id. One query for roster-wide screens. */
+function staff_shift_map(): array
+{
+    $out = [];
+    try {
+        $rows = db()->query("
+            SELECT user_id, work_start, work_end FROM staff_profiles
+            WHERE work_start IS NOT NULL OR work_end IS NOT NULL
+        ")->fetchAll();
+    } catch (Throwable $e) {
+        return $out;
+    }
+    foreach ($rows as $r) {
+        $out[(int)$r['user_id']] = [
+            'start' => staff_time_norm($r['work_start'] ?? null),
+            'end'   => staff_time_norm($r['work_end'] ?? null),
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Set (or clear) one staff member's shift. Admin-only by convention — this is
+ * kept out of staff_profile_save() so the self-service profile form and the
+ * public application form can never touch it.
+ */
+function staff_shift_save(int $userId, $start, $end): void
+{
+    db()->prepare("
+        INSERT INTO staff_profiles (user_id, work_start, work_end)
+        VALUES (:u, :ws, :we)
+        ON DUPLICATE KEY UPDATE work_start = VALUES(work_start), work_end = VALUES(work_end)
+    ")->execute([
+        ':u'  => $userId,
+        ':ws' => staff_time_norm($start),
+        ':we' => staff_time_norm($end),
+    ]);
+}
+
+/** '9:00 AM – 5:00 PM', or '' when no shift is defined. */
+function staff_shift_label(array $shift): string
+{
+    $s = staff_time_label($shift['start'] ?? null);
+    $e = staff_time_label($shift['end'] ?? null);
+    if ($s === '' && $e === '') return '';
+    if ($s === '') return 'until ' . $e;
+    if ($e === '') return 'from ' . $s;
+    return $s . ' – ' . $e;
 }
 
 const STAFF_DOC_MAX_BYTES  = 8 * 1024 * 1024; // 8 MB
