@@ -318,7 +318,7 @@ try {
         SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id
         FROM students s
         WHERE s.teacher_id = :tid AND $activeWhere
-        ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
+        ORDER BY " . grade_sql_order('s.grade') . ", s.first_name
     ");
     $q->execute([':tid' => $teacher1]);
     $ids = array_map('intval', array_column($q->fetchAll(), 'id'));

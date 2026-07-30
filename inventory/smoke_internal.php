@@ -102,11 +102,18 @@ try {
     }
 
     // ---- 2. Category map matches the master spec exactly. ------------------
-    $map = inventory_category_map();
+    // The three per-grade categories are checked against the *configured* grade
+    // list rather than a frozen literal. Grades are admin-managed now
+    // (grade_levels / /grades.php), so hard-coding four names here would turn
+    // every legitimate grade change into a failed deploy — which is exactly
+    // what adding Daycare did. The assertion still has teeth: it fails if those
+    // categories stop tracking the configured grades.
+    $map        = inventory_category_map();
+    $gradeSubs  = grade_names();
     $expected = [
-        'Uniform'             => ['Playgroup','Nursery','LKG','UKG'],
-        'School Bag'          => ['Playgroup','Nursery','LKG','UKG'],
-        'Textbook'            => ['Playgroup','Nursery','LKG','UKG'],
+        'Uniform'             => $gradeSubs,
+        'School Bag'          => $gradeSubs,
+        'Textbook'            => $gradeSubs,
         'Montessori Material' => ['Practical Life','Sensorial','Language','Math','Culture'],
         'Toys'                => ['Indoor','Outdoor','STEM'],
         'Books'               => ['Story Books','Teacher Resources'],
