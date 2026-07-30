@@ -187,6 +187,124 @@ function daycare_time(?string $t): string
     return $t === '' ? '' : substr($t, 0, 5);
 }
 
+// ---------------------------------------------------------------------------
+// Summary over a date range
+// ---------------------------------------------------------------------------
+//
+// The two tables don't use the same status set:
+//   students → present, absent, late, excused, holiday
+//   staff    → present, absent, late, leave,   holiday, wfh
+//
+// So the "Leave" column reads `excused` for children and `leave` for staff —
+// they're the same idea under two names. Anything else a row can hold (holiday,
+// and WFH for staff) is counted as "Other" rather than silently folded into one
+// of the four, so a row's counts always reconcile against the days recorded.
+
+/** First and last day of a 'YYYY-MM' month, clamped so the end is never future. */
+function daycare_month_bounds(string $month): array
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+    $from = $month . '-01';
+    $to   = date('Y-m-t', strtotime($from));
+    $today = date('Y-m-d');
+    if ($to > $today) $to = $today;      // don't count days that haven't happened
+    if ($from > $today) { $from = date('Y-m-01'); $to = $today; }
+    return [$from, $to];
+}
+
+/**
+ * How many distinct days in the range have any attendance recorded at all.
+ * Used as the denominator for "not marked" — counting calendar days would
+ * charge people for weekends and holidays the school was closed.
+ */
+function daycare_recorded_days(string $table, string $dateCol, string $from, string $to): int
+{
+    try {
+        $s = db()->prepare("SELECT COUNT(DISTINCT $dateCol) FROM $table WHERE $dateCol BETWEEN :f AND :t");
+        $s->execute([':f' => $from, ':t' => $to]);
+        return (int)$s->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/** Per-child attendance totals for the range. */
+function daycare_child_summary(string $from, string $to): array
+{
+    try {
+        $s = db()->prepare("
+            SELECT s.id, s.first_name, s.last_name,
+                   COALESCE(SUM(a.status = 'present'), 0) AS present,
+                   COALESCE(SUM(a.status = 'late'),    0) AS late,
+                   COALESCE(SUM(a.status = 'absent'),  0) AS absent,
+                   COALESCE(SUM(a.status = 'excused'), 0) AS on_leave,
+                   COALESCE(SUM(a.status = 'holiday'), 0) AS other,
+                   COUNT(a.id)                            AS marked,
+                   COALESCE(SUM(
+                       CASE WHEN a.check_in IS NOT NULL AND a.check_out IS NOT NULL
+                                 AND a.check_out >= a.check_in
+                            THEN TIME_TO_SEC(TIMEDIFF(a.check_out, a.check_in)) ELSE 0 END
+                   ), 0) AS secs
+            FROM students s
+            LEFT JOIN attendance a
+                   ON a.student_id = s.id AND a.attendance_date BETWEEN :f AND :t
+            WHERE s.grade = :g
+              AND COALESCE(s.is_active, 1) = 1
+              AND COALESCE(s.enrollment_status, 'enrolled') IN ('enrolled','promoted')
+            GROUP BY s.id, s.first_name, s.last_name
+            ORDER BY s.first_name, s.last_name
+        ");
+        $s->execute([':f' => $from, ':t' => $to, ':g' => DAYCARE_GRADE]);
+        return array_map(function (array $r): array {
+            $r['name'] = trim((string)$r['first_name'] . ' ' . (string)$r['last_name']);
+            return $r;
+        }, $s->fetchAll());
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Per-staff attendance totals for the range. */
+function daycare_staff_summary(string $from, string $to): array
+{
+    try {
+        $s = db()->prepare("
+            SELECT u.id, u.name, u.role,
+                   COALESCE(SUM(sa.status = 'present'), 0) AS present,
+                   COALESCE(SUM(sa.status = 'late'),    0) AS late,
+                   COALESCE(SUM(sa.status = 'absent'),  0) AS absent,
+                   COALESCE(SUM(sa.status = 'leave'),   0) AS on_leave,
+                   COALESCE(SUM(sa.status IN ('holiday','wfh')), 0) AS other,
+                   COUNT(sa.id)                            AS marked,
+                   COALESCE(SUM(
+                       CASE WHEN sa.check_in IS NOT NULL AND sa.check_out IS NOT NULL
+                                 AND sa.check_out >= sa.check_in
+                            THEN TIME_TO_SEC(TIMEDIFF(sa.check_out, sa.check_in)) ELSE 0 END
+                   ), 0) AS secs
+            FROM users u
+            LEFT JOIN staff_attendance sa
+                   ON sa.user_id = u.id AND sa.att_date BETWEEN :f AND :t
+            WHERE u.active = 1
+              AND (u.role IN ('admin','teacher','non_teaching') OR FIND_IN_SET('staff', u.modules) > 0)
+            GROUP BY u.id, u.name, u.role
+            ORDER BY u.name
+        ");
+        $s->execute([':f' => $from, ':t' => $to]);
+        return $s->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Seconds → '7h 30m', or '—' when nothing was clocked. */
+function daycare_hours(int $secs): string
+{
+    if ($secs <= 0) return '—';
+    $h = intdiv($secs, 3600);
+    $m = intdiv($secs % 3600, 60);
+    return $h > 0 ? ($m > 0 ? "{$h}h {$m}m" : "{$h}h") : "{$m}m";
+}
+
 /** Counts for the header line: how many are in, and how many have left. */
 function daycare_tally(array $rows, array $marks, string $idKey): array
 {

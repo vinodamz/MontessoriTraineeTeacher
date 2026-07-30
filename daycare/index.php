@@ -182,6 +182,7 @@ require __DIR__ . '/../includes/header.php';
         <?php if (!$isToday): ?>
             <a class="btn btn-ghost" href="/daycare/index.php">Back to today</a>
         <?php endif; ?>
+        <a class="btn" href="/daycare/summary.php">Summary</a>
     </div>
 </div>
 
