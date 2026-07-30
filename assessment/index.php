@@ -18,14 +18,14 @@ if ($user['role'] === 'admin') {
         FROM students s
         JOIN users t ON t.id = s.teacher_id
         WHERE $activeWhere
-        ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
+        ORDER BY " . grade_sql_order('s.grade') . ", s.first_name
     ")->fetchAll();
 } else {
     $stmt = db()->prepare("
         SELECT s.id, s.first_name, s.last_name, s.grade, s.teacher_id, s.is_active, s.enrollment_status
         FROM students s
         WHERE s.teacher_id = :tid AND $activeWhere
-        ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
+        ORDER BY " . grade_sql_order('s.grade') . ", s.first_name
     ");
     $stmt->execute([':tid' => $user['id']]);
     $students = $stmt->fetchAll();

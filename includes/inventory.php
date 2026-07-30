@@ -16,9 +16,9 @@ declare(strict_types=1);
 function inventory_category_map(): array
 {
     return [
-        'Uniform'             => ['Playgroup', 'Nursery', 'LKG', 'UKG'],
-        'School Bag'          => ['Playgroup', 'Nursery', 'LKG', 'UKG'],
-        'Textbook'            => ['Playgroup', 'Nursery', 'LKG', 'UKG'],
+        'Uniform'             => grade_names(),
+        'School Bag'          => grade_names(),
+        'Textbook'            => grade_names(),
         'Montessori Material' => ['Practical Life', 'Sensorial', 'Language', 'Math', 'Culture'],
         'Toys'                => ['Indoor', 'Outdoor', 'STEM'],
         'Books'               => ['Story Books', 'Teacher Resources'],

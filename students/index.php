@@ -24,7 +24,7 @@ $gradeIn    = $_GET['grade'] ?? '';
 $teacherIn  = isset($_GET['teacher_id']) ? (int)$_GET['teacher_id'] : 0;
 $activeIn   = $_GET['active'] ?? 'active';  // 'active' | 'inactive' | 'all'
 
-$validGrades   = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$validGrades   = grade_names();
 $gradeFilter   = in_array($gradeIn, $validGrades, true) ? $gradeIn : '';
 
 // Academic year + enrollment-status filters. Default to the LATEST year
@@ -98,7 +98,7 @@ $sql = "
     FROM students s
     LEFT JOIN users u ON u.id = s.teacher_id
     " . ($where ? 'WHERE ' . implode(' AND ', $where) : '') . "
-    ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'),
+    ORDER BY " . grade_sql_order('s.grade') . ",
              s.first_name, s.last_name
 ";
 $stmt = db()->prepare($sql);
@@ -114,7 +114,7 @@ $teachers = db()->query("
 ")->fetchAll();
 
 // Grade counts for the summary chips.
-$gradeCounts = ['Playgroup' => 0, 'Nursery' => 0, 'LKG' => 0, 'UKG' => 0];
+$gradeCounts = grade_buckets(0);
 foreach ($students as $s) {
     $gradeCounts[$s['grade']] = ($gradeCounts[$s['grade']] ?? 0) + 1;
 }

@@ -49,7 +49,7 @@ $stmt = db()->prepare("
     WHERE COALESCE(s.is_active, 1) = 1
       AND COALESCE(s.enrollment_status, 'enrolled') = 'enrolled'
       AND s.teacher_id = :uid
-    ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name, s.last_name
+    ORDER BY " . grade_sql_order('s.grade') . ", s.first_name, s.last_name
 ");
 $stmt->execute([':d' => $today, ':uid' => (int)$user['id']]);
 $myClass = $stmt->fetchAll();

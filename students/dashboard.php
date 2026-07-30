@@ -27,7 +27,7 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
     exit;
 }
 
-$GRADES = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$GRADES = grade_names();
 
 // Month window for the joiners chart: 3 / 6 / 12 (default 6).
 $months = (int)($_GET['months'] ?? 6);

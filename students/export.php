@@ -70,7 +70,7 @@ $activeIn  = $_GET['active'] ?? 'all';
 $yearIn    = $_GET['year']   ?? 'all';
 $statusIn  = $_GET['status'] ?? 'all';
 
-$validGrades = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$validGrades = grade_names();
 $gradeFilter = in_array($gradeIn, $validGrades, true) ? $gradeIn : '';
 
 $where  = [];

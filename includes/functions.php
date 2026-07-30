@@ -1,6 +1,11 @@
 <?php
 // View + domain helpers — shared across modules.
 
+// Grade levels are config-driven (grade_levels table, managed at /grades.php).
+// Required here rather than page by page so every page that already pulls in
+// functions.php gets grade_names() / grade_label() / grade_sql_order() for free.
+require_once __DIR__ . '/grades.php';
+
 function e(?string $s): string
 {
     return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -630,16 +635,9 @@ function academic_years_in_use(): array
     return $years;
 }
 
-/** Promote helper — Playgroup→Nursery→LKG→UKG. UKG returns null (graduates). */
-function next_grade(string $grade): ?string
-{
-    return [
-        'Playgroup' => 'Nursery',
-        'Nursery'   => 'LKG',
-        'LKG'       => 'UKG',
-        'UKG'       => null,
-    ][$grade] ?? null;
-}
+// next_grade() now lives in includes/grades.php — the promotion chain is the
+// grade_levels.promotes_to column rather than a hard-coded ladder, so admins
+// control it from /grades.php.
 
 /**
  * Classroom sections. Free-form VARCHAR in the DB; this constant is the

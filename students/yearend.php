@@ -31,7 +31,7 @@ const YEAREND_ACTIONS = [
     'on_break'   => 'On break',
 ];
 
-$VALID_GRADES = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES = grade_names();
 
 $fromYear = $_REQUEST['from'] ?? current_academic_year();
 $toYear   = next_academic_year($fromYear);
@@ -165,13 +165,13 @@ $stmt = db()->prepare("
     LEFT JOIN users u ON u.id = s.teacher_id
     WHERE s.academic_year = :ay
       AND COALESCE(s.enrollment_status, 'enrolled') = 'enrolled'
-    ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name, s.last_name
+    ORDER BY " . grade_sql_order('s.grade') . ", s.first_name, s.last_name
 ");
 $stmt->execute([':ay' => $fromYear]);
 $students = $stmt->fetchAll();
 
 // Group by grade.
-$byGrade = ['Playgroup' => [], 'Nursery' => [], 'LKG' => [], 'UKG' => []];
+$byGrade = grade_buckets([]);
 foreach ($students as $s) {
     $byGrade[$s['grade']][] = $s;
 }

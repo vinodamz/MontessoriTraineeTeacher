@@ -29,7 +29,7 @@ require_once __DIR__ . '/../includes/student_form.php';
 
 $user = require_admin();
 
-$validGrades = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$validGrades = grade_names();
 
 // Teacher pool for the dropdown — admins + montessori-module teachers.
 $teachers = db()->query("

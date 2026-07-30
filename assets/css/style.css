@@ -449,11 +449,16 @@ body.landing { background: var(--bg); }
 .status-old  { background: #f59e0b; }
 .status-none { background: #cbd2da; }
 
-/* grade badges */
+/* Grade badges. grade_badge_class() builds ".grade grade-<slug>" from the
+   configured name, so grades added at /grades.php get a class automatically.
+   The base rule carries a neutral background, which means an unstyled new
+   grade still renders as a proper pill instead of bare text. */
 .grade {
     display: inline-block; padding: .15rem .55rem; border-radius: 999px;
     font-size: .75rem; font-weight: 600; letter-spacing: .03em;
+    background: #eef0f3; color: #4a5361;
 }
+.grade-daycare   { background: #f3ecff; color: #5b3a9c; }
 .grade-playgroup { background: #fff1e8; color: #b25316; }
 .grade-nursery   { background: #e8f4ff; color: #1c5b9c; }
 .grade-lkg       { background: #ecf7e8; color: #2d6526; }
