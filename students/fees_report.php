@@ -21,7 +21,7 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
     exit;
 }
 
-$VALID_GRADES = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES = grade_names();
 $gradeFilter  = $_GET['grade']  ?? '';
 $statusFilter = $_GET['status'] ?? 'all';
 if (!in_array($gradeFilter, $VALID_GRADES, true)) $gradeFilter = '';
@@ -48,7 +48,7 @@ $sql = "
     LEFT JOIN fee_invoices fi ON fi.student_id = s.id
     WHERE " . implode(' AND ', $where) . "
     GROUP BY s.id
-    ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name, s.last_name
+    ORDER BY " . grade_sql_order('s.grade') . ", s.first_name, s.last_name
 ";
 $stmt = db()->prepare($sql);
 $stmt->execute($params);

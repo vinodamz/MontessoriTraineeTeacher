@@ -21,7 +21,7 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students') && !user_ha
     exit;
 }
 
-$VALID_GRADES   = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES   = grade_names();
 $VALID_STATUSES = ['present', 'absent', 'late', 'excused', 'holiday'];
 
 // ---------- POST: save day's marks ---------------------------------------
@@ -102,7 +102,7 @@ $stmt = db()->prepare("
     LEFT JOIN users u      ON u.id = s.teacher_id
     LEFT JOIN attendance a ON a.student_id = s.id AND a.attendance_date = :d
     WHERE " . implode(' AND ', $where) . "
-    ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name, s.last_name
+    ORDER BY " . grade_sql_order('s.grade') . ", s.first_name, s.last_name
 ");
 $params[':d'] = $date;
 $stmt->execute($params);

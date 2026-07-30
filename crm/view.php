@@ -215,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($_POST['kid_enroll'][$i]))                continue;
             $grade   = $_POST['kid_grade'][$i]   ?? '';
             $teacher = (int)($_POST['kid_teacher'][$i] ?? 0);
-            if (!in_array($grade, ['Playgroup','Nursery','LKG','UKG'], true) || !$teacher) {
+            if (!in_array($grade, grade_names(), true) || !$teacher) {
                 flash_set('error', 'Each enrolling child needs a grade and a teacher.');
                 redirect('/crm/view.php?id=' . $id . '#enroll');
             }
@@ -697,7 +697,7 @@ if ($appointments): ?>
                         <td><?= e(trim($k['first_name'] . ' ' . ($k['last_name'] ?? ''))) ?></td>
                         <td>
                             <select name="kid_grade[<?= $i ?>]">
-                                <?php foreach (['Playgroup','Nursery','LKG','UKG'] as $g): ?>
+                                <?php foreach (grade_names() as $g): ?>
                                     <option value="<?= $g ?>" <?= ($k['target_grade'] ?? '') === $g ? 'selected' : '' ?>><?= $g ?></option>
                                 <?php endforeach; ?>
                             </select>

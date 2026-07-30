@@ -25,7 +25,7 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
     exit;
 }
 
-$VALID_GRADES  = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES  = grade_names();
 $VALID_GENDERS = ['Male', 'Female', 'Other'];
 
 // Teacher dropdown options (montessori-module users + admins).
@@ -184,7 +184,7 @@ $sql = "
            s.home_address, s.permanent_address, s.photo_path
     FROM students s
     " . ($where ? 'WHERE ' . implode(' AND ', $where) : '') . "
-    ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name, s.last_name
+    ORDER BY " . grade_sql_order('s.grade') . ", s.first_name, s.last_name
 ";
 $stmt = db()->prepare($sql);
 $stmt->execute($params);

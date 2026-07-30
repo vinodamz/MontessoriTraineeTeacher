@@ -61,7 +61,7 @@ $user = require_admin();
 const IMPORT_MAX_BYTES = 4 * 1024 * 1024;   // 4 MB
 const IMPORT_MAX_ROWS  = 2000;              // sanity ceiling
 
-$VALID_GRADES     = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES     = grade_names();
 $VALID_GENDERS    = ['Male', 'Female', 'Other'];
 $VALID_STATUSES   = ['enrolled', 'promoted', 'withdrawn', 'graduated', 'on_break'];
 $VALID_ADMISSIONS = array_keys(STUDENT_ADMISSION_TYPES);   // ['new', 'old']

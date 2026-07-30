@@ -106,6 +106,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php endif; ?>
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="/feedback/index.php">Feedback</a>
+                <a href="/grades.php">Grades</a>
                 <a href="/admin.php">Admin</a>
             <?php endif; ?>
             <?php endif; /* teacher vs full nav */ ?>

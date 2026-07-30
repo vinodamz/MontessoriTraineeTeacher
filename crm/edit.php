@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fn = trim((string)$fn);
             if ($fn === '') continue;
             $grade = $kidGrade[$i] ?? '';
-            if (!in_array($grade, ['Playgroup','Nursery','LKG','UKG'], true)) $grade = null;
+            if (!in_array($grade, grade_names(), true)) $grade = null;
             $gender = $kidGender[$i] ?? '';
             if (!in_array($gender, ['Male','Female','Other'], true)) $gender = null;
             $insKid->execute([
@@ -367,7 +367,7 @@ require __DIR__ . '/../includes/header.php';
                 <div class="field"><label>Target grade</label>
                     <select name="kid_grade[]">
                         <option value="">—</option>
-                        <?php foreach (['Playgroup','Nursery','LKG','UKG'] as $g): ?>
+                        <?php foreach (grade_names() as $g): ?>
                             <option value="<?= $g ?>" <?= ($k['target_grade'] ?? '') === $g ? 'selected' : '' ?>><?= $g ?></option>
                         <?php endforeach; ?>
                     </select>

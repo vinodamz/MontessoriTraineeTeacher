@@ -230,10 +230,14 @@ if ($logoPath && is_file($logoPath)) {
     <div class="section">
         <p class="section-title"><span class="num">1.</span> Admission For</p>
         <div class="checkbox-row">
-            <label><?= pdf_check($grade === 'Playgroup') ?> Playgroup</label>
-            <label><?= pdf_check($grade === 'Nursery')   ?> Nursery</label>
-            <label><?= pdf_check($grade === 'LKG')       ?> Jr. KG (LKG)</label>
-            <label><?= pdf_check($grade === 'UKG')       ?> Sr. KG (UKG)</label>
+            <?php
+            // Driven by the configured grade list so a new grade appears on the
+            // printed form too. The two KG rows keep the traditional wording the
+            // paper form has always used; anything else uses its configured label.
+            $printLabels = ['LKG' => 'Jr. KG (LKG)', 'UKG' => 'Sr. KG (UKG)'];
+            foreach (grade_names() as $g): ?>
+                <label><?= pdf_check($grade === $g) ?> <?= e($printLabels[$g] ?? grade_label($g)) ?></label>
+            <?php endforeach; ?>
         </div>
     </div>
 

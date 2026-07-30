@@ -148,7 +148,7 @@ CREATE TABLE students (
     consent_date             DATE         NULL,
     transport                ENUM('own','cab','bus','walk') NULL,
     is_active                TINYINT(1)   NOT NULL DEFAULT 1,
-    grade                    ENUM('Playgroup','Nursery','LKG','UKG') NOT NULL,
+    grade                    VARCHAR(40)  NOT NULL,  -- see grade_levels (migrate_050)
     -- Classroom section (A/B/C/...). Free-form so the list can grow by
     -- editing STUDENT_SECTIONS in includes/functions.php.
     section                  VARCHAR(20)  NULL,
@@ -303,7 +303,7 @@ CREATE TABLE rating_config (
 
 CREATE TABLE skill_indicators (
     id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    grade          ENUM('Playgroup','Nursery','LKG','UKG') NOT NULL,
+    grade          VARCHAR(40)  NOT NULL,  -- see grade_levels (migrate_050)
     category       VARCHAR(60)  NOT NULL,
     indicator_text TEXT         NOT NULL,
     display_order  INT          NOT NULL DEFAULT 0,
@@ -628,7 +628,7 @@ CREATE TABLE inquiry_children (
     last_name           VARCHAR(120) NULL,
     dob                 DATE NULL,
     gender              ENUM('Male','Female','Other') NULL,
-    target_grade        ENUM('Playgroup','Nursery','LKG','UKG') NULL,
+    target_grade        VARCHAR(40)  NULL,  -- see grade_levels (migrate_050)
     notes               TEXT NULL,
     promoted_student_id INT UNSIGNED NULL,
     PRIMARY KEY (id),

@@ -19,7 +19,7 @@ $VALID_TABS = ['teachers', 'students', 'indicators', 'rating'];
 $tab = $_GET['tab'] ?? 'teachers';
 if (!in_array($tab, $VALID_TABS, true)) $tab = 'teachers';
 
-$GRADES = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$GRADES = grade_names();
 
 // ---------- POST handlers --------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -219,7 +219,7 @@ if ($tab === 'students') {
         SELECT s.*, t.name AS teacher_name
         FROM students s
         JOIN users t ON t.id = s.teacher_id
-        ORDER BY FIELD(s.grade,'Playgroup','Nursery','LKG','UKG'), s.first_name
+        ORDER BY " . grade_sql_order('s.grade') . ", s.first_name
     ")->fetchAll();
 }
 
@@ -234,7 +234,7 @@ if ($tab === 'indicators') {
         SELECT id, grade, category, indicator_text, display_order, is_active
         FROM skill_indicators
         " . ($filterGrade ? "WHERE grade = :g " : "") . "
-        ORDER BY FIELD(grade,'Playgroup','Nursery','LKG','UKG'), category, display_order, id
+        ORDER BY " . grade_sql_order('grade') . ", category, display_order, id
     ";
     $stmt = db()->prepare($sql);
     if ($filterGrade) $stmt->bindValue(':g', $filterGrade);

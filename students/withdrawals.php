@@ -22,7 +22,7 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
     exit;
 }
 
-$VALID_GRADES = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES = grade_names();
 $STATUSES_LEFT = ['withdrawn', 'graduated', 'on_break'];
 
 $availableYears = academic_years_in_use();

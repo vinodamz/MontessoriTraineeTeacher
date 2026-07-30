@@ -20,7 +20,7 @@ if ($user['role'] !== 'admin' && !user_has_module($user, 'students')) {
     exit;
 }
 
-$VALID_GRADES   = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
+$VALID_GRADES   = grade_names();
 $VALID_GENDERS  = ['Male', 'Female', 'Other'];
 $VALID_RELATION = ['father', 'mother', 'guardian', 'other'];
 

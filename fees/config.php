@@ -21,6 +21,7 @@ $fields = [
     ['key' => 'monthly_billing',   'label' => 'Monthly Billing Add-on',          'default' => 300],
     ['key' => 'weekly_rate',       'label' => 'School Fee (weekly rate)',         'default' => 1975],
     ['key' => 'quarterly_rate',    'label' => 'School Fee (quarterly rate)',      'default' => 22800],
+    ['key' => 'daycare_monthly',   'label' => 'Daycare (monthly) — 0 disables the Daycare fee tier', 'default' => 0],
     ['key' => 'care_rest',         'label' => 'Rest Care (monthly add-on)',      'default' => 1500],
     ['key' => 'care_enrichment',   'label' => 'Enrichment Care (monthly)',       'default' => 3800],
     ['key' => 'care_fullday',      'label' => 'Full Day Care (monthly)',         'default' => 5500],

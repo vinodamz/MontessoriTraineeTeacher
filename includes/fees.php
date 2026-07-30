@@ -47,6 +47,13 @@ function fee_structure(): array
         'lkg'       => ['label' => 'LKG (3.5-4.5 yrs)',       'ukg' => false],
         'ukg'       => ['label' => 'UKG (4.5-5.5 yrs)',       'ukg' => true],
     ];
+    // Daycare bills at its own monthly rate. Left at 0 until the school sets it
+    // at /fees/config.php — a made-up figure here would quietly produce wrong
+    // invoices, so the tier only becomes usable once a real amount is entered.
+    $daycareMonthly = fee_int('daycare_monthly', 0);
+    if ($daycareMonthly > 0) {
+        $grades = ['daycare' => ['label' => 'Daycare', 'ukg' => false]] + $grades;
+    }
 
     $paymentDueDay = fee_int('payment_due_day', 5);
     $academicStart = fee_setting('academic_start_month', '6'); // June
@@ -55,7 +62,7 @@ function fee_structure(): array
     return compact(
         'admission', 'schoolFeeMonthly', 'monthlyBilling', 'weeklyRate',
         'quarterlyRate', 'ukgReadiness', 'lateFee', 'graceDays',
-        'carePlans', 'grades', 'paymentDueDay', 'academicStart', 'academicMonths'
+        'carePlans', 'grades', 'daycareMonthly', 'paymentDueDay', 'academicStart', 'academicMonths'
     );
 }
 
@@ -108,12 +115,21 @@ function fee_student_lookup(int $studentId): ?array
     }
 }
 
-/** Map student grade (Playgroup / Nursery / LKG / UKG) to fees grade code. */
+/**
+ * Map a student's grade to its fees grade code (the lower-cased name).
+ *
+ * Driven by the configured grade list rather than a fixed set, so a grade added
+ * at /grades.php resolves here too. Returns '' when the grade has no matching
+ * tier in fee_structure() — callers already treat '' as "no fee tier", which is
+ * how a newly added grade behaves until its amounts are filled in.
+ */
 function fee_grade_from_student(string $grade): string
 {
     $g = strtolower(trim($grade));
-    if (in_array($g, ['playgroup', 'nursery', 'lkg', 'ukg'], true)) return $g;
-    return '';
+    if ($g === '') return '';
+    $known = array_map(fn($n) => strtolower($n), grade_names(false));
+    if (!in_array($g, $known, true)) return '';
+    return isset(fee_structure()['grades'][$g]) ? $g : '';
 }
 
 function fee_inr(int $v): string
