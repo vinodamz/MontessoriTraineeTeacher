@@ -1683,3 +1683,47 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .dc-table tr.dc-present .dc-name { box-shadow: inset 3px 0 0 #45a049; }
 .dc-table tr.dc-left td { background: #f7f7f8; color: #6b6b6b; }
 .dc-datepick { display: flex; gap: .4rem; align-items: center; margin: 0; }
+/* =========================================================
+   Parent surveys — the shareable link, the responses grid
+   (built to read like a spreadsheet) and the tallies.
+   ========================================================= */
+.inline-form { display: inline-flex; gap: .35rem; align-items: center; margin: 0; }
+.sv-linkrow { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin: .2rem 0 .4rem; }
+.sv-linkbox { flex: 1 1 22rem; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size: .82rem; padding: .5rem .6rem; border: 1px solid #dfd3da; border-radius: 6px;
+              background: #fcfaf7; }
+
+/* Responses grid. Fifty columns is normal here, so the table scrolls
+   horizontally inside its own box and the identifying columns are pinned —
+   scrolling right must never leave you looking at anonymous cells. */
+.sv-grid-wrap { overflow-x: auto; max-height: 72vh; overflow-y: auto; }
+.sv-grid { border-collapse: separate; border-spacing: 0; }
+.sv-grid th, .sv-grid td { white-space: nowrap; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; }
+.sv-grid thead th { position: sticky; top: 0; z-index: 3; background: #faf4ea; }
+.sv-grid .sv-stick { position: sticky; background: #fff; z-index: 2; }
+.sv-grid thead .sv-stick { z-index: 4; background: #faf4ea; }
+.sv-grid .sv-stick-1 { left: 0;      min-width: 2.6rem; }
+.sv-grid .sv-stick-2 { left: 2.6rem; min-width: 9rem; }
+.sv-grid .sv-stick-3 { left: 11.6rem; min-width: 9rem; box-shadow: 2px 0 0 #ece3d5; }
+@media (max-width: 720px) {
+    /* Pinning three columns on a phone leaves no room for the answers. */
+    .sv-grid .sv-stick { position: static; }
+    .sv-grid .sv-stick-3 { box-shadow: none; }
+}
+
+/* Tallies. */
+.sv-tally { padding: .8rem 0; border-top: 1px solid #f1e9dc; }
+.sv-tally:first-of-type { border-top: 0; padding-top: .2rem; }
+.sv-tally-q { margin: 0 0 .5rem; font-weight: 600; }
+.sv-bar-row { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr auto;
+              gap: .6rem; align-items: center; padding: .12rem 0; font-size: .9rem; }
+.sv-bar-label { color: #4a4a4a; }
+.sv-bar-track { background: #f3ece0; border-radius: 4px; height: .7rem; overflow: hidden; }
+.sv-bar-fill { display: block; height: 100%; background: #e91e63; border-radius: 4px; min-width: 0; }
+.sv-bar-n { font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
+.sv-quotes { margin: 0; padding-left: 1.1rem; }
+.sv-quotes li { margin-bottom: .45rem; }
+@media (max-width: 620px) {
+    .sv-bar-row { grid-template-columns: 1fr auto; }
+    .sv-bar-track { grid-column: 1 / -1; }
+}
