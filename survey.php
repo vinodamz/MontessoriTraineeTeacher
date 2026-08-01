@@ -345,7 +345,8 @@ if (!$survey || !$spec) {
         <p class="sv-foot">
             Only questions marked <span class="sv-req">*</span> are required —
             answer as much or as little as you like.<br>
-            <span id="sv-foot-save">Your answers are kept on this device as you type.</span>
+            <span id="sv-foot-save">Once you've filled in your name, your child's name and their
+            class, everything you type is kept on this device.</span>
         </p>
     </form>
     <div class="sv-saved" id="sv-saved" role="status" aria-live="polite">Saved</div>
@@ -417,6 +418,31 @@ if (!$survey || !$spec) {
         return restored;
     }
 
+    // Autosave waits for the parent to identify themselves. A draft belonging to
+    // nobody is no use to the school and no comfort to the parent, and on a
+    // shared device — the tablet passed around a hall — an anonymous half-draft
+    // is the one most likely to be restored into a stranger's form.
+    var BASICS = ['parent_name', 'child_name', 'class'];
+
+    function valueOf(name) {
+        var field = form.elements[name];
+        if (!field) return '';
+        if (field.length !== undefined && !field.tagName) {   // radio group
+            for (var i = 0; i < field.length; i++) {
+                if (field[i].checked) return field[i].value;
+            }
+            return '';
+        }
+        return (field.value || '').replace(/^\s+|\s+$/g, '');
+    }
+
+    function hasBasics() {
+        for (var i = 0; i < BASICS.length; i++) {
+            if (valueOf(BASICS[i]) === '') return false;
+        }
+        return true;
+    }
+
     var badge = document.getElementById('sv-saved');
     var hideTimer, saveTimer;
     function flash(text) {
@@ -427,12 +453,26 @@ if (!$survey || !$spec) {
         hideTimer = setTimeout(function () { badge.classList.remove('on'); }, 1400);
     }
 
+    function foot(text) {
+        var el = document.getElementById('sv-foot-save');
+        if (el) el.textContent = text;
+    }
+
+    // Latched: once saving has begun it keeps going even if a name is later
+    // cleared. Freezing a draft mid-form because someone is re-typing their
+    // surname would quietly strand everything they wrote afterwards.
+    var started = false;
+
     function save() {
+        if (!started) {
+            if (!hasBasics()) return;
+            started = true;
+            foot('Saved on this device as you type — you can stop and come back.');
+        }
         var ok = write({ at: new Date().getTime(), v: collect() });
         flash(ok ? 'Saved' : 'Could not save on this device');
         if (!ok) {                                        // say so once, then stop nagging
-            var foot = document.getElementById('sv-foot-save');
-            if (foot) foot.textContent = 'This browser is blocking local storage, so answers are not being kept — please finish in one go.';
+            foot('This browser is blocking local storage, so answers are not being kept — please finish in one go.');
         }
     }
 
@@ -444,6 +484,10 @@ if (!$survey || !$spec) {
             if (apply(saved.v) > 0) {
                 var note = document.getElementById('sv-restored');
                 if (note) note.hidden = false;
+                // A stored draft only exists because the basics were filled in
+                // once already, so saving is live again from the first keystroke.
+                started = true;
+                foot('Saved on this device as you type — you can stop and come back.');
             }
         } else if (saved) {
             drop();                                        // stale
@@ -455,6 +499,9 @@ if (!$survey || !$spec) {
         discard.addEventListener('click', function () {
             drop();
             form.reset();
+            started = false;                     // back to waiting for the basics
+            foot("Once you've filled in your name, your child's name and their class, "
+                 + 'everything you type is kept on this device.');
             var note = document.getElementById('sv-restored');
             if (note) note.hidden = true;
         });
