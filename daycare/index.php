@@ -42,7 +42,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $t = $kind === 'staff'
                 ? daycare_mark_staff($id, $date, $which, (int)$user['id'])
                 : daycare_mark_child($id, $date, $which, (int)$user['id']);
-            flash_set('ok', ($which === 'in' ? 'Checked in at ' : 'Checked out at ') . daycare_time($t) . '.');
+            $msg = ($which === 'in' ? 'Checked in at ' : 'Checked out at ') . daycare_time($t) . '.';
+            // Say so when the check-in landed past the person's shift start —
+            // the status changes silently otherwise.
+            if ($kind === 'staff' && $which === 'in') {
+                $start = staff_shift($id)['start'];
+                if (staff_arrival_status($start, $t) === 'late') {
+                    $msg .= ' Marked late (due in at ' . staff_time_label($start) . ').';
+                }
+            }
+            flash_set('ok', $msg);
         } elseif ($op === 'undo') {
             if (daycare_undo($kind, $id, $date, $which)) {
                 flash_set('ok', 'Time cleared.');
@@ -61,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $children    = daycare_children();
 $staff       = daycare_staff();
+$shiftMap    = staff_shift_map();
 $childMarks  = daycare_child_attendance($date);
 $staffMarks  = daycare_staff_attendance($date);
 $childTally  = daycare_tally($children, $childMarks, 'id');
@@ -70,8 +80,9 @@ $isToday     = $date === $today;
 /**
  * One attendance row: name, in, out, comment, actions.
  * $kind is 'child' or 'staff'; $mark is that row's stored attendance or null.
+ * $late marks the check-in time as late (staff only — see staff_arrival_status).
  */
-function daycare_row(string $kind, int $id, string $name, ?array $mark, string $date, bool $isToday, string $sub = ''): void
+function daycare_row(string $kind, int $id, string $name, ?array $mark, string $date, bool $isToday, string $sub = '', bool $late = false): void
 {
     $in   = daycare_time($mark['check_in']  ?? null);
     $out  = daycare_time($mark['check_out'] ?? null);
@@ -97,6 +108,7 @@ function daycare_row(string $kind, int $id, string $name, ?array $mark, string $
                 </form>
             <?php else: ?>
                 <span class="dc-time"><?= e($in) ?></span>
+                <?php if ($late): ?><span class="pill dc-late">Late</span><?php endif; ?>
                 <?php if ($isToday): ?>
                     <form method="post" class="dc-act" onsubmit="return confirm('Clear the check-in time for <?= e(addslashes($name)) ?>?');">
                         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
@@ -182,6 +194,7 @@ require __DIR__ . '/../includes/header.php';
         <?php if (!$isToday): ?>
             <a class="btn btn-ghost" href="/daycare/index.php">Back to today</a>
         <?php endif; ?>
+        <a class="btn" href="/daycare/summary.php">Summary</a>
     </div>
 </div>
 
@@ -230,13 +243,27 @@ require __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                     <?php foreach ($staff as $st):
-                        $uid = (int)$st['id'];
-                        daycare_row('staff', $uid, (string)$st['name'], $staffMarks[$uid] ?? null, $date, $isToday,
-                                    function_exists('role_label') ? role_label((string)($st['role'] ?? '')) : '');
+                        $uid   = (int)$st['id'];
+                        $mark  = $staffMarks[$uid] ?? null;
+                        $shift = $shiftMap[$uid] ?? ['start' => null, 'end' => null];
+                        // The shift sits under the name so whoever is marking
+                        // can see at a glance who was due in when.
+                        $sub   = function_exists('role_label') ? role_label((string)($st['role'] ?? '')) : '';
+                        $label = staff_shift_label($shift);
+                        if ($label !== '') $sub = trim($sub . ' · ' . $label, ' ·');
+                        daycare_row('staff', $uid, (string)$st['name'], $mark, $date, $isToday, $sub,
+                                    ($mark['status'] ?? '') === 'late');
                     endforeach; ?>
                 </tbody>
             </table>
         </div>
+        <?php if ($shiftMap): ?>
+            <p class="muted small">
+                A check-in later than the staff member's own start time — plus
+                <?= (int)staff_late_grace_minutes() ?> minutes' grace — is recorded as
+                <strong>late</strong>. Staff with no shift set are never marked late.
+            </p>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 

@@ -1683,7 +1683,6 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .dc-table tr.dc-present .dc-name { box-shadow: inset 3px 0 0 #45a049; }
 .dc-table tr.dc-left td { background: #f7f7f8; color: #6b6b6b; }
 .dc-datepick { display: flex; gap: .4rem; align-items: center; margin: 0; }
-/* =========================================================
    Parent surveys — the shareable link, the responses grid
    (built to read like a spreadsheet) and the tallies.
    ========================================================= */
@@ -1727,3 +1726,14 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
     .sv-bar-row { grid-template-columns: 1fr auto; }
     .sv-bar-track { grid-column: 1 / -1; }
 }
+/* Late arrival, against that staff member's own shift start + grace. */
+.dc-late { background: #fdf0e6; color: #a15c1c; border-color: #f0d2b4;
+           font-size: .7rem; padding: .1rem .4rem; margin-left: .25rem; }
+/* Daycare summary: dense numeric table, absences called out. */
+.dc-sum td, .dc-sum th { text-align: center; }
+.dc-sum td:first-child, .dc-sum th:first-child { text-align: left; }
+.dc-sum td { font-variant-numeric: tabular-nums; }
+.dc-bad { color: #b3402c; font-weight: 700; }
+.dc-sum tr.dc-total td { background: #faf4ea; border-top: 2px solid #e8dcc8; }
+
+/* ==================================================
