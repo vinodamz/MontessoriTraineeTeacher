@@ -26,6 +26,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mcp.php';
+require_once __DIR__ . '/includes/oauth.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -131,27 +132,59 @@ function mcp_presented_token(): string
     return (string)($_GET['token'] ?? '');
 }
 
-$tokenRow = null;
+/**
+ * Two ways in, and they are not equivalent.
+ *
+ *   OAuth  — a person signed in with their PIN and consented. The token lives
+ *            an hour, never passes through a human's hands, and the audit log
+ *            can name them. This is the one to prefer.
+ *   Bearer — a long-lived token minted at /mcp_admin.php, for things that
+ *            cannot open a browser: cron, n8n. Kept working deliberately.
+ *
+ * Both arrive as `Authorization: Bearer …`, which is what the OAuth spec
+ * requires, so they are told apart by looking each up in turn.
+ */
+$presented  = mcp_presented_token();
+$tokenId    = null;      // mcp_tokens.id
+$oauthId    = null;      // oauth_tokens.id
+$userId     = null;
+$actor      = null;      // for the WWW-Authenticate hint and error text
+
 try {
-    $tokenRow = mcp_token_check(mcp_presented_token());
+    $oauthRow = oauth_access_token_check($presented);
+    if ($oauthRow !== null) {
+        $oauthId = (int)$oauthRow['id'];
+        $userId  = (int)$oauthRow['user_id'];
+        $actor   = (string)$oauthRow['user_name'];
+    } else {
+        $tokenRow = mcp_token_check($presented);
+        if ($tokenRow !== null) {
+            $tokenId = (int)$tokenRow['id'];
+            $actor   = (string)$tokenRow['label'];
+        }
+    }
 } catch (PDOException $e) {
-    // The mcp_* tables are not there yet (pre-migration). Treated as "no valid
-    // token" below. Deliberately catches PDOException and nothing wider: a
-    // catch-all here once disguised a plain missing-function fatal as an
-    // authentication failure, which is a miserable thing to debug.
+    // The mcp_* / oauth_* tables are not there yet (pre-migration). Treated as
+    // "no valid credential" below. Deliberately catches PDOException and
+    // nothing wider: a catch-all here once disguised a plain missing-function
+    // fatal as an authentication failure, which is a miserable thing to debug.
 }
 
-if ($tokenRow === null) {
+if ($actor === null) {
+    // RFC 9728: point an unauthenticated client at the metadata that tells it
+    // where to go and log in. This is what turns a 401 into a login prompt in
+    // the client rather than a dead end.
+    $meta = oauth_base_url() . '/.well-known/oauth-protected-resource';
     http_response_code(401);
-    header('WWW-Authenticate: Bearer');
+    header('WWW-Authenticate: Bearer resource_metadata="' . $meta . '"');
     echo json_encode([
         'jsonrpc' => '2.0',
         'id'      => null,
-        'error'   => ['code' => -32001, 'message' => 'Unauthorized — a valid bearer token is required.'],
+        'error'   => ['code' => -32001,
+                      'message' => 'Unauthorized — sign in, or present a valid API token.'],
     ]);
     exit;
 }
-$tokenId = (int)$tokenRow['id'];
 
 // --------------------------------------------------------------------- body
 
@@ -194,7 +227,7 @@ foreach ($messages as $msg) {
                   'error' => ['code' => -32600, 'message' => 'Invalid request.']];
         continue;
     }
-    $resp = mcp_dispatch($msg, $tokenId);
+    $resp = mcp_dispatch($msg, $tokenId, $userId, $oauthId);
     if ($resp !== null) $out[] = $resp;
 }
 
@@ -212,7 +245,7 @@ exit;
  * Handle one JSON-RPC message. Returns the response array, or null when the
  * message was a notification (no `id`) and so must not be answered.
  */
-function mcp_dispatch(array $msg, int $tokenId): ?array
+function mcp_dispatch(array $msg, ?int $tokenId, ?int $userId, ?int $oauthId): ?array
 {
     $method = (string)($msg['method'] ?? '');
     $params = is_array($msg['params'] ?? null) ? $msg['params'] : [];
@@ -266,7 +299,7 @@ function mcp_dispatch(array $msg, int $tokenId): ?array
             $name = (string)($params['name'] ?? '');
             $args = is_array($params['arguments'] ?? null) ? $params['arguments'] : [];
             try {
-                $result = mcp_call_tool($name, $args, $tokenId);
+                $result = mcp_call_tool($name, $args, $tokenId, $userId, $oauthId);
                 return $ok([
                     'content' => [[
                         'type' => 'text',

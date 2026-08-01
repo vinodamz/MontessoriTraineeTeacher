@@ -15,6 +15,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mcp.php';
+require_once __DIR__ . '/includes/oauth.php';
 
 $user = require_admin();
 
@@ -39,6 +40,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mcp_token_revoke((int)($_POST['id'] ?? 0));
             flash_set('ok', 'Token revoked. Any client using it stops working immediately.');
             redirect('/mcp_admin.php');
+        } elseif ($op === 'disconnect') {
+            oauth_session_revoke((int)($_POST['id'] ?? 0));
+            flash_set('ok', 'Disconnected. That client will have to sign in again.');
+            redirect('/mcp_admin.php');
         }
     } catch (Throwable $e) {
         flash_set('error', 'Could not do that: ' . $e->getMessage());
@@ -52,12 +57,21 @@ $freshToken = (string)($_SESSION['mcp_fresh_token'] ?? '');
 unset($_SESSION['mcp_fresh_token']);   // shown once, then gone
 
 $ready = true;
-$tokens = $audit = [];
+$tokens = $audit = $sessions = $clients = [];
 try {
     $tokens = mcp_tokens_all();
     $audit  = mcp_audit_recent(100);
 } catch (Throwable $e) {
     $ready = false;
+}
+// OAuth arrived a migration later than the token table, so an install that is
+// mid-upgrade can have one without the other.
+$oauthReady = true;
+try {
+    $sessions = oauth_sessions();
+    $clients  = oauth_clients_all();
+} catch (Throwable $e) {
+    $oauthReady = false;
 }
 
 $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -107,7 +121,58 @@ require __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <div class="card">
+    <h3 style="margin-top:0;">Connected assistants</h3>
+    <p class="muted small">
+        Sign-ins through OAuth. <strong>This is the way to connect a person</strong> — nothing
+        gets pasted anywhere, the access expires hourly, and everything below is recorded
+        against the name of whoever signed in.
+    </p>
+    <?php if (!$oauthReady): ?>
+        <p class="muted">Not available yet — run <code>migrate_056_oauth.sql</code>.</p>
+    <?php elseif (!$sessions): ?>
+        <p class="muted">
+            Nobody connected yet. Point a client at <code><?= e($baseUrl) ?></code> and it will
+            offer to sign in — no token needed.
+        </p>
+    <?php else: ?>
+    <div style="overflow-x:auto;">
+    <table class="table">
+        <thead><tr>
+            <th>Who</th><th>Application</th><th>Connected</th><th>Last used</th><th>Expires</th><th></th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($sessions as $s): ?>
+            <tr>
+                <td><strong><?= e((string)$s['user_name']) ?></strong></td>
+                <td><?= e((string)($s['client_name'] ?: 'Unknown client')) ?></td>
+                <td class="small"><?= e((string)$s['created_at']) ?></td>
+                <td class="small"><?= $s['last_used_at'] ? e((string)$s['last_used_at'])
+                        : '<span class="muted">never</span>' ?></td>
+                <td class="small"><?= e((string)$s['expires_at']) ?></td>
+                <td>
+                    <form method="post" style="margin:0;"
+                          onsubmit="return confirm('Disconnect this client? They will have to sign in again.');">
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="op" value="disconnect">
+                        <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
+                        <button class="btn btn-ghost" type="submit">Disconnect</button>
+                    </form>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+    <?php endif; ?>
+</div>
+
+<div class="card">
     <h3 style="margin-top:0;">Issue a token</h3>
+    <p class="muted small">
+        <strong>Only needed for something that can't open a browser</strong> — a cron job, an
+        n8n workflow. For a person, use the OAuth sign-in above instead: a token here is a
+        long-lived secret in a file, and it can only ever be labelled, never attributed.
+    </p>
     <p class="muted small">
         Name it after the device or person that will hold it, so revoking the right one
         later is obvious.
@@ -172,13 +237,21 @@ require __DIR__ . '/includes/header.php';
     <div style="overflow-x:auto;">
     <table class="table">
         <thead><tr>
-            <th>When</th><th>Token</th><th>Tool</th><th>Rows</th><th>Result</th><th>Arguments</th>
+            <th>When</th><th>Who</th><th>Tool</th><th>Rows</th><th>Result</th><th>Arguments</th>
         </tr></thead>
         <tbody>
         <?php foreach ($audit as $a): ?>
             <tr>
                 <td class="small"><?= e((string)$a['created_at']) ?></td>
-                <td class="small"><?= e((string)($a['token_label'] ?? '—')) ?></td>
+                <td class="small">
+                    <?php if (!empty($a['user_name'])): ?>
+                        <strong><?= e((string)$a['user_name']) ?></strong>
+                    <?php elseif (!empty($a['token_label'])): ?>
+                        <?= e((string)$a['token_label']) ?> <span class="muted">(token)</span>
+                    <?php else: ?>
+                        <span class="muted">—</span>
+                    <?php endif; ?>
+                </td>
                 <td><code><?= e((string)$a['tool']) ?></code></td>
                 <td><?= (int)$a['rows_affected'] ?></td>
                 <td class="small">

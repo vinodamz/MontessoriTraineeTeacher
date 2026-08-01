@@ -12,7 +12,37 @@ service.
 Claude ──HTTPS + bearer token──▶ /mcp.php ──▶ includes/mcp.php ──▶ database
 ```
 
-## Setting it up
+## Connecting — for a person (OAuth)
+
+**This is the way to connect yourself or a colleague.** Nothing is copied,
+pasted or stored in a file.
+
+```bash
+claude mcp add --transport http mtt https://mtt.thelittlegraduates.in/mcp.php
+```
+
+No token. The client discovers the server, registers itself, opens a browser,
+you sign in with your PIN, and a consent screen tells you exactly what you are
+about to grant. Access lasts an hour and renews silently; the refresh token
+lives in your OS keychain.
+
+Why this and not a token:
+
+| | Bearer token | OAuth |
+|---|---|---|
+| Credential on disk | 64-char string, never expires | refresh token in the keychain |
+| Can be pasted into a chat | **yes** | no — you never see one |
+| Audit log says | a label you typed | **the actual person** |
+| Leaked → | full access until noticed | access dies within the hour |
+
+Only **admins** may consent. A teacher signing in is told so and gets no
+Allow button.
+
+See connected clients — and disconnect any of them — at **/mcp_admin.php**.
+
+## Connecting — for a machine (bearer token)
+
+Only for something that cannot open a browser: cron, n8n, a shell script.
 
 1. Sign in as an admin and go to **/mcp_admin.php** (nav: *MCP API*).
 2. Give the token a label naming the device that will hold it, and create it.
@@ -25,7 +55,47 @@ claude mcp add --transport http mtt https://mtt.thelittlegraduates.in/mcp.php \
   --header "Authorization: Bearer <token>"
 ```
 
-Revoke a token from the same page. Revocation is immediate.
+Revoke from the same page. Revocation is immediate.
+
+> A bearer token is as powerful as the admin password and never expires. If one
+> is ever pasted somewhere it shouldn't be — a chat, a ticket, a screenshot —
+> revoke it and mint another. That is a thirty-second fix; not doing it isn't.
+
+## How the OAuth side works
+
+Authorization code + PKCE (S256 only). No implicit flow, no password grant,
+no client-credentials grant.
+
+| Endpoint | Purpose |
+|---|---|
+| `/.well-known/oauth-authorization-server` | RFC 8414 discovery |
+| `/.well-known/oauth-protected-resource` | RFC 9728 — points `/mcp.php` at the AS |
+| `/oauth/register.php` | RFC 7591 dynamic client registration |
+| `/oauth/authorize.php` | Sign-in bounce + consent screen |
+| `/oauth/token.php` | Code → tokens, refresh → tokens |
+| `/oauth/revoke.php` | RFC 7009 revocation |
+
+The two well-known URLs have no file extension and are served by rewrite rules
+in `.htaccess`, which also passes the `Authorization` header through to PHP —
+Apache strips it otherwise, and every request then arrives unauthenticated.
+
+**Registration is open**, because there is no way to pre-share an id with
+software the school hasn't installed yet. A `client_id` alone grants nothing:
+it can only *ask*, and the ask still ends at a consent screen behind a PIN.
+What registration cannot do is nominate an arbitrary redirect — URIs must be
+https, a literal loopback address, or a reverse-DNS private scheme.
+
+**Things that are deliberately unforgiving:**
+
+- An authorization code lives **60 seconds**, is single-use, and is bound to
+  the client, the redirect URI and the PKCE challenge.
+- **Replaying a code revokes every token it ever issued.** Replay means the
+  code leaked; the safe assumption is that its tokens did too.
+- **Refresh tokens rotate.** Presenting a retired one revokes the entire chain
+  for that client — the signature of a stolen token being used alongside the
+  real one.
+- Deactivating someone in `/admin.php` **kills their API access immediately**.
+  Tokens must not outlive the account.
 
 ## The tools
 
@@ -89,6 +159,13 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 | Path | Role |
 |---|---|
 | `mcp.php` | JSON-RPC endpoint (Streamable HTTP transport) |
-| `includes/mcp.php` | Auth, tool catalogue, validation, execution, audit |
-| `mcp_admin.php` | Admin UI: mint, revoke, read the audit trail |
+| `includes/mcp.php` | Tool catalogue, validation, execution, audit |
+| `includes/oauth.php` | Authorization server: clients, PKCE, codes, tokens |
+| `oauth/meta.php` | The two discovery documents |
+| `oauth/register.php` | Dynamic client registration |
+| `oauth/authorize.php` | Sign-in bounce and consent screen |
+| `oauth/token.php` | Token issue and refresh |
+| `oauth/revoke.php` | Token revocation |
+| `mcp_admin.php` | Admin UI: connections, tokens, audit trail |
 | `sql/migrate_055_mcp_api.sql` | `mcp_tokens`, `mcp_audit` |
+| `sql/migrate_056_oauth.sql` | `oauth_clients`, `oauth_auth_codes`, `oauth_tokens` |

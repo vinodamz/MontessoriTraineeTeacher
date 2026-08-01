@@ -3,6 +3,24 @@ RewriteEngine On
 RewriteRule ^includes/.*$ - [F,L]
 RewriteRule ^sql/.*$      - [F,L]
 
+# OAuth discovery (RFC 8414 / RFC 9728). These URLs have no file extension, so
+# they are rewritten to the PHP that builds them. MCP clients also probe the
+# path-suffixed forms — /.well-known/oauth-authorization-server/mcp.php — when
+# the resource lives below the root, so both shapes are matched.
+RewriteRule ^\.well-known/oauth-authorization-server(/.*)?$ oauth/meta.php?doc=as [L,QSA]
+RewriteRule ^\.well-known/oauth-protected-resource(/.*)?$   oauth/meta.php?doc=rs [L,QSA]
+
+# Apache strips the Authorization header before PHP sees it unless it is
+# passed through explicitly. Without this every OAuth and bearer request
+# arrives unauthenticated.
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
 # Default to index.php
 DirectoryIndex index.php
 
