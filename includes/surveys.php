@@ -101,9 +101,19 @@ function survey_spec(string $key): ?array
 /**
  * Parent Voice Survey — Parent Orientation 2026–27.
  *
+ * The questions track the orientation deck section by section, so a low score
+ * points at a specific slide rather than at "the orientation" in general.
+ * Where the deck asks the room a question out loud ("Where do you feel
+ * pressure about your child's pace?", "What would make this a meaningful next
+ * step — or a clear no?", "What would help you feel confident about the year
+ * ahead?"), the same question is repeated here for the parents who don't speak
+ * up in a hall.
+ *
  * Only the three identifying fields are required. Everything else is optional
  * on purpose: a long form with mandatory questions gets abandoned halfway and
- * a half-finished form saves nothing at all, so partial answers beat no answers.
+ * a half-finished form saves nothing at all, so partial answers beat no
+ * answers. The form also autosaves to the parent's own device as they type
+ * (see survey.php), so a dropped connection doesn't cost them the whole thing.
  */
 function survey_spec_orientation_2026_27(): array
 {
@@ -117,7 +127,10 @@ function survey_spec_orientation_2026_27(): array
         'intro'    => "Thank you for attending today's Parent Orientation.\n\n"
                     . "Your feedback is invaluable in helping us strengthen our partnership with "
                     . "families and provide the best possible learning experience for every child. "
-                    . "This survey will take approximately 5 minutes to complete.",
+                    . "This survey takes about 5–7 minutes.\n\n"
+                    . "Only your name, your child's name and their class are required — answer as "
+                    . "much or as little of the rest as you like. Your answers are saved on this "
+                    . "device as you go, so you can stop and come back.",
         'thanks'   => "Thank you for taking the time to share your thoughts. Your feedback is "
                     . "deeply valued and will help us create an even better learning experience "
                     . "for every Little Graduate and their family.",
@@ -147,14 +160,16 @@ function survey_spec_orientation_2026_27(): array
                      'label' => 'The orientation helped me understand the following:',
                      'scale' => $agree,
                      'rows'  => [
-                         'vision'     => 'School Vision & Philosophy',
-                         'policies'   => 'School Policies',
-                         'expectations' => 'Parent Expectations',
-                         'routine'    => 'Daily Routine',
-                         'cue_app'    => 'Cue App & Communication',
-                         'safety'     => 'Child Safety & Well-being',
-                         'beyond_y6'  => 'Learning Beyond Year 6',
-                         'year_round' => 'Year-round Learning (No Summer Break)',
+                         'vision'       => 'Our vision and the five foundations',
+                         'early_years'  => 'Why the early years matter — most brain development happens before six',
+                         'play_based'   => 'Why we are play-based and Montessori rather than traditional teaching',
+                         'routine'      => 'The daily rhythm and the prepared learning environment',
+                         'independence' => 'How independence is built, one small responsibility at a time',
+                         'partnership'  => 'Parent partnership — the family habits and why our policies exist',
+                         'cuepilot'     => 'CuePilot — which channel to use for which kind of message',
+                         'safety'       => 'Health, safety and authorised handover at pickup',
+                         'year_round'   => 'Year-round learning (no summer break)',
+                         'next_chapter' => 'The idea of continuing beyond the early years',
                      ]],
                 ],
             ],
@@ -166,9 +181,10 @@ function survey_spec_orientation_2026_27(): array
                      'scale' => $conf,
                      'rows'  => [
                          'sending'    => 'Sending my child to school',
-                         'policies'   => 'Understanding school policies',
-                         'cue_app'    => 'Using the Cue App',
+                         'policies'   => "Following the school's policies and routines",
+                         'cuepilot'   => 'Using CuePilot and knowing who to contact',
                          'supporting' => "Supporting my child's learning at home",
+                         'pace'       => "Trusting my child's own pace without pushing",
                      ]],
                 ],
             ],
@@ -176,23 +192,26 @@ function survey_spec_orientation_2026_27(): array
                 'title' => '3. Your thoughts',
                 'questions' => [
                     ['key' => 'valuable', 'type' => 'checkbox', 'other' => true,
-                     'label' => '3.1 Which session did you find most valuable?',
+                     'label' => '3.1 Which part of today did you find most valuable?',
                      'help'  => 'Select all that apply.',
                      'options' => [
-                         'welcome'     => 'Welcome & School Vision',
-                         'montessori'  => 'Montessori Philosophy',
-                         'policies'    => 'School Policies',
-                         'expectations'=> 'Parent Expectations',
-                         'routine'     => 'Daily Routine',
-                         'cue_app'     => 'Cue App',
-                         'beyond_y6'   => 'Learning Beyond Year 6',
-                         'year_round'  => 'Continuous Learning Throughout the Year',
-                         'qa'          => 'Q&A Session',
+                         'welcome'      => 'Welcome & thank you to the team',
+                         'vision'       => 'Our vision and the five foundations',
+                         'traditional'  => 'Why traditional learning is not enough',
+                         'early_years'  => 'Why the early years matter',
+                         'experience'   => 'Experience Little Graduates — the day, the spaces, independence, enrichment',
+                         'partnership'  => 'Parent partnership — habits, policies, communication, safety',
+                         'year_round'   => 'Year-round learning (no summer break)',
+                         'kitchen'      => 'The Little Graduates Kitchen',
+                         'daycare'      => 'Daycare — the afternoon programme',
+                         'next_chapter' => 'What comes next — continuing beyond the early years',
+                         'community'    => 'Our community and events',
+                         'qa'           => 'Q&A session',
                      ]],
                     ['key' => 'more_about', 'type' => 'textarea',
                      'label' => '3.2 Which topic would you like to know more about?'],
                     ['key' => 'unclear', 'type' => 'textarea',
-                     'label' => '3.3 Was there anything that remained unclear after today\'s orientation?'],
+                     'label' => '3.3 Was there anything that remained unclear after today?'],
                 ],
             ],
             [
@@ -205,16 +224,72 @@ function survey_spec_orientation_2026_27(): array
                          'attendance'  => 'I understand the importance of regular attendance.',
                          'punctuality' => 'I understand why punctuality is important.',
                          'philosophy'  => 'I understand our play-based, child-centred philosophy.',
+                         'channels'    => 'I know which channel to use for routine, personal and urgent messages.',
                          'cares'       => "I believe Little Graduates genuinely cares about my child's development.",
                          'partners'    => 'I believe parents and the school should work as partners.',
                      ]],
                 ],
             ],
             [
-                'title' => '5. Looking ahead',
+                'title' => '5. The Little Graduates Kitchen',
+                'intro' => 'We served today so you could taste what your child eats, ask about the '
+                         . 'ingredients and tell us honestly what you think.',
+                'questions' => [
+                    ['key' => 'kitchen_tasted', 'type' => 'radio',
+                     'label' => '5.1 Did you taste the food today?',
+                     'options' => [
+                         'yes'     => 'Yes',
+                         'partly'  => 'A little',
+                         'no'      => 'No, not today',
+                     ]],
+                    ['key' => 'kitchen_rating', 'type' => 'radio',
+                     'label' => '5.2 If you tasted it, how was it?',
+                     'options' => [
+                         'excellent' => '★★★★★ Excellent',
+                         'very_good' => '★★★★ Very Good',
+                         'good'      => '★★★ Good',
+                         'fair'      => '★★ Fair',
+                         'poor'      => '★ Needs Improvement',
+                     ]],
+                    ['key' => 'kitchen_feedback', 'type' => 'textarea',
+                     'label' => '5.3 Any feedback on the menu, the ingredients or how meals are run?',
+                     'help'  => 'Honest feedback is more useful to us than a compliment.'],
+                ],
+            ],
+            [
+                'title' => '6. Daycare — the afternoon programme',
+                'intro' => 'Art, cooking, music, outdoor play and free play — a calm afternoon, not '
+                         . 'a second academic shift.',
+                'questions' => [
+                    ['key' => 'daycare_interest', 'type' => 'radio',
+                     'label' => '6.1 Where does your family stand on daycare?',
+                     'options' => [
+                         'using'     => 'We already use it',
+                         'planning'  => 'We plan to use it this year',
+                         'maybe'     => 'We might consider it later',
+                         'not_needed'=> 'We do not need it',
+                     ]],
+                    ['key' => 'daycare_activities', 'type' => 'checkbox', 'other' => true,
+                     'label' => '6.2 Which afternoon activities appeal to you most?',
+                     'help'  => 'Select all that apply — this helps us plan the timetable.',
+                     'options' => [
+                         'art'      => 'Art',
+                         'cooking'  => 'Cooking',
+                         'music'    => 'Music',
+                         'outdoor'  => 'Outdoor play',
+                         'free'     => 'Free play',
+                         'quiet'    => 'Quiet time / rest',
+                     ]],
+                    ['key' => 'daycare_comments', 'type' => 'textarea',
+                     'label' => '6.3 Anything else about the afternoon programme?',
+                     'help'  => 'Optional.'],
+                ],
+            ],
+            [
+                'title' => '7. Looking ahead',
                 'questions' => [
                     ['key' => 'excitement', 'type' => 'radio',
-                     'label' => "5.1 How excited are you about your child's journey at Little Graduates?",
+                     'label' => "7.1 How excited are you about your child's journey at Little Graduates?",
                      'options' => [
                          'very_excited'     => '★★★★★ Very Excited',
                          'excited'          => '★★★★ Excited',
@@ -223,57 +298,77 @@ function survey_spec_orientation_2026_27(): array
                          'not_excited'      => '★ Not Excited',
                      ]],
                     ['key' => 'looking_forward', 'type' => 'textarea',
-                     'label' => '5.2 What are you most looking forward to for your child this year?'],
+                     'label' => '7.2 What are you most looking forward to for your child this year?'],
+                    ['key' => 'pace_pressure', 'type' => 'textarea',
+                     'label' => "7.3 Where do you feel pressure about your child's pace, and what would "
+                              . 'reassure you most this year?',
+                     'help'  => 'We asked this in the hall; answer here if you would rather write it.'],
                     ['key' => 'concerns', 'type' => 'textarea',
-                     'label' => '5.3 Do you have any concerns that you would like us to know?'],
+                     'label' => '7.4 Do you have any concerns you would like us to know?'],
                     ['key' => 'suggestions', 'type' => 'textarea',
-                     'label' => '5.4 Do you have any suggestions to improve future Parent Orientation sessions?'],
+                     'label' => '7.5 Any suggestions to improve future Parent Orientation sessions?'],
                 ],
             ],
             [
-                'title' => "6. Planning your child's educational journey",
-                'intro' => "At Little Graduates, we understand that every family has unique aspirations "
-                         . "for their child's education. Your responses will help us better understand "
-                         . "your expectations and continuously improve our programs.",
+                'title' => "8. Planning your child's educational journey",
+                'intro' => "Every family has different aspirations for their child. Your answers help "
+                         . "us understand what matters to you — there is no commitment here, and no "
+                         . "answer counts against your child in any way.",
                 'questions' => [
                     ['key' => 'next_school', 'type' => 'radio',
-                     'label' => "6.1 Have you started thinking about your child's schooling after Playgroup/Nursery?",
+                     'label' => "8.1 Have you started thinking about your child's schooling after Playgroup/Nursery?",
                      'options' => [
                          'continue'  => 'We plan to continue at Little Graduates.',
                          'other'     => 'We are considering other schools.',
                          'undecided' => "We haven't decided yet.",
                          'too_early' => 'It is too early for us to think about it.',
                      ]],
-                    ['key' => 'factors_text', 'type' => 'textarea',
-                     'label' => '6.2 If you are considering other schools or are undecided, what factors are influencing your decision?',
-                     'help'  => 'Optional.'],
                     ['key' => 'choice_factors', 'type' => 'checkbox', 'other' => true,
-                     'label' => '6.3 Which factors are most important to you when choosing a school for your child?',
+                     'label' => '8.2 Which factors matter most to you when choosing a school?',
                      'help'  => 'Select all that apply.',
                      'options' => [
                          'academics'      => 'Academic excellence',
                          'happiness'      => "Child's happiness and emotional well-being",
                          'philosophy'     => 'Teaching philosophy & curriculum',
                          'reputation'     => 'School reputation',
-                         'continuity'     => 'Primary school continuity',
+                         'continuity'     => 'Continuity — not changing schools again',
                          'facilities'     => 'Facilities & infrastructure',
                          'extracurricular'=> 'Extracurricular opportunities',
                          'location'       => 'Location',
                          'fees'           => 'Fees',
                          'recommendations'=> 'Recommendations from family/friends',
                      ]],
-                    ['key' => 'preferred_choice', 'type' => 'textarea',
-                     'label' => '6.4 Is there anything Little Graduates could do to make it your preferred choice for your child\'s continued educational journey?',
-                     'help'  => 'Optional.'],
+                    ['key' => 'next_chapter', 'type' => 'textarea',
+                     'label' => '8.3 We are exploring a small continuation beyond the present programme. '
+                              . 'What would make that a meaningful next step for your family — or a clear no?',
+                     'help'  => 'Nothing is decided. A plain "no" is as useful to us as a yes.'],
                 ],
             ],
             [
-                'title' => '7. Final reflection',
+                'title' => '9. Our community',
+                'questions' => [
+                    ['key' => 'involvement', 'type' => 'checkbox', 'other' => true,
+                     'label' => '9.1 Would you like to be involved in any of these?',
+                     'help'  => 'Optional — select all that apply, and we will get in touch.',
+                     'options' => [
+                         'events'     => 'Helping at events and celebrations',
+                         'trips'      => 'Accompanying outings and trips',
+                         'reading'    => 'Reading or storytelling with the children',
+                         'talk'       => 'Sharing my work or skill with the children',
+                         'kitchen'    => 'Kitchen and nutrition feedback group',
+                         'none'       => 'Not this year, thank you',
+                     ]],
+                ],
+            ],
+            [
+                'title' => '10. Final reflection',
                 'questions' => [
                     ['key' => 'why_chose', 'type' => 'textarea',
-                     'label' => '7.1 In one sentence, what made you choose Little Graduates for your child?'],
+                     'label' => '10.1 In one sentence, what made you choose Little Graduates for your child?'],
+                    ['key' => 'confidence_year', 'type' => 'textarea',
+                     'label' => '10.2 What would help you feel confident about the year ahead?'],
                     ['key' => 'anything_else', 'type' => 'textarea',
-                     'label' => '7.2 Is there anything else you would like to share with us?'],
+                     'label' => '10.3 Is there anything else you would like to share with us?'],
                 ],
             ],
         ],
