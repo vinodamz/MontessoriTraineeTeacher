@@ -478,6 +478,37 @@ body.landing { background: var(--bg); }
     border-radius: 999px; border: 1px solid var(--line); font-size: .85rem;
     border-left: 4px solid var(--ring, var(--accent));
 }
+/* Per-area bulk fill: set every skill in one area, then adjust the outliers. */
+.bulk-bar {
+    display: flex; align-items: center; gap: .3rem; flex-wrap: wrap;
+    margin: 0 0 .6rem; padding: .4rem .55rem;
+    background: var(--bg-soft, #faf4ea); border-radius: 10px;
+}
+.bulk-label { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em;
+              color: var(--ink-soft, #7a6a55); margin-right: .2rem; }
+.bulk-set {
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+    border: 2px solid var(--ring, var(--accent)); background: #fff;
+    color: var(--ink, #2b2b2b); font-weight: 700; font-size: .8rem; line-height: 1;
+}
+.bulk-set:hover { background: var(--ring, var(--accent)); color: #fff; }
+.bulk-clear {
+    margin-left: .3rem; padding: .3rem .7rem; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff;
+    font-size: .78rem; color: var(--ink-soft, #7a6a55);
+}
+.bulk-clear:hover { border-color: var(--warn, #b3402c); color: var(--warn, #b3402c); }
+
+/* Carried-forward rows: pre-filled from last month, not yet reviewed. */
+.carry-note a { margin-left: .4rem; }
+.carry-tag {
+    display: inline-block; margin-left: .4rem; padding: 0 .4rem;
+    border-radius: 4px; background: #fdf0d5; color: #8a6d3b;
+    font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+}
+.rating-table tr.ind-carried { background: #fffdf5; }
+.rating-table tr.ind-carried .ind-text { box-shadow: inset 3px 0 0 #e8c46a; }
+
 .rating-table { width: 100%; border-collapse: collapse; }
 .rating-table tr { border-bottom: 1px solid var(--line-soft); }
 .rating-table tr:last-child { border-bottom: 0; }

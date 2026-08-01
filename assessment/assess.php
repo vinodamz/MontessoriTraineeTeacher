@@ -286,6 +286,50 @@ if ($retiredCust) {
     foreach ($rows as $r) { $r['_retired'] = true; $customIndicators[] = $r; }
 }
 
+// ---- Carry forward last month's ratings ----------------------------------
+// Most of a child's ratings don't move month to month, so starting from a
+// blank grid meant re-entering ~30 near-identical decisions every month. When
+// this month has nothing recorded yet, pre-select the most recent earlier
+// month's ratings as a starting point. They are shown as "carried" until the
+// teacher touches them, and nothing reaches the database until Save — so this
+// speeds up the work without silently inventing an assessment.
+//
+// ?blank=1 opts out and starts from an empty grid.
+$carried     = [];
+$carriedFrom = null;
+if (!$existing && empty($_GET['blank'])) {
+    try {
+        $stmt = db()->prepare("SELECT DISTINCT month_year FROM evaluation_cards WHERE student_id = :s");
+        $stmt->execute([':s' => $studentId]);
+        // month_year is 'M-y' text, which doesn't sort chronologically in SQL.
+        $prior = array_filter(
+            array_column($stmt->fetchAll(), 'month_year'),
+            fn($m) => compare_month_year((string)$m, $month) < 0
+        );
+        usort($prior, 'compare_month_year');
+        if ($prior) {
+            $activeCodes = rating_config_map();   // active codes only
+            $carriedFrom = (string)end($prior);
+            $stmt = db()->prepare("
+                SELECT indicator_id, rating, is_custom_indicator
+                FROM evaluation_cards WHERE student_id = :s AND month_year = :m
+            ");
+            $stmt->execute([':s' => $studentId, ':m' => $carriedFrom]);
+            foreach ($stmt as $r) {
+                $key = ($r['is_custom_indicator'] ? 'cust' : 'std') . ':' . $r['indicator_id'];
+                // Don't resurrect indicators that have since been retired, and
+                // don't carry a rating code that's no longer configured.
+                if (!isset($activeKeys[$key]))            continue;
+                if (!isset($activeCodes[$r['rating']]))   continue;
+                $carried[$key] = $r['rating'];
+            }
+            if (!$carried) $carriedFrom = null;
+        }
+    } catch (Throwable $e) {
+        $carried = []; $carriedFrom = null;   // never block the form on this
+    }
+}
+
 // Group indicators by category (preserve insertion order — already sorted).
 $byCategory = [];
 foreach ($indicators as $i) {
@@ -398,9 +442,28 @@ require __DIR__ . '/../includes/header.php';
         <?php endforeach; ?>
     </div>
 
+    <?php if ($carriedFrom !== null): ?>
+        <div class="flash flash-info carry-note">
+            Started from <strong><?= e(month_year_label($carriedFrom)) ?></strong>'s ratings —
+            change what has moved and leave the rest. Rows still marked
+            <span class="carry-tag">carried</span> haven't been reviewed yet.
+            Nothing is saved until you press <strong>Save assessment</strong>.
+            <a href="assess.php?student_id=<?= $studentId ?>&amp;month=<?= e(urlencode($month)) ?>&amp;blank=1">Start from blank instead</a>
+        </div>
+    <?php endif; ?>
+
     <?php foreach ($byCategory as $cat => $groups): ?>
         <section class="cat-block">
             <h2><?= e($cat) ?></h2>
+            <div class="bulk-bar" role="group" aria-label="Set every skill in <?= e($cat) ?>">
+                <span class="bulk-label">Set all</span>
+                <?php foreach ($ratingCodes as $code): ?>
+                    <button type="button" class="bulk-set" data-code="<?= e($code) ?>"
+                            style="--ring: <?= e($rmap[$code]['color']) ?>"
+                            title="Set every skill in <?= e($cat) ?> to <?= e($rmap[$code]['label']) ?>"><?= e($code) ?></button>
+                <?php endforeach; ?>
+                <button type="button" class="bulk-clear" title="Clear every rating in <?= e($cat) ?>">Clear</button>
+            </div>
             <table class="rating-table">
                 <tbody>
                 <?php
@@ -410,11 +473,19 @@ require __DIR__ . '/../includes/header.php';
                     foreach ($allIndicators as $ind):
                         $kind = $ind['_kind'] ?? 'std';
                         $key  = "$kind:" . $ind['id'];
-                        $sel  = $existing[$key] ?? '';
+                        // Real data for this month wins; otherwise fall back to
+                        // whatever was carried forward (flagged, not confirmed).
+                        $sel        = $existing[$key] ?? '';
+                        $isCarried  = false;
+                        if ($sel === '' && isset($carried[$key])) {
+                            $sel       = $carried[$key];
+                            $isCarried = true;
+                        }
                 ?>
-                    <tr>
+                    <tr<?= $isCarried ? ' class="ind-carried"' : '' ?>>
                         <td class="ind-text">
                             <?= e($ind['indicator_text']) ?>
+                            <?php if ($isCarried): ?><span class="carry-tag">carried</span><?php endif; ?>
                             <?php if ($kind === 'cust'): ?><span class="pill small">custom</span><?php endif; ?>
                             <?php if (!empty($ind['_retired'])): ?><span class="pill small" title="This indicator was deactivated after this month was assessed; the rating is kept.">retired</span><?php endif; ?>
                         </td>
