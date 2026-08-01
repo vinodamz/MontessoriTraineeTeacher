@@ -12,13 +12,47 @@ require_once __DIR__ . '/includes/functions.php';
 
 start_session_once();
 
+/**
+ * Where to send someone once they're in.
+ *
+ * ?next= lets a page bounce through login and get the visitor back — the
+ * OAuth authorize endpoint needs this, because a consent screen is useless
+ * if signing in dumps you on the dashboard instead.
+ *
+ * Only a same-site path is ever accepted: it must begin with a single "/"
+ * and carry no scheme, host or backslash. "//evil.example" and
+ * "https://evil.example" are both rejected, so this cannot be turned into an
+ * open redirect that lends the school's domain to a phishing link.
+ */
+function login_next_is_safe(string $p): bool
+{
+    if ($p === '' || $p[0] !== '/') return false;      // must be a local path
+    if (str_starts_with($p, '//')) return false;       // protocol-relative
+    if (strpbrk($p, "\\\r\n\t") !== false) return false;
+    if (preg_match('~^/+[a-z][a-z0-9+.-]*:~i', $p)) return false;
+    return true;
+}
+
+if (isset($_GET['next'])) {
+    $next = (string)$_GET['next'];
+    if (login_next_is_safe($next)) $_SESSION['_login_next'] = $next;
+}
+
+/** Consume the stored destination — one login, one bounce. */
+function login_next_target(): string
+{
+    $t = (string)($_SESSION['_login_next'] ?? '');
+    unset($_SESSION['_login_next']);
+    return login_next_is_safe($t) ? $t : '/index.php';
+}
+
 if (current_user()) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'redirect' => '/index.php']);
+        echo json_encode(['ok' => true, 'redirect' => login_next_target()]);
         exit;
     }
-    redirect('/index.php');
+    redirect(login_next_target());
 }
 
 // ---------- POST: AJAX PIN verification ----------
@@ -83,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // phone-browser restarts stop demanding a fresh login every time.
     remember_issue((int)$u['id']);
 
-    echo json_encode(['ok' => true, 'redirect' => '/index.php']);
+    echo json_encode(['ok' => true, 'redirect' => login_next_target()]);
     exit;
 }
 

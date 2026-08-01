@@ -145,16 +145,20 @@ function mcp_tokens_all(): array
 // --------------------------------------------------------------------- audit
 
 function mcp_audit_log(?int $tokenId, string $tool, array $args, bool $ok,
-                       ?string $error, int $rowsAffected, ?array $beforeImage): void
+                       ?string $error, int $rowsAffected, ?array $beforeImage,
+                       ?int $userId = null, ?int $oauthTokenId = null): void
 {
     try {
         $s = db()->prepare(
             "INSERT INTO mcp_audit
-                (token_id, tool, arguments, ok, error, rows_affected, before_image, ip_hash)
-             VALUES (:t, :n, :a, :ok, :e, :r, :b, :ip)"
+                (token_id, user_id, oauth_token_id, tool, arguments, ok, error,
+                 rows_affected, before_image, ip_hash)
+             VALUES (:t, :u, :ot, :n, :a, :ok, :e, :r, :b, :ip)"
         );
         $s->execute([
             ':t'  => $tokenId,
+            ':u'  => $userId,
+            ':ot' => $oauthTokenId,
             ':n'  => mb_substr($tool, 0, 60),
             ':a'  => json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ':ok' => $ok ? 1 : 0,
@@ -174,10 +178,13 @@ function mcp_audit_log(?int $tokenId, string $tool, array $args, bool $ok,
 function mcp_audit_recent(int $limit = 200): array
 {
     $limit = max(1, min(1000, $limit));
+    // The actor is either a named person (OAuth) or a token label (machine).
+    // Both are surfaced so the page can say which it was.
     return db()->query(
-        "SELECT a.*, t.label AS token_label
+        "SELECT a.*, t.label AS token_label, u.name AS user_name
            FROM mcp_audit a
            LEFT JOIN mcp_tokens t ON t.id = a.token_id
+           LEFT JOIN users u      ON u.id = a.user_id
           ORDER BY a.id DESC
           LIMIT $limit"
     )->fetchAll();
@@ -655,7 +662,8 @@ function mcp_rows_matching(string $table, string $where, array $params, int $cap
  * Run one tool call. Returns the tool's result array.
  * Throws McpError for anything the caller can fix.
  */
-function mcp_call_tool(string $name, array $args, ?int $tokenId): array
+function mcp_call_tool(string $name, array $args, ?int $tokenId,
+                       ?int $userId = null, ?int $oauthTokenId = null): array
 {
     $writes  = ['insert', 'update', 'delete'];
     $isWrite = in_array($name, $writes, true);
@@ -683,12 +691,14 @@ function mcp_call_tool(string $name, array $args, ?int $tokenId): array
 
         mcp_audit_log($tokenId, $name, $args, true, null,
                       (int)($result['rows_affected'] ?? 0),
-                      is_array($before) ? mcp_redact_rows($before) : null);
+                      is_array($before) ? mcp_redact_rows($before) : null,
+                      $userId, $oauthTokenId);
         return $result;
 
     } catch (Throwable $e) {
         if ($began && $pdo->inTransaction()) $pdo->rollBack();
-        mcp_audit_log($tokenId, $name, $args, false, $e->getMessage(), 0, null);
+        mcp_audit_log($tokenId, $name, $args, false, $e->getMessage(), 0, null,
+                      $userId, $oauthTokenId);
         throw $e;
     }
 }
