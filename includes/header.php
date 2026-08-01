@@ -112,6 +112,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                 <a href="/feedback/index.php">Feedback</a>
                 <a href="/surveys/index.php">Surveys</a>
                 <a href="/grades.php">Grades</a>
+                <a href="/mcp_admin.php">MCP API</a>
                 <a href="/admin.php">Admin</a>
             <?php endif; ?>
             <?php endif; /* teacher vs full nav */ ?>
