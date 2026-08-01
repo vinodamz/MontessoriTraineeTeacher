@@ -1,0 +1,653 @@
+<?php
+/**
+ * includes/surveys.php — parent surveys: question definitions, storage, and the
+ * flattening that turns a response into spreadsheet columns.
+ *
+ * Shape of the thing:
+ *
+ *   A *spec* is the questionnaire itself, defined in code below (not in the
+ *   database). Questions change once a year and are reviewed like any other
+ *   change; keeping them in PHP means the wording, the option lists and the
+ *   validation can never drift apart, and a typo is a diff rather than a
+ *   silent data problem.
+ *
+ *   A *survey* is one live run of a spec — a row in `surveys` carrying the
+ *   shareable token. One link, shared with every parent; there's no per-parent
+ *   token because parents identify themselves on the form.
+ *
+ *   A *response* is one submission — a row in `survey_responses`. Parent name,
+ *   child name and class get their own columns (they're what you search and
+ *   sort by); everything else is stored as JSON in `answers`.
+ *
+ * Why JSON rather than a row per answer: the answers are only ever read as a
+ * whole response, the questionnaire changes each year, and a key/value answer
+ * table would need a join and a pivot to produce the grid the office actually
+ * wants. survey_columns() does that pivot in PHP instead, driven by the same
+ * spec that rendered the form — so the grid and the CSV can't fall out of step
+ * with the questions.
+ *
+ * Schema: sql/migrate_054_parent_surveys.sql
+ */
+declare(strict_types=1);
+
+const SURVEY_TEXT_MAX  = 2000;   // per free-text answer
+const SURVEY_NAME_MAX  = 120;
+const SURVEY_OTHER_MAX = 200;
+
+// ---- Shared answer scales ------------------------------------------------
+
+/** The 5-point agreement scale used by the two matrix questions. */
+function survey_agree_scale(): array
+{
+    return [
+        'strongly_disagree' => 'Strongly Disagree',
+        'disagree'          => 'Disagree',
+        'neutral'           => 'Neutral',
+        'agree'             => 'Agree',
+        'strongly_agree'    => 'Strongly Agree',
+    ];
+}
+
+/** The 4-point confidence scale. */
+function survey_confidence_scale(): array
+{
+    return [
+        'not_confident'      => 'Not Confident',
+        'somewhat_confident' => 'Somewhat Confident',
+        'confident'          => 'Confident',
+        'very_confident'     => 'Very Confident',
+    ];
+}
+
+/**
+ * Class options come from the grade config (/grades.php), not a frozen list,
+ * so a new grade is offered to parents the day it's added and nobody has to
+ * remember this file exists. Falls back to the four school classes if the
+ * grade table isn't reachable — a public form must still render.
+ */
+function survey_class_options(): array
+{
+    $fallback = ['Playgroup', 'Nursery', 'Junior KG', 'Senior KG'];
+    if (!function_exists('grade_names')) return array_combine($fallback, $fallback);
+    try {
+        $names = grade_names();
+    } catch (Throwable $e) {
+        $names = [];
+    }
+    if (!$names) $names = $fallback;
+    return array_combine($names, $names);
+}
+
+// ---- The questionnaires --------------------------------------------------
+
+/**
+ * Every questionnaire the app knows, keyed by spec key. The key is stored on
+ * the survey row, so responses stay attached to the questions that produced
+ * them even after a later edition is added alongside.
+ */
+function survey_specs(): array
+{
+    return [
+        'orientation_2026_27' => survey_spec_orientation_2026_27(),
+    ];
+}
+
+/** One spec by key, or null. */
+function survey_spec(string $key): ?array
+{
+    return survey_specs()[$key] ?? null;
+}
+
+/**
+ * Parent Voice Survey — Parent Orientation 2026–27.
+ *
+ * Only the three identifying fields are required. Everything else is optional
+ * on purpose: a long form with mandatory questions gets abandoned halfway and
+ * a half-finished form saves nothing at all, so partial answers beat no answers.
+ */
+function survey_spec_orientation_2026_27(): array
+{
+    $agree = survey_agree_scale();
+    $conf  = survey_confidence_scale();
+
+    return [
+        'key'      => 'orientation_2026_27',
+        'title'    => 'Little Graduates Parent Voice Survey',
+        'subtitle' => 'Parent Orientation 2026–27',
+        'intro'    => "Thank you for attending today's Parent Orientation.\n\n"
+                    . "Your feedback is invaluable in helping us strengthen our partnership with "
+                    . "families and provide the best possible learning experience for every child. "
+                    . "This survey will take approximately 5 minutes to complete.",
+        'thanks'   => "Thank you for taking the time to share your thoughts. Your feedback is "
+                    . "deeply valued and will help us create an even better learning experience "
+                    . "for every Little Graduate and their family.",
+        'sections' => [
+            [
+                'title' => 'Parent details',
+                'questions' => [
+                    ['key' => 'parent_name', 'type' => 'text', 'label' => 'Parent Name', 'required' => true],
+                    ['key' => 'child_name',  'type' => 'text', 'label' => "Child's Name", 'required' => true],
+                    ['key' => 'class',       'type' => 'radio', 'label' => 'Class', 'required' => true,
+                     'options' => 'classes'],
+                ],
+            ],
+            [
+                'title' => '1. Orientation experience',
+                'questions' => [
+                    ['key' => 'overall', 'type' => 'radio',
+                     'label' => "Overall, how would you rate today's Parent Orientation?",
+                     'options' => [
+                         'excellent'         => '★★★★★ Excellent',
+                         'very_good'         => '★★★★ Very Good',
+                         'good'              => '★★★ Good',
+                         'fair'              => '★★ Fair',
+                         'needs_improvement' => '★ Needs Improvement',
+                     ]],
+                    ['key' => 'understand', 'type' => 'matrix', 'short' => 'Understood',
+                     'label' => 'The orientation helped me understand the following:',
+                     'scale' => $agree,
+                     'rows'  => [
+                         'vision'     => 'School Vision & Philosophy',
+                         'policies'   => 'School Policies',
+                         'expectations' => 'Parent Expectations',
+                         'routine'    => 'Daily Routine',
+                         'cue_app'    => 'Cue App & Communication',
+                         'safety'     => 'Child Safety & Well-being',
+                         'beyond_y6'  => 'Learning Beyond Year 6',
+                         'year_round' => 'Year-round Learning (No Summer Break)',
+                     ]],
+                ],
+            ],
+            [
+                'title' => '2. Your confidence',
+                'questions' => [
+                    ['key' => 'confidence', 'type' => 'matrix', 'short' => 'Confidence',
+                     'label' => "After today's orientation, how confident do you feel about the following?",
+                     'scale' => $conf,
+                     'rows'  => [
+                         'sending'    => 'Sending my child to school',
+                         'policies'   => 'Understanding school policies',
+                         'cue_app'    => 'Using the Cue App',
+                         'supporting' => "Supporting my child's learning at home",
+                     ]],
+                ],
+            ],
+            [
+                'title' => '3. Your thoughts',
+                'questions' => [
+                    ['key' => 'valuable', 'type' => 'checkbox', 'other' => true,
+                     'label' => '3.1 Which session did you find most valuable?',
+                     'help'  => 'Select all that apply.',
+                     'options' => [
+                         'welcome'     => 'Welcome & School Vision',
+                         'montessori'  => 'Montessori Philosophy',
+                         'policies'    => 'School Policies',
+                         'expectations'=> 'Parent Expectations',
+                         'routine'     => 'Daily Routine',
+                         'cue_app'     => 'Cue App',
+                         'beyond_y6'   => 'Learning Beyond Year 6',
+                         'year_round'  => 'Continuous Learning Throughout the Year',
+                         'qa'          => 'Q&A Session',
+                     ]],
+                    ['key' => 'more_about', 'type' => 'textarea',
+                     'label' => '3.2 Which topic would you like to know more about?'],
+                    ['key' => 'unclear', 'type' => 'textarea',
+                     'label' => '3.3 Was there anything that remained unclear after today\'s orientation?'],
+                ],
+            ],
+            [
+                'title' => '4. Parent partnership',
+                'intro' => 'Please indicate how strongly you agree with the following statements.',
+                'questions' => [
+                    ['key' => 'partnership', 'type' => 'matrix', 'short' => 'Partnership',
+                     'label' => '', 'scale' => $agree,
+                     'rows'  => [
+                         'attendance'  => 'I understand the importance of regular attendance.',
+                         'punctuality' => 'I understand why punctuality is important.',
+                         'philosophy'  => 'I understand our play-based, child-centred philosophy.',
+                         'cares'       => "I believe Little Graduates genuinely cares about my child's development.",
+                         'partners'    => 'I believe parents and the school should work as partners.',
+                     ]],
+                ],
+            ],
+            [
+                'title' => '5. Looking ahead',
+                'questions' => [
+                    ['key' => 'excitement', 'type' => 'radio',
+                     'label' => "5.1 How excited are you about your child's journey at Little Graduates?",
+                     'options' => [
+                         'very_excited'     => '★★★★★ Very Excited',
+                         'excited'          => '★★★★ Excited',
+                         'neutral'          => '★★★ Neutral',
+                         'slightly_excited' => '★★ Slightly Excited',
+                         'not_excited'      => '★ Not Excited',
+                     ]],
+                    ['key' => 'looking_forward', 'type' => 'textarea',
+                     'label' => '5.2 What are you most looking forward to for your child this year?'],
+                    ['key' => 'concerns', 'type' => 'textarea',
+                     'label' => '5.3 Do you have any concerns that you would like us to know?'],
+                    ['key' => 'suggestions', 'type' => 'textarea',
+                     'label' => '5.4 Do you have any suggestions to improve future Parent Orientation sessions?'],
+                ],
+            ],
+            [
+                'title' => "6. Planning your child's educational journey",
+                'intro' => "At Little Graduates, we understand that every family has unique aspirations "
+                         . "for their child's education. Your responses will help us better understand "
+                         . "your expectations and continuously improve our programs.",
+                'questions' => [
+                    ['key' => 'next_school', 'type' => 'radio',
+                     'label' => "6.1 Have you started thinking about your child's schooling after Playgroup/Nursery?",
+                     'options' => [
+                         'continue'  => 'We plan to continue at Little Graduates.',
+                         'other'     => 'We are considering other schools.',
+                         'undecided' => "We haven't decided yet.",
+                         'too_early' => 'It is too early for us to think about it.',
+                     ]],
+                    ['key' => 'factors_text', 'type' => 'textarea',
+                     'label' => '6.2 If you are considering other schools or are undecided, what factors are influencing your decision?',
+                     'help'  => 'Optional.'],
+                    ['key' => 'choice_factors', 'type' => 'checkbox', 'other' => true,
+                     'label' => '6.3 Which factors are most important to you when choosing a school for your child?',
+                     'help'  => 'Select all that apply.',
+                     'options' => [
+                         'academics'      => 'Academic excellence',
+                         'happiness'      => "Child's happiness and emotional well-being",
+                         'philosophy'     => 'Teaching philosophy & curriculum',
+                         'reputation'     => 'School reputation',
+                         'continuity'     => 'Primary school continuity',
+                         'facilities'     => 'Facilities & infrastructure',
+                         'extracurricular'=> 'Extracurricular opportunities',
+                         'location'       => 'Location',
+                         'fees'           => 'Fees',
+                         'recommendations'=> 'Recommendations from family/friends',
+                     ]],
+                    ['key' => 'preferred_choice', 'type' => 'textarea',
+                     'label' => '6.4 Is there anything Little Graduates could do to make it your preferred choice for your child\'s continued educational journey?',
+                     'help'  => 'Optional.'],
+                ],
+            ],
+            [
+                'title' => '7. Final reflection',
+                'questions' => [
+                    ['key' => 'why_chose', 'type' => 'textarea',
+                     'label' => '7.1 In one sentence, what made you choose Little Graduates for your child?'],
+                    ['key' => 'anything_else', 'type' => 'textarea',
+                     'label' => '7.2 Is there anything else you would like to share with us?'],
+                ],
+            ],
+        ],
+    ];
+}
+
+// ---- Spec helpers --------------------------------------------------------
+
+/** Resolve a question's options — the literal map, or a named dynamic list. */
+function survey_options(array $q): array
+{
+    $o = $q['options'] ?? [];
+    if ($o === 'classes') return survey_class_options();
+    return is_array($o) ? $o : [];
+}
+
+/** Every question in a spec, flat, in order. */
+function survey_questions(array $spec): array
+{
+    $out = [];
+    foreach ($spec['sections'] ?? [] as $sec) {
+        foreach ($sec['questions'] ?? [] as $q) $out[] = $q;
+    }
+    return $out;
+}
+
+/**
+ * The spreadsheet columns for a spec: one per answerable field, in form order.
+ * A matrix becomes one column per statement — that's what makes the grid and
+ * the CSV usable in Excel, where each cell must hold a single value.
+ *
+ * Each column: ['key','label','type','q'] where key is 'question' or
+ * 'question.row' and q is the owning question.
+ */
+function survey_columns(array $spec): array
+{
+    $cols = [];
+    foreach (survey_questions($spec) as $q) {
+        $type = $q['type'] ?? 'text';
+        if ($type === 'matrix') {
+            $short = (string)($q['short'] ?? $q['label'] ?? $q['key']);
+            foreach (($q['rows'] ?? []) as $rk => $rlabel) {
+                $cols[] = [
+                    'key'   => $q['key'] . '.' . $rk,
+                    'label' => $short . ': ' . $rlabel,
+                    'type'  => 'matrix',
+                    'q'     => $q,
+                ];
+            }
+            continue;
+        }
+        $cols[] = ['key' => $q['key'], 'label' => (string)$q['label'], 'type' => $type, 'q' => $q];
+        if ($type === 'checkbox' && !empty($q['other'])) {
+            $cols[] = ['key' => $q['key'] . '_other', 'label' => $q['label'] . ' — Other',
+                       'type' => 'text', 'q' => $q];
+        }
+    }
+    return $cols;
+}
+
+/** Read a possibly-dotted answer key out of a decoded answers array. */
+function survey_raw(array $answers, string $key)
+{
+    if (strpos($key, '.') === false) return $answers[$key] ?? null;
+    [$a, $b] = explode('.', $key, 2);
+    return $answers[$a][$b] ?? null;
+}
+
+/**
+ * One cell, as display text. Codes become their labels; a multi-select becomes
+ * a comma-joined list. '' when unanswered — a survey left blank should read as
+ * blank, not as a zero or a dash that looks like data.
+ */
+function survey_cell(array $col, array $answers): string
+{
+    $v = survey_raw($answers, $col['key']);
+    if ($v === null || $v === '' || $v === []) return '';
+    $q = $col['q'];
+
+    switch ($col['type']) {
+        case 'matrix':
+            $scale = $q['scale'] ?? [];
+            return (string)($scale[$v] ?? $v);
+        case 'radio':
+            $opts = survey_options($q);
+            return (string)($opts[$v] ?? $v);
+        case 'checkbox':
+            $opts = survey_options($q);
+            $out  = [];
+            foreach ((array)$v as $code) $out[] = (string)($opts[$code] ?? $code);
+            return implode(', ', $out);
+        default:
+            return (string)$v;
+    }
+}
+
+// ---- Validation ----------------------------------------------------------
+
+/**
+ * Turn a raw POST into the answers to store.
+ *
+ * Whitelist-only: an answer survives just when it matches an option the spec
+ * actually offers, so nothing a browser (or anyone else) invents reaches the
+ * database. Returns [answers, errors]; errors is keyed by question key.
+ */
+function survey_collect(array $spec, array $post): array
+{
+    $answers = [];
+    $errors  = [];
+
+    foreach (survey_questions($spec) as $q) {
+        $key  = (string)$q['key'];
+        $type = (string)($q['type'] ?? 'text');
+        $req  = !empty($q['required']);
+        $raw  = $post[$key] ?? null;
+
+        switch ($type) {
+            case 'text':
+            case 'textarea':
+                $max = $type === 'text' ? SURVEY_NAME_MAX : SURVEY_TEXT_MAX;
+                $v   = trim((string)($raw ?? ''));
+                if (function_exists('mb_substr')) $v = mb_substr($v, 0, $max);
+                else                              $v = substr($v, 0, $max);
+                if ($v !== '') $answers[$key] = $v;
+                elseif ($req)  $errors[$key] = 'Please fill this in.';
+                break;
+
+            case 'radio':
+                $opts = survey_options($q);
+                $v    = (string)($raw ?? '');
+                if ($v !== '' && array_key_exists($v, $opts)) $answers[$key] = $v;
+                elseif ($req) $errors[$key] = 'Please choose one.';
+                break;
+
+            case 'checkbox':
+                $opts = survey_options($q);
+                $picked = [];
+                foreach ((array)($raw ?? []) as $code) {
+                    $code = (string)$code;
+                    if (array_key_exists($code, $opts) && !in_array($code, $picked, true)) {
+                        $picked[] = $code;
+                    }
+                }
+                if ($picked) $answers[$key] = $picked;
+                elseif ($req) $errors[$key] = 'Please choose at least one.';
+
+                if (!empty($q['other'])) {
+                    $other = trim((string)($post[$key . '_other'] ?? ''));
+                    if ($other !== '') {
+                        $answers[$key . '_other'] = function_exists('mb_substr')
+                            ? mb_substr($other, 0, SURVEY_OTHER_MAX)
+                            : substr($other, 0, SURVEY_OTHER_MAX);
+                    }
+                }
+                break;
+
+            case 'matrix':
+                $scale = $q['scale'] ?? [];
+                $rows  = (array)($raw ?? []);
+                $picked = [];
+                foreach (($q['rows'] ?? []) as $rk => $_) {
+                    $v = (string)($rows[$rk] ?? '');
+                    if ($v !== '' && array_key_exists($v, $scale)) $picked[$rk] = $v;
+                }
+                if ($picked) $answers[$key] = $picked;
+                elseif ($req) $errors[$key] = 'Please answer this.';
+                break;
+        }
+    }
+
+    return [$answers, $errors];
+}
+
+// ---- Surveys (the live links) -------------------------------------------
+
+/**
+ * The live survey row for a spec, creating it — token and all — the first time
+ * it's asked for. So the shareable link simply exists once the code is
+ * deployed; nobody has to remember to press "create" before an orientation.
+ */
+function survey_ensure(string $specKey, ?int $byUserId = null): ?array
+{
+    if (!survey_spec($specKey)) return null;
+    try {
+        $s = db()->prepare("SELECT * FROM surveys WHERE spec_key = :k ORDER BY id LIMIT 1");
+        $s->execute([':k' => $specKey]);
+        if ($row = $s->fetch()) return $row;
+
+        db()->prepare("
+            INSERT INTO surveys (spec_key, token, active, created_by)
+            VALUES (:k, :t, 1, :by)
+        ")->execute([
+            ':k'  => $specKey,
+            ':t'  => bin2hex(random_bytes(32)),
+            ':by' => $byUserId,
+        ]);
+        $s->execute([':k' => $specKey]);
+        return $s->fetch() ?: null;
+    } catch (Throwable $e) {
+        return null;   // pre-migration DB
+    }
+}
+
+/** Look up a survey by its public token. Null when unknown or closed. */
+function survey_by_token(string $token): ?array
+{
+    // Length-check first so a junk URL never reaches the database, and compare
+    // in constant time so a wrong token can't be narrowed down by timing.
+    if (strlen($token) !== 64 || !ctype_xdigit($token)) return null;
+    try {
+        $s = db()->prepare("SELECT * FROM surveys WHERE token = :t LIMIT 1");
+        $s->execute([':t' => $token]);
+        $row = $s->fetch();
+    } catch (Throwable $e) {
+        return null;
+    }
+    if (!$row || !hash_equals((string)$row['token'], $token)) return null;
+    if ((int)$row['active'] !== 1) return null;
+    return $row;
+}
+
+/** Mint a fresh token, retiring the old link. */
+function survey_reissue_token(int $surveyId): string
+{
+    $token = bin2hex(random_bytes(32));
+    db()->prepare("UPDATE surveys SET token = :t WHERE id = :id")
+        ->execute([':t' => $token, ':id' => $surveyId]);
+    return $token;
+}
+
+/** Open or close a survey. A closed survey's link stops accepting responses. */
+function survey_set_active(int $surveyId, bool $active): void
+{
+    db()->prepare("UPDATE surveys SET active = :a WHERE id = :id")
+        ->execute([':a' => $active ? 1 : 0, ':id' => $surveyId]);
+}
+
+/** Absolute URL of a survey's public form. */
+function survey_url(string $token): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? '');
+    if ($host === '') return '/survey.php?t=' . $token;
+    return $scheme . '://' . $host . '/survey.php?t=' . $token;
+}
+
+// ---- Responses -----------------------------------------------------------
+
+/**
+ * Store one submission. parent_name / child_name / class get their own columns
+ * because they're what the office sorts, searches and de-duplicates on;
+ * everything else rides along as JSON.
+ */
+function survey_save_response(int $surveyId, array $answers): int
+{
+    db()->prepare("
+        INSERT INTO survey_responses
+            (survey_id, parent_name, child_name, class, answers, ip_hash)
+        VALUES (:s, :p, :c, :g, :a, :ip)
+    ")->execute([
+        ':s'  => $surveyId,
+        ':p'  => (string)($answers['parent_name'] ?? ''),
+        ':c'  => (string)($answers['child_name'] ?? ''),
+        ':g'  => (string)($answers['class'] ?? ''),
+        ':a'  => json_encode($answers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        // Hashed, not stored raw: enough to spot one device submitting twenty
+        // times, without keeping identifiable network data about families.
+        ':ip' => hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? '')),
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+/** Responses for a survey, newest first. Each row gains a decoded `_a`. */
+function survey_responses(int $surveyId, string $q = ''): array
+{
+    $sql    = "SELECT * FROM survey_responses WHERE survey_id = :s";
+    $params = [':s' => $surveyId];
+    if ($q !== '') {
+        $sql .= " AND (parent_name LIKE :q OR child_name LIKE :q OR class LIKE :q OR answers LIKE :q2)";
+        $params[':q']  = '%' . $q . '%';
+        $params[':q2'] = '%' . $q . '%';
+    }
+    $sql .= " ORDER BY submitted_at DESC, id DESC LIMIT 2000";
+    try {
+        $s = db()->prepare($sql);
+        $s->execute($params);
+        $rows = $s->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+    foreach ($rows as &$r) {
+        $decoded = json_decode((string)$r['answers'], true);
+        $r['_a'] = is_array($decoded) ? $decoded : [];
+    }
+    return $rows;
+}
+
+/** One response by id, with `_a` decoded. */
+function survey_response(int $id): ?array
+{
+    try {
+        $s = db()->prepare("SELECT * FROM survey_responses WHERE id = :id");
+        $s->execute([':id' => $id]);
+        $row = $s->fetch();
+    } catch (Throwable $e) {
+        return null;
+    }
+    if (!$row) return null;
+    $decoded = json_decode((string)$row['answers'], true);
+    $row['_a'] = is_array($decoded) ? $decoded : [];
+    return $row;
+}
+
+/** How many responses a survey has. */
+function survey_response_count(int $surveyId): int
+{
+    try {
+        $s = db()->prepare("SELECT COUNT(*) FROM survey_responses WHERE survey_id = :s");
+        $s->execute([':s' => $surveyId]);
+        return (int)$s->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/**
+ * Tally the choice questions across a set of responses:
+ *   question key → ['label', 'options' => [label => count], 'answered' => n]
+ *
+ * Free-text questions are skipped — there's nothing to count, and they're read
+ * one at a time on the responses page.
+ */
+function survey_tally(array $spec, array $rows): array
+{
+    $out = [];
+    foreach (survey_questions($spec) as $q) {
+        $type = (string)($q['type'] ?? '');
+        $key  = (string)$q['key'];
+
+        if ($type === 'radio' || $type === 'checkbox') {
+            $opts   = survey_options($q);
+            $counts = array_fill_keys(array_values($opts), 0);
+            $answered = 0;
+            foreach ($rows as $r) {
+                $v = $r['_a'][$key] ?? null;
+                if ($v === null || $v === '' || $v === []) continue;
+                $answered++;
+                foreach ((array)$v as $code) {
+                    $label = (string)($opts[$code] ?? $code);
+                    $counts[$label] = ($counts[$label] ?? 0) + 1;
+                }
+            }
+            $out[$key] = ['label' => (string)$q['label'], 'options' => $counts,
+                          'answered' => $answered, 'multi' => $type === 'checkbox'];
+        } elseif ($type === 'matrix') {
+            $scale = $q['scale'] ?? [];
+            foreach (($q['rows'] ?? []) as $rk => $rlabel) {
+                $counts   = array_fill_keys(array_values($scale), 0);
+                $answered = 0;
+                foreach ($rows as $r) {
+                    $v = $r['_a'][$key][$rk] ?? null;
+                    if ($v === null || $v === '') continue;
+                    $answered++;
+                    $label = (string)($scale[$v] ?? $v);
+                    $counts[$label] = ($counts[$label] ?? 0) + 1;
+                }
+                $out[$key . '.' . $rk] = [
+                    'label'    => ($q['short'] ?? $q['label']) . ': ' . $rlabel,
+                    'options'  => $counts,
+                    'answered' => $answered,
+                    'multi'    => false,
+                ];
+            }
+        }
+    }
+    return $out;
+}
