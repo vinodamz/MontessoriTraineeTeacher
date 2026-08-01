@@ -77,8 +77,12 @@ $where  = [];
 $params = [];
 
 if ($q !== '') {
-    $where[] = "(s.first_name LIKE :q OR s.last_name LIKE :q OR s.admission_number LIKE :q)";
-    $params[':q'] = '%' . $q . '%';
+    // A named placeholder may appear only once per statement: db() runs with
+    // EMULATE_PREPARES off, and a native prepare rejects a repeat.
+    $where[] = "(s.first_name LIKE :q1 OR s.last_name LIKE :q2 OR s.admission_number LIKE :q3)";
+    $params[':q1'] = '%' . $q . '%';
+    $params[':q2'] = '%' . $q . '%';
+    $params[':q3'] = '%' . $q . '%';
 }
 if ($gradeFilter !== '') {
     $where[] = "s.grade = :g";

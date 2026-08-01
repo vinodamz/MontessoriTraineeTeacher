@@ -22,9 +22,15 @@ $where = ['1=1'];
 $params = [];
 if ($fStatus !== '') { $where[] = 'f.status = :st'; $params[':st'] = $fStatus; }
 if ($q !== '') {
-    $where[] = '(f.parent_comments LIKE :q OR f.parent_name LIKE :q
-                 OR s.first_name LIKE :q OR s.last_name LIKE :q)';
-    $params[':q'] = '%' . $q . '%';
+    // A named placeholder may appear only once per statement: db() runs with
+    // EMULATE_PREPARES off, and a native prepare rejects a repeat.
+    $where[] = '(f.parent_comments LIKE :q1 OR f.parent_name LIKE :q2
+                 OR s.first_name LIKE :q3 OR s.last_name LIKE :q4)';
+    $like = '%' . $q . '%';
+    $params[':q1'] = $like;
+    $params[':q2'] = $like;
+    $params[':q3'] = $like;
+    $params[':q4'] = $like;
 }
 
 $rows = [];
