@@ -167,6 +167,29 @@ $relRelation = $profile['relative_relation'] !== '' ? (staff_relations()[$profil
             <dl class="dl-grid">
                 <dt>Highest qualification</dt><dd><?= $pv($profile['highest_qualification']) ?></dd>
             </dl>
+            <?php
+            // Working hours are set by an admin on /staff/shifts.php, not on the
+            // personal-details form, so they're shown here rather than edited here.
+            $shift  = ['start' => staff_time_norm($profile['work_start']), 'end' => staff_time_norm($profile['work_end'])];
+            $cutoff = staff_late_cutoff($shift['start']);
+            ?>
+            <h4 class="muted small section-h-spaced">Working hours</h4>
+            <dl class="dl-grid">
+                <dt>Shift</dt>
+                <dd><?= staff_shift_label($shift) !== '' ? e(staff_shift_label($shift)) : '<span class="muted">not set</span>' ?></dd>
+                <dt>Late after</dt>
+                <dd>
+                    <?php if ($cutoff !== null): ?>
+                        <?= e(staff_time_label($cutoff)) ?>
+                        <span class="muted small">(<?= (int)staff_late_grace_minutes() ?> min grace)</span>
+                    <?php else: ?>
+                        <span class="muted">not tracked</span>
+                    <?php endif; ?>
+                </dd>
+            </dl>
+            <?php if ($isAdmin): ?>
+                <p class="muted small"><a href="/staff/shifts.php">Set working hours</a></p>
+            <?php endif; ?>
         </div>
         <div style="flex: 1 1 240px;">
             <h4 class="muted small">Address &amp; emergency</h4>
