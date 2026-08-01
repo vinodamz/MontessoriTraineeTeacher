@@ -399,7 +399,13 @@ if ($assnExplicit !== '' && ctype_digit($assnExplicit)) {
     $where[] = 't.assigned_to_user_id = :auid';
     $params[':auid'] = (int)$assnExplicit;
 }
-if ($search !== '') { $where[] = '(t.title LIKE :q OR t.description LIKE :q)'; $params[':q'] = '%'.$search.'%'; }
+// A named placeholder may appear only once per statement: db() runs with
+// EMULATE_PREPARES off, and a native prepare rejects a repeat.
+if ($search !== '') {
+    $where[] = '(t.title LIKE :q1 OR t.description LIKE :q2)';
+    $params[':q1'] = '%'.$search.'%';
+    $params[':q2'] = '%'.$search.'%';
+}
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
 $sql = "

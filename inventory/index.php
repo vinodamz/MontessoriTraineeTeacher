@@ -37,8 +37,11 @@ if (!in_array($view, $VALID_VIEWS, true)) $view = '';
 
 $where   = []; $params = [];
 if ($q !== '') {
-    $where[] = '(name LIKE :q OR sku LIKE :q)';
-    $params[':q'] = '%' . $q . '%';
+    // A named placeholder may appear only once per statement: db() runs with
+    // EMULATE_PREPARES off, and a native prepare rejects a repeat.
+    $where[] = '(name LIKE :q1 OR sku LIKE :q2)';
+    $params[':q1'] = '%' . $q . '%';
+    $params[':q2'] = '%' . $q . '%';
 }
 if (in_array($cat,  $VALID_CATS,  true)) { $where[] = 'category = :cat';     $params[':cat']  = $cat; }
 if ($sub !== '')                          { $where[] = 'sub_category = :sub'; $params[':sub']  = $sub; }

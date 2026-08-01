@@ -647,9 +647,16 @@ function survey_responses(int $surveyId, string $q = ''): array
     $sql    = "SELECT * FROM survey_responses WHERE survey_id = :s";
     $params = [':s' => $surveyId];
     if ($q !== '') {
-        $sql .= " AND (parent_name LIKE :q OR child_name LIKE :q OR class LIKE :q OR answers LIKE :q2)";
-        $params[':q']  = '%' . $q . '%';
-        $params[':q2'] = '%' . $q . '%';
+        // One placeholder per LIKE. db() runs with EMULATE_PREPARES off, and a
+        // native prepare rejects the same named placeholder used twice in a
+        // statement ("Invalid parameter number") — which the catch below would
+        // then turn into a silently empty result.
+        $sql .= " AND (parent_name LIKE :q1 OR child_name LIKE :q2 OR class LIKE :q3 OR answers LIKE :q4)";
+        $like = '%' . $q . '%';
+        $params[':q1'] = $like;
+        $params[':q2'] = $like;
+        $params[':q3'] = $like;
+        $params[':q4'] = $like;
     }
     $sql .= " ORDER BY submitted_at DESC, id DESC LIMIT 2000";
     try {

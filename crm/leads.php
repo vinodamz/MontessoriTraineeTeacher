@@ -44,8 +44,12 @@ if ($ownerIn > 0) {
     $params[':oid'] = $ownerIn;
 }
 if ($q !== '') {
-    $where[] = "(f.primary_name LIKE :q OR f.primary_phone LIKE :q OR f.primary_email LIKE :q)";
-    $params[':q'] = "%$q%";
+    // A named placeholder may appear only once per statement: db() runs with
+    // EMULATE_PREPARES off, and a native prepare rejects a repeat.
+    $where[] = "(f.primary_name LIKE :q1 OR f.primary_phone LIKE :q2 OR f.primary_email LIKE :q3)";
+    $params[':q1'] = "%$q%";
+    $params[':q2'] = "%$q%";
+    $params[':q3'] = "%$q%";
 }
 
 $sql = "
