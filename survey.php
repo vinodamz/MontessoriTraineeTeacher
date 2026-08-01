@@ -170,6 +170,18 @@ if (!$survey || !$spec) {
   .sv-thanks h2 { color: var(--deep); margin: .6rem 0; }
   .sv-thanks p { white-space: pre-line; color: #4a4a4a; max-width: 34rem; margin: 0 auto; }
   .sv-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  /* Autosave: a quiet confirmation, and the offer to discard a restored draft. */
+  .sv-saved { position: fixed; right: .8rem; bottom: .8rem; z-index: 20;
+              background: #2f7d4f; color: #fff; font-size: .8rem; font-weight: 600;
+              padding: .4rem .75rem; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+              opacity: 0; transform: translateY(.4rem); transition: opacity .2s, transform .2s;
+              pointer-events: none; }
+  .sv-saved.on { opacity: 1; transform: none; }
+  .sv-restored { background: #eef7f0; border: 1px solid #cfe6d6; color: #22603c;
+                 padding: .7rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-size: .9rem; }
+  .sv-restored button { background: none; border: 0; color: #22603c; font: inherit;
+                        font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
 </style>
 </head>
 <body>
@@ -211,7 +223,17 @@ if (!$survey || !$spec) {
         <div class="sv-flash"><?= e($topErr) ?></div>
     <?php endif; ?>
 
-    <form method="post" action="/survey.php?t=<?= e($token) ?>" novalidate>
+    <div id="sv-restored" class="sv-restored" hidden>
+        We've brought back the answers you'd already filled in on this device.
+        <button type="button" id="sv-discard">Start fresh instead</button>
+    </div>
+
+    <?php // data-restore is set only on a clean GET. After a failed submit the
+          // server has already re-rendered what the parent typed, and letting the
+          // saved draft overwrite that would undo their most recent edits. ?>
+    <form method="post" action="/survey.php?t=<?= e($token) ?>" novalidate
+          id="sv-form" data-key="<?= e(substr($token, 0, 16)) ?>"
+          data-restore="<?= $posted ? '0' : '1' ?>">
         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="t" value="<?= e($token) ?>">
         <div class="sv-hp" aria-hidden="true">
@@ -322,12 +344,149 @@ if (!$survey || !$spec) {
         <button class="sv-submit" type="submit">Submit my response</button>
         <p class="sv-foot">
             Only questions marked <span class="sv-req">*</span> are required —
-            answer as much or as little as you like.
+            answer as much or as little as you like.<br>
+            <span id="sv-foot-save">Your answers are kept on this device as you type.</span>
         </p>
     </form>
+    <div class="sv-saved" id="sv-saved" role="status" aria-live="polite">Saved</div>
 
 <?php endif; ?>
 </main>
+
+<script>
+/*
+ * Autosave. Every keystroke and every tap is written to this device's
+ * localStorage, so a dropped connection, a phone that sleeps, or a
+ * closed tab doesn't cost a parent the five minutes they just spent.
+ *
+ * Deliberately device-local: nothing is sent to the school until the parent
+ * presses Submit. A parent who types a worry, thinks better of it and closes
+ * the tab has not consented to send it, and a draft on a server is sent.
+ * The trade-off is that a draft doesn't follow them to another phone.
+ *
+ * Everything here is an enhancement. With JS off the form behaves exactly as
+ * it did before: the server still re-renders what was typed after a failed
+ * submit, and nothing about saving changes.
+ */
+(function () {
+    var form = document.getElementById('sv-form');
+    if (!form || !window.localStorage) return;
+
+    var KEY  = 'lg_survey_' + form.getAttribute('data-key');
+    var MAXAGE = 30 * 24 * 60 * 60 * 1000;          // forget drafts after a month
+    var SKIP = { '_csrf': 1, 't': 1, 'website': 1 };
+
+    // localStorage throws in some private-browsing modes; a survey must never
+    // break because of a storage quirk, so every access is guarded.
+    function read()      { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+    function write(o)    { try { localStorage.setItem(KEY, JSON.stringify(o)); return true; } catch (e) { return false; } }
+    function drop()      { try { localStorage.removeItem(KEY); } catch (e) {} }
+
+    function collect() {
+        var data = {}, fd = new FormData(form), it = fd.entries(), row;
+        while (!(row = it.next()).done) {
+            var k = row.value[0], v = row.value[1];
+            if (SKIP[k]) continue;
+            if (k.slice(-2) === '[]') { (data[k] = data[k] || []).push(v); }
+            else if (v !== '') { data[k] = v; }
+        }
+        return data;
+    }
+
+    // form.elements[name] handles 'understand[vision]' and 'valuable[]' without
+    // any selector escaping, and hands back a RadioNodeList for grouped inputs.
+    function apply(data) {
+        var restored = 0;
+        for (var k in data) {
+            if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
+            var field = form.elements[k];
+            if (!field) continue;                          // question since removed
+            var vals  = data[k] instanceof Array ? data[k] : [data[k]];
+            var nodes = (field.length !== undefined && !field.tagName) ? field : [field];
+            for (var i = 0; i < nodes.length; i++) {
+                var el = nodes[i];
+                if (el.type === 'radio' || el.type === 'checkbox') {
+                    for (var j = 0; j < vals.length; j++) {
+                        if (el.value === vals[j]) { el.checked = true; restored++; }
+                    }
+                } else if (vals[0] != null) {
+                    el.value = vals[0]; restored++;
+                }
+            }
+        }
+        return restored;
+    }
+
+    var badge = document.getElementById('sv-saved');
+    var hideTimer, saveTimer;
+    function flash(text) {
+        if (!badge) return;
+        badge.textContent = text;
+        badge.classList.add('on');
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () { badge.classList.remove('on'); }, 1400);
+    }
+
+    function save() {
+        var ok = write({ at: new Date().getTime(), v: collect() });
+        flash(ok ? 'Saved' : 'Could not save on this device');
+        if (!ok) {                                        // say so once, then stop nagging
+            var foot = document.getElementById('sv-foot-save');
+            if (foot) foot.textContent = 'This browser is blocking local storage, so answers are not being kept — please finish in one go.';
+        }
+    }
+
+    // Restore before wiring the listeners, so replaying a draft doesn't
+    // immediately rewrite it, and only on a clean load (see data-restore).
+    if (form.getAttribute('data-restore') === '1') {
+        var saved = read();
+        if (saved && saved.v && (new Date().getTime() - (saved.at || 0)) < MAXAGE) {
+            if (apply(saved.v) > 0) {
+                var note = document.getElementById('sv-restored');
+                if (note) note.hidden = false;
+            }
+        } else if (saved) {
+            drop();                                        // stale
+        }
+    }
+
+    var discard = document.getElementById('sv-discard');
+    if (discard) {
+        discard.addEventListener('click', function () {
+            drop();
+            form.reset();
+            var note = document.getElementById('sv-restored');
+            if (note) note.hidden = true;
+        });
+    }
+
+    // Typing is debounced so we're not serialising the whole form on every
+    // letter; taps on radios and checkboxes save straight away.
+    form.addEventListener('input', function () {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(save, 400);
+    });
+    form.addEventListener('change', function () {
+        clearTimeout(saveTimer);
+        save();
+    });
+    // A phone locking or the tab being swapped away is the most likely way a
+    // half-filled form is lost, so flush on the way out too.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') { clearTimeout(saveTimer); save(); }
+    });
+
+    // Once it's really submitted the draft has done its job.
+    form.addEventListener('submit', function () { drop(); });
+})();
+
+<?php if ($done): ?>
+/* Submitted successfully — clear the draft even though the form is gone. */
+(function () {
+    try { localStorage.removeItem('lg_survey_' + <?= json_encode(substr($token, 0, 16)) ?>); } catch (e) {}
+})();
+<?php endif; ?>
+</script>
 
 </body>
 </html>
