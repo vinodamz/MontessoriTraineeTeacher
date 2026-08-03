@@ -221,7 +221,13 @@ function oauth_client_authenticate(array $client, ?string $presentedSecret): voi
 {
     if ($client['secret_hash'] === null) return;                 // public client
     if ($presentedSecret === null || $presentedSecret === '') {
-        throw new OAuthError('invalid_client', 'This client must authenticate.', 401);
+        // Worth spelling out: this is what an application with no secret box
+        // hits when it was registered with one, and "must authenticate" alone
+        // sends people looking in the wrong place.
+        throw new OAuthError('invalid_client',
+            'This client was registered with a secret and did not send one. If the '
+          . 'application has nowhere to enter a client secret, register it again without '
+          . 'one — PKCE is required either way.', 401);
     }
     if (!hash_equals((string)$client['secret_hash'], oauth_hash($presentedSecret))) {
         throw new OAuthError('invalid_client', 'Bad client credentials.', 401);

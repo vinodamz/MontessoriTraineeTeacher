@@ -360,9 +360,17 @@ foreach ($clients as $c) {
                       placeholder="https://…"><?= e($suggestedRedirect) ?></textarea></label>
         </p>
         <p class="small" style="margin:.4rem 0;">
-            <label><input type="checkbox" name="confidential" value="1" checked>
+            <label><input type="checkbox" name="confidential" value="1">
             Also issue a client secret</label>
-            <span class="muted">— leave ticked unless the application only asks for an ID.</span>
+            <span class="muted">— only tick this if the application has a box to put it in.</span>
+        </p>
+        <p class="muted small" style="margin:.2rem 0 .8rem;">
+            Most assistants ask for a Client ID and nothing else. They run on someone's
+            machine, where a secret cannot be kept, so they prove themselves with PKCE
+            instead — which this server requires either way. Issuing a secret to an
+            application that has nowhere to put it does not make it safer; it makes it
+            unable to sign in at all, because the server will then insist on a secret it
+            never receives.
         </p>
         <button class="btn btn-primary" type="submit">Create application</button>
     </form>
