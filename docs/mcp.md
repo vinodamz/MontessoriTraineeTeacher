@@ -169,3 +169,37 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 | `mcp_admin.php` | Admin UI: connections, tokens, audit trail |
 | `sql/migrate_055_mcp_api.sql` | `mcp_tokens`, `mcp_audit` |
 | `sql/migrate_056_oauth.sql` | `oauth_clients`, `oauth_auth_codes`, `oauth_tokens` |
+
+## If a client cannot connect
+
+Run these three against the live site — they separate the three failure modes
+that look identical from inside a client:
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" \
+  https://mtt.thelittlegraduates.in/.well-known/oauth-protected-resource
+curl -sS https://mtt.thelittlegraduates.in/.well-known/oauth-authorization-server
+curl -sS -i -X POST https://mtt.thelittlegraduates.in/mcp.php \
+  -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+| Symptom | Cause |
+|---|---|
+| well-known 404 / 403 | The rewrite is not firing. There are rules in both the root `.htaccess` and `.well-known/.htaccess`; check `mod_rewrite` is enabled. |
+| metadata lists `http://` URLs | Scheme detection is wrong for this host — set `site_base_url` (below). A client told to POST registration to an `http` URL hits the Force-HTTPS 301, and a redirect on POST drops the body. |
+| `/mcp.php` returns 401 + `WWW-Authenticate` | The server is healthy. The problem is client-side — re-add the connector. |
+| `/mcp.php` returns 500 or HTML | Something is throwing; the body says what, and the detail is in the PHP error log. |
+
+### Forcing the public origin
+
+`app_base_url()` looks at `HTTPS`, `X-Forwarded-Proto`, `X-Forwarded-SSL`,
+`REQUEST_SCHEME` and the port, then assumes https for any non-loopback host.
+If a host still gets it wrong, set the answer explicitly — it overrides
+detection everywhere, including the OAuth discovery documents and the parent
+survey links:
+
+```sql
+INSERT INTO app_settings (setting_key, setting_value)
+VALUES ('site_base_url', 'https://mtt.thelittlegraduates.in')
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+```

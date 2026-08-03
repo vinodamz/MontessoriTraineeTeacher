@@ -74,8 +74,7 @@ try {
     $oauthReady = false;
 }
 
-$scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$baseUrl = $scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? '') . '/mcp.php';
+$baseUrl = app_base_url() . '/mcp.php';
 
 $pageTitle  = 'MCP API';
 $wideLayout = true;

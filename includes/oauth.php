@@ -57,12 +57,17 @@ class OAuthError extends Exception
 
 // ------------------------------------------------------------------- helpers
 
-/** The public origin of this install, e.g. https://mtt.thelittlegraduates.in */
+/**
+ * The public origin of this install, e.g. https://mtt.thelittlegraduates.in
+ *
+ * Delegates to app_base_url(), which honours the site_base_url setting and
+ * looks past $_SERVER['HTTPS'] at the proxy headers. Advertising http:// here
+ * breaks registration outright: the client POSTs to it, the Force-HTTPS
+ * redirect 301s, and the body is dropped.
+ */
 function oauth_base_url(): string
 {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? '');
-    return $scheme . '://' . $host;
+    return app_base_url();
 }
 
 function oauth_secret(int $bytes = 32): string
