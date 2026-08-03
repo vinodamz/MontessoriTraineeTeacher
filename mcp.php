@@ -33,6 +33,41 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('X-Robots-Tag: noindex, nofollow');
 
+/*
+ * CORS.
+ *
+ * A browser-based client — claude.ai's connector, anything running in a page
+ * rather than a terminal — cannot POST JSON with an Authorization header
+ * cross-origin without a preflight succeeding first. Without these headers
+ * the browser refuses before the request is ever sent, and the only thing the
+ * user sees is "connection to server failed", with nothing in the server log
+ * because nothing reached the server.
+ *
+ * The OAuth endpoints have had these since they were written. This one, which
+ * every request actually goes through, did not.
+ *
+ * Origin '*' is correct here: authorization is a Bearer header, never a
+ * cookie, so there is nothing for a hostile page to ride on. A token holder
+ * can already call this from anywhere; a browser is not a new door.
+ *
+ * WWW-Authenticate must be exposed or a client cannot read the pointer to the
+ * OAuth metadata off a 401 — which is how it discovers it needs to sign in.
+ */
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, GET, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept, '
+     . 'Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID');
+header('Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id');
+header('Access-Control-Max-Age: 86400');
+
+// Answered before authentication, deliberately: a preflight never carries the
+// Authorization header, so demanding one here would fail every cross-origin
+// client before it had a chance to send credentials at all.
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 // This endpoint must answer in JSON even when it dies. Without this a fatal
 // gives the client an empty 200 or a page of HTML, and "the MCP server just
 // stops responding" is a horrible thing to diagnose from the far end. The
