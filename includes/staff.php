@@ -319,6 +319,92 @@ function staff_leave_month_split(int $userId, int $year, int $month): array
     ];
 }
 
+// ---- Leave notifications -------------------------------------------------
+//
+// A leave request is a conversation between two people who are rarely at a
+// screen at the same time. Without this, an admin has to remember to look at
+// the page, and a member of staff has to keep asking whether they can book
+// the train.
+
+/** "2 days" / "half a day" / "1 day" — for a sentence, not a table cell. */
+function staff_leave_days_phrase(float $days): string
+{
+    if (abs($days - 0.5) < 0.001) return 'half a day';
+    $n = rtrim(rtrim(number_format($days, 1), '0'), '.');
+    return $n . ' day' . (abs($days - 1.0) < 0.001 ? '' : 's');
+}
+
+/** Tell the admins somebody is waiting on them. */
+function staff_leave_notify_applied(array $req, string $applicantName): void
+{
+    if (!function_exists('notify_admins')) return;
+    $type = staff_leave_types()[$req['leave_type']] ?? (string)$req['leave_type'];
+    $when = (string)$req['start_date'] === (string)$req['end_date']
+          ? date('j M', strtotime((string)$req['start_date']))
+          : date('j M', strtotime((string)$req['start_date'])) . ' – '
+            . date('j M', strtotime((string)$req['end_date']));
+
+    notify_admins(
+        'staff',
+        'leave.applied',
+        $applicantName . ' applied for leave',
+        $type . ' leave, ' . staff_leave_days_phrase((float)$req['days_count'])
+            . ', ' . $when . '.'
+            . (trim((string)($req['reason'] ?? '')) !== ''
+               ? ' Reason: ' . trim((string)$req['reason']) : ''),
+        '/staff/leave.php?user_id=' . (int)$req['user_id']
+    );
+}
+
+/**
+ * Tell the applicant what was decided.
+ *
+ * Sent as 'system', not 'staff': _notify_category_enabled() always allows
+ * system, and this one must not be silenceable. A rejection changes whether
+ * somebody is expected at work and whether they are paid for the day.
+ */
+function staff_leave_notify_decided(array $req, string $decision, ?string $note, float $lopDays): void
+{
+    if (!function_exists('notify')) return;
+    $type = staff_leave_types()[$req['leave_type']] ?? (string)$req['leave_type'];
+    $when = (string)$req['start_date'] === (string)$req['end_date']
+          ? date('j M', strtotime((string)$req['start_date']))
+          : date('j M', strtotime((string)$req['start_date'])) . ' – '
+            . date('j M', strtotime((string)$req['end_date']));
+
+    $body = $type . ' leave, ' . staff_leave_days_phrase((float)$req['days_count']) . ', ' . $when . '.';
+    if ($decision === 'approved' && $lopDays > 0) {
+        // Say it here rather than let it turn up as a smaller number on the
+        // payslip three weeks later.
+        $body .= ' ' . staff_leave_days_phrase($lopDays)
+               . ' of this is loss of pay — your balance did not cover it.';
+    }
+    if (trim((string)$note) !== '') $body .= ' Note: ' . trim((string)$note);
+
+    notify(
+        (int)$req['user_id'],
+        'system',
+        'leave.' . $decision,
+        'Your leave was ' . $decision,
+        $body,
+        '/staff/leave.php'
+    );
+}
+
+/** Tell the admins a pending request has gone away, so they stop looking. */
+function staff_leave_notify_cancelled(array $req, string $applicantName): void
+{
+    if (!function_exists('notify_admins')) return;
+    notify_admins(
+        'staff',
+        'leave.cancelled',
+        $applicantName . ' cancelled a leave request',
+        staff_leave_days_phrase((float)$req['days_count']) . ' from '
+            . date('j M', strtotime((string)$req['start_date'])) . ' — no longer needs approving.',
+        '/staff/leave.php'
+    );
+}
+
 /**
  * Recompute lop_days on every approved request in a month and write it back.
  *

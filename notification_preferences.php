@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $attendance = !empty($_POST['attendance_enabled']) ? 1 : 0;
     $fees       = !empty($_POST['fees_enabled']) ? 1 : 0;
     $students   = !empty($_POST['students_enabled']) ? 1 : 0;
+    $staff      = !empty($_POST['staff_enabled']) ? 1 : 0;
 
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         flash_set('error', 'That email address looks invalid.');
@@ -37,17 +38,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
         $pdo->prepare("
             INSERT INTO notification_preferences
-                (user_id, email_enabled, tasks_enabled, attendance_enabled, fees_enabled, students_enabled)
-            VALUES (:uid, :e, :t, :a, :f, :s)
+                (user_id, email_enabled, tasks_enabled, attendance_enabled, fees_enabled, students_enabled, staff_enabled)
+            VALUES (:uid, :e, :t, :a, :f, :s, :st)
             ON DUPLICATE KEY UPDATE
                 email_enabled = VALUES(email_enabled),
                 tasks_enabled = VALUES(tasks_enabled),
                 attendance_enabled = VALUES(attendance_enabled),
                 fees_enabled = VALUES(fees_enabled),
-                students_enabled = VALUES(students_enabled)
+                students_enabled = VALUES(students_enabled),
+                staff_enabled = VALUES(staff_enabled)
         ")->execute([
             ':uid' => $me, ':e' => $emailOn,
             ':t' => $tasks, ':a' => $attendance, ':f' => $fees, ':s' => $students,
+            ':st' => $staff,
         ]);
 
         // Store the address in app_settings under a per-user key for now.
@@ -135,7 +138,17 @@ require __DIR__ . '/includes/header.php';
                 <span>Students (new admissions, withdrawals, assessment due)</span>
             </label>
         </div>
+        <div class="field">
+            <label class="checkbox">
+                <input type="checkbox" name="staff_enabled" value="1" <?= !isset($prefs['staff_enabled']) || $prefs['staff_enabled'] ? 'checked' : '' ?>>
+                <span>Staff (leave requests waiting for approval)</span>
+            </label>
+        </div>
     </div>
+    <p class="muted small">
+        The decision on <strong>your own</strong> leave request always reaches you, whatever is
+        ticked here — it changes whether you are expected at work, and whether you are paid.
+    </p>
 
     <div class="actions section-h-spaced">
         <button class="btn btn-primary" type="submit">Save preferences</button>
