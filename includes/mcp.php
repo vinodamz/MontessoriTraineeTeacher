@@ -232,7 +232,8 @@ function mcp_debug_disable(): void
  * than the one it was opened to investigate.
  */
 function mcp_debug_record(string $method, string $path, array $headers,
-                          string $body, int $status, string $note = ''): void
+                          string $body, int $status, string $note = '',
+                          string $reply = ''): void
 {
     try {
         $safe = [];
@@ -245,20 +246,29 @@ function mcp_debug_record(string $method, string $path, array $headers,
             }
         }
         db()->prepare(
-            "INSERT INTO mcp_debug_log (method, path, headers, body, status, note, ip_hash)
-             VALUES (:m, :p, :h, :b, :s, :n, :ip)"
+            "INSERT INTO mcp_debug_log (method, path, headers, body, status, reply, note, ip_hash)
+             VALUES (:m, :p, :h, :b, :s, :r, :n, :ip)"
         )->execute([
             ':m'  => mb_substr($method, 0, 10),
-            ':p'  => mb_substr($path, 0, 255),
+            ':p'  => mb_substr($path, 0, 1000),
             ':h'  => json_encode($safe, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
             ':b'  => mb_substr($body, 0, 4000),
             ':s'  => $status,
+            ':r'  => $reply !== '' ? mb_substr($reply, 0, 1000) : null,
             ':n'  => $note !== '' ? mb_substr($note, 0, 255) : null,
             ':ip' => hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? '')),
         ]);
     } catch (Throwable $e) {
         // Diagnostics must never be the reason a request fails.
     }
+}
+
+/** Strip anything secret out of a URL before it is written down. */
+function mcp_debug_mask(string $url): string
+{
+    return (string)preg_replace(
+        '/\b(code|token|client_secret|code_verifier|refresh_token|access_token)=[^&\s]*/i',
+        '$1=[masked]', $url);
 }
 
 /**
@@ -279,18 +289,43 @@ function mcp_debug_watch(string $label): void
     try { if (!mcp_debug_active()) return; } catch (Throwable $e) { return; }
 
     register_shutdown_function(function () use ($label) {
-        $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
         // code / token / secret in a query string must not land in a log.
-        $uri = (string)preg_replace(
-            '/\b(code|token|client_secret|code_verifier|refresh_token)=[^&]*/i',
-            '$1=[masked]', $uri);
+        $uri = mcp_debug_mask((string)($_SERVER['REQUEST_URI'] ?? ''));
+
+        /*
+         * Where a redirect actually went.
+         *
+         * A status code cannot tell an authorization from a refusal — both
+         * leave as 302. Only the Location says which: `?code=…` means a code
+         * was issued, `?error=…` means it was turned down and names why.
+         * Without this the log reports that something was redirected and
+         * nothing about where, which is the difference between a diagnosis
+         * and a guess.
+         */
+        // Not guarded on headers_sent(): a redirect exits before any body, so
+        // the headers may or may not have gone out by shutdown, and the list
+        // is readable either way. Under CLI it is simply empty.
+        $reply = '';
+        if (function_exists('headers_list')) {
+            foreach (headers_list() as $h) {
+                if (stripos($h, 'location:') === 0) {
+                    $reply = mcp_debug_mask(trim(substr($h, 9)));
+                    break;
+                }
+                if (stripos($h, 'www-authenticate:') === 0 && $reply === '') {
+                    $reply = trim($h);
+                }
+            }
+        }
+
         mcp_debug_record(
             (string)($_SERVER['REQUEST_METHOD'] ?? '?'),
             $uri,
             mcp_request_headers(),
             '',                                  // never the body: it holds secrets
             (int)(http_response_code() ?: 0),
-            $label
+            $label,
+            $reply
         );
     });
 }
