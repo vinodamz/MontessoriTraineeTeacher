@@ -550,6 +550,16 @@ foreach ($clients as $c) {
                         <?= $d['note'] ? '· ' . e((string)$d['note']) : '' ?>
                     </span>
                 </summary>
+                <?php if (trim((string)($d['reply'] ?? '')) !== ''): ?>
+                    <p class="small" style="margin:.4rem 0 .2rem;"><strong>We replied</strong>
+                        <?php if (stripos((string)$d['reply'], 'code=') !== false): ?>
+                            <span style="color:#2e7d32;">— an authorization code was issued</span>
+                        <?php elseif (stripos((string)$d['reply'], 'error=') !== false): ?>
+                            <span style="color:#c62828;">— this was a refusal, not a sign-in</span>
+                        <?php endif; ?>
+                    </p>
+                    <pre class="small" style="white-space:pre-wrap;word-break:break-all;background:#fafafa;padding:.4rem;"><?= e((string)$d['reply']) ?></pre>
+                <?php endif; ?>
                 <p class="small" style="margin:.4rem 0 .2rem;"><strong>Headers</strong></p>
                 <pre class="small" style="white-space:pre-wrap;word-break:break-all;background:#fafafa;padding:.4rem;"><?= e((string)$d['headers']) ?></pre>
                 <?php if (trim((string)$d['body']) !== ''): ?>
