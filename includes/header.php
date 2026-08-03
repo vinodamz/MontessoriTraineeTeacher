@@ -83,6 +83,11 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php endif; ?>
             <?php if (user_has_module($user, 'staff')): ?>
                 <a href="/staff/index.php">Staff</a>
+            <?php else: ?>
+                <?php /* Applying for your own leave is not a management function,
+                          so everyone gets a way in. Those with the staff module
+                          reach the same page through Staff. */ ?>
+                <a href="/staff/leave.php">My leave</a>
             <?php endif; ?>
             <?php if (user_has_module($user, 'expenses')): ?>
                 <a href="/expenses/index.php">Expenses</a>

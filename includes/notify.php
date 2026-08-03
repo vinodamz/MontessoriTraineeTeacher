@@ -45,12 +45,17 @@ function _notify_get_prefs(int $userId): array
     } catch (Throwable $e) {
         $row = false;
     }
+    // Every category must appear here. _notify_category_enabled() reads a
+    // missing key as "off", so a category left out of this list is silently
+    // dropped for everyone who has never opened the preferences page — which
+    // is most people. Add the key when you add the category.
     $cache[$userId] = $row ?: [
         'email_enabled'      => 1,
         'tasks_enabled'      => 1,
         'attendance_enabled' => 1,
         'fees_enabled'       => 1,
         'students_enabled'   => 1,
+        'staff_enabled'      => 1,
     ];
     return $cache[$userId];
 }

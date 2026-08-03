@@ -1,23 +1,36 @@
 <?php
 /**
- * staff/leave.php — leave requests & allowances.
+ * staff/leave.php — apply for leave, and approve it.
  *
- *   GET  /staff/leave.php                 Admin: every pending request + filters.
- *                                         Non-admin: own requests + apply form.
+ * Open to everyone signed in: applying for your own leave is not a management
+ * function. Admins additionally see the whole queue and the balance controls.
+ *
+ *   GET  /staff/leave.php                 Admin: every request + filters.
+ *                                         Everyone else: own requests + apply form.
  *   GET  /staff/leave.php?user_id=N       Admin: focus one staff member.
- *   POST op=apply                         Anyone: apply for themselves
- *                                         (admins can also apply on behalf via user_id).
- *   POST op=decide   { id, decision, note } Admin: approve / reject.
- *   POST op=cancel   { id }               Owner: cancel own pending request.
- *   POST op=allowance { user_id, year, leave_type, days_total } Admin only.
+ *   POST op=apply     Anyone, for themselves (admins may apply on behalf via user_id).
+ *   POST op=decide    { id, decision, note }  Admin: approve / reject.
+ *   POST op=cancel    { id }                  Owner: cancel own pending request.
+ *   POST op=opening   { user_id, days, as_of } Admin: set the balance as at a date.
+ *   POST op=adjust    { user_id, days, note }  Admin: correct without resetting.
+ *
+ * Applying notifies the admins; deciding notifies the applicant. The decision
+ * goes out as a 'system' notification so it cannot be muted — it changes
+ * whether somebody is expected at work, and whether they are paid.
  */
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/staff.php';
+require_once __DIR__ . '/../includes/notify.php';
 
-$user    = require_module('staff');
+// Every employee applies for their own leave, so this page is open to anyone
+// signed in — not gated on the 'staff' module, which most teachers do not
+// have. Nothing management-facing is exposed by that: the roster picker, the
+// approve/reject buttons and the balance controls are all behind $isAdmin,
+// and a non-admin's view is forced to their own user id below.
+$user    = require_login();
 $isAdmin = staff_is_admin($user);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -48,6 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             VALUES (:u, :t, :s, :e, :h, :d, :r, 'pending')
         ")->execute([':u' => $forUser, ':t' => $type, ':s' => $start, ':e' => $end,
                      ':h' => $half, ':d' => $days, ':r' => $reason]);
+        // Taken immediately: lastInsertId() reflects the most recent INSERT on
+        // the connection, and reading it after the queries below would be a
+        // trap for whoever adds another write in between.
+        $newId = (int)db()->lastInsertId();
 
         // Tell them now whether this will be paid, rather than at payday.
         $bal  = staff_leave_balance_at($forUser);
@@ -60,6 +77,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    . ' day(s), so ' . rtrim(rtrim(number_format($short, 1), '0'), '.')
                    . ' of these would be loss of pay if approved.';
         }
+        // Let the admins know somebody is waiting on them.
+        $q = db()->prepare("SELECT * FROM staff_leave_requests WHERE id = :i");
+        $q->execute([':i' => $newId]);
+        if ($row = $q->fetch()) {
+            $applicant = $forUser === (int)$user['id']
+                       ? (string)$user['name']
+                       : (string)((staff_member($forUser)['name'] ?? 'A staff member'));
+            staff_leave_notify_applied($row, $applicant);
+        }
+
         flash_set($note === '' ? 'ok' : 'error',
                   'Leave request submitted (' . rtrim(rtrim(number_format($days, 1), '0'), '.')
                   . ' day' . ($days == 1 ? '' : 's') . ').' . $note);
@@ -118,6 +145,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               . ' day(s) will be loss of pay — the balance did not cover it.';
                     }
                 }
+                // Tell the person who asked. This is the whole point of the
+                // exercise — otherwise they have to keep checking the page.
+                staff_leave_notify_decided($req, $decide, $note, $decide === 'approved' ? $lop : 0.0);
+
                 flash_set($decide === 'approved' && $lop > 0 ? 'error' : 'ok', $msg);
             }
         }
@@ -126,11 +157,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($op === 'cancel') {
         $rid = (int)($_POST['id'] ?? 0);
-        $stmt = db()->prepare("SELECT user_id, status FROM staff_leave_requests WHERE id = :id");
+        $stmt = db()->prepare("SELECT * FROM staff_leave_requests WHERE id = :id");
         $stmt->execute([':id' => $rid]);
         $r = $stmt->fetch();
         if ($r && (int)$r['user_id'] === (int)$user['id'] && $r['status'] === 'pending') {
             db()->prepare("UPDATE staff_leave_requests SET status='cancelled' WHERE id = :id")->execute([':id' => $rid]);
+            // So an admin who saw the request in their bell stops looking for it.
+            staff_leave_notify_cancelled($r, (string)$user['name']);
             flash_set('ok', 'Request cancelled.');
         }
         redirect('/staff/leave.php');
