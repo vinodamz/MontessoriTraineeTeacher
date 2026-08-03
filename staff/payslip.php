@@ -50,14 +50,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'issue') {
     db()->prepare("
         INSERT INTO staff_payslips
             (user_id, period_year, period_month, working_days, present_days,
-             paid_leave_days, lop_days, hours_worked, earnings_json, deductions_json,
+             paid_leave_days, lop_days, lop_leave_days, lop_absent_days,
+             hours_worked, earnings_json, deductions_json,
              gross_earnings, lop_amount, total_deductions, net_pay, notes, generated_by)
         VALUES
-            (:u, :y, :m, :wd, :pd, :pl, :lop, :hrs, :ej, :dj,
+            (:u, :y, :m, :wd, :pd, :pl, :lop, :lopl, :lopa, :hrs, :ej, :dj,
              :gross, :lopamt, :totded, :net, :notes, :by)
         ON DUPLICATE KEY UPDATE
             working_days = VALUES(working_days), present_days = VALUES(present_days),
             paid_leave_days = VALUES(paid_leave_days), lop_days = VALUES(lop_days),
+            lop_leave_days = VALUES(lop_leave_days), lop_absent_days = VALUES(lop_absent_days),
             hours_worked = VALUES(hours_worked), earnings_json = VALUES(earnings_json),
             deductions_json = VALUES(deductions_json), gross_earnings = VALUES(gross_earnings),
             lop_amount = VALUES(lop_amount), total_deductions = VALUES(total_deductions),
@@ -66,7 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'issue') {
     ")->execute([
         ':u' => $id, ':y' => $year, ':m' => $month,
         ':wd' => $workingDays, ':pd' => $draft['present_days'], ':pl' => $draft['paid_leave_days'],
-        ':lop' => $lopDays, ':hrs' => $draft['hours_worked'],
+        ':lop' => $lopDays,
+        // The split is stored, not recomputed later: leave can be edited after
+        // a slip is issued, and an issued payslip must keep explaining itself.
+        ':lopl' => min($lopDays, (float)($draft['lop_leave_days'] ?? 0)),
+        ':lopa' => max(0.0, $lopDays - (float)($draft['lop_leave_days'] ?? 0)),
+        ':hrs' => $draft['hours_worked'],
         ':ej' => json_encode($draft['earnings'], JSON_UNESCAPED_UNICODE),
         ':dj' => json_encode($draft['deductions'], JSON_UNESCAPED_UNICODE),
         ':gross' => $gross, ':lopamt' => $lopAmt, ':totded' => $totDed, ':net' => $net,
@@ -87,6 +94,8 @@ if ($issued) {
         'present_days'     => (float)$issued['present_days'],
         'paid_leave_days'  => (float)$issued['paid_leave_days'],
         'lop_days'         => (float)$issued['lop_days'],
+        'lop_leave_days'   => (float)($issued['lop_leave_days'] ?? 0),
+        'lop_absent_days'  => (float)($issued['lop_absent_days'] ?? 0),
         'hours_worked'     => (float)$issued['hours_worked'],
         'earnings'         => $earnings,
         'deductions'       => $deductions,
@@ -176,7 +185,8 @@ require __DIR__ . '/../includes/header.php';
         <dt>Employee</dt><dd><?= e($staff['name']) ?></dd>
         <dt>Role</dt><dd><?= e(ucfirst((string)$staff['role'])) ?></dd>
         <dt>Working days</dt><dd><?= e(rtrim(rtrim(number_format($view['working_days'],1),'0'),'.')) ?></dd>
-        <dt>Present</dt><dd><?= (int)$view['present_days'] ?> · paid leave <?= (int)$view['paid_leave_days'] ?> · LOP <?= (int)$view['lop_days'] ?></dd>
+        <?php $dd = fn($v) => rtrim(rtrim(number_format((float)$v, 1), '0'), '.'); ?>
+        <dt>Present</dt><dd><?= (int)$view['present_days'] ?> · paid leave <?= e($dd($view['paid_leave_days'])) ?> · LOP <?= e($dd($view['lop_days'])) ?></dd>
         <dt>Hours worked</dt><dd><?= e(number_format($view['hours_worked'], 1)) ?> h</dd>
     </dl>
 
@@ -198,7 +208,26 @@ require __DIR__ . '/../includes/header.php';
                     <tr><td><?= e($label) ?></td><td><?= e(staff_money((float)$view['deductions'][$k])) ?></td></tr>
                 <?php endforeach; ?>
                 <?php if ($view['lop_amount'] > 0): ?>
-                    <tr><td>Loss of pay (<?= (int)$view['lop_days'] ?> d)</td><td><?= e(staff_money($view['lop_amount'])) ?></td></tr>
+                    <tr>
+                        <td>
+                            Loss of pay (<?= e($dd($view['lop_days'])) ?> d)
+                            <?php
+                            // Where the LOP came from. An unexplained deduction
+                            // on a payslip is the fastest way to lose someone's
+                            // trust, so name the two sources separately.
+                            $ll = (float)($view['lop_leave_days'] ?? 0);
+                            $la = (float)($view['lop_absent_days'] ?? 0);
+                            if ($ll > 0 || $la > 0): ?>
+                                <br><span class="muted small">
+                                <?php if ($ll > 0): ?>
+                                    <?= e($dd($ll)) ?> leave beyond balance / unpaid<?= $la > 0 ? ' · ' : '' ?>
+                                <?php endif; ?>
+                                <?php if ($la > 0): ?><?= e($dd($la)) ?> absent<?php endif; ?>
+                                </span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?= e(staff_money($view['lop_amount'])) ?></td>
+                    </tr>
                 <?php endif; ?>
                 <tr class="total"><td>Total deductions</td><td><?= e(staff_money($view['total_deductions'] + $view['lop_amount'])) ?></td></tr>
             </tbody>
