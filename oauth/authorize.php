@@ -20,6 +20,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/oauth.php';
+require_once __DIR__ . '/../includes/mcp.php';
+mcp_debug_watch('oauth: authorize / consent');
 
 start_session_once();
 oauth_gc();
