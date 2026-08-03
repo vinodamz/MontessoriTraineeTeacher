@@ -41,14 +41,41 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     reg_fail('invalid_request', 'POST a client metadata document here.', 405);
 }
 
-// Cheap flood guard: 10 registrations per IP per hour. Enough for a client
-// that re-registers on every restart, nowhere near enough to fill a table.
+/*
+ * Flood guard, per caller.
+ *
+ * The first version of this computed an IP hash, discarded it, and counted
+ * every registration from everyone — a global cap wearing a per-IP comment.
+ * One client retrying could lock out every other client, itself included,
+ * for an hour, and all a user sees is "couldn't register with the sign-in
+ * service". Clients legitimately re-register on restart and on any failure
+ * further down the flow, so retries are normal traffic, not abuse.
+ *
+ * Per-IP is generous, because being wrong in that direction costs a few
+ * unused rows. The global ceiling behind it exists only to stop a
+ * distributed flood filling the table, and is set far above anything one
+ * honest client could reach.
+ */
+const REG_PER_IP_PER_HOUR = 40;
+const REG_TOTAL_PER_HOUR  = 500;
+
 try {
     $ipHash = hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? ''));
-    $recent = (int)db()->query(
+
+    $mine = db()->prepare(
+        "SELECT COUNT(*) FROM oauth_clients
+          WHERE ip_hash = :ip AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)"
+    );
+    $mine->execute([':ip' => $ipHash]);
+    if ((int)$mine->fetchColumn() > REG_PER_IP_PER_HOUR) {
+        reg_fail('temporarily_unavailable',
+            'This client has registered too many times in the last hour. Wait a few minutes and try again.', 429);
+    }
+
+    $all = (int)db()->query(
         "SELECT COUNT(*) FROM oauth_clients WHERE created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)"
     )->fetchColumn();
-    if ($recent > 60) {
+    if ($all > REG_TOTAL_PER_HOUR) {
         reg_fail('temporarily_unavailable', 'Too many registrations right now. Try again shortly.', 429);
     }
 } catch (PDOException $e) {
@@ -84,7 +111,7 @@ foreach ($grants as $g) {
 }
 
 try {
-    $c = oauth_client_register($name, $uris, $confidential);
+    $c = oauth_client_register($name, $uris, $confidential, $ipHash);
 } catch (OAuthError $e) {
     reg_fail($e->errorCode, $e->getMessage());
 } catch (Throwable $e) {

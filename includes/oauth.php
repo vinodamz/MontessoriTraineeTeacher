@@ -143,7 +143,8 @@ function oauth_redirect_uri_matches(string $registered, string $presented): bool
  * Register a client. Returns the row plus, for a confidential client, the
  * one-and-only plaintext secret.
  */
-function oauth_client_register(string $name, array $redirectUris, bool $confidential): array
+function oauth_client_register(string $name, array $redirectUris, bool $confidential,
+                               ?string $ipHash = null): array
 {
     $clean = [];
     foreach ($redirectUris as $u) {
@@ -165,13 +166,14 @@ function oauth_client_register(string $name, array $redirectUris, bool $confiden
     $secret   = $confidential ? oauth_secret() : null;
 
     db()->prepare(
-        "INSERT INTO oauth_clients (client_id, secret_hash, client_name, redirect_uris)
-         VALUES (:cid, :sh, :n, :r)"
+        "INSERT INTO oauth_clients (client_id, secret_hash, client_name, redirect_uris, ip_hash)
+         VALUES (:cid, :sh, :n, :r, :ip)"
     )->execute([
         ':cid' => $clientId,
         ':sh'  => $secret === null ? null : oauth_hash($secret),
         ':n'   => mb_substr($name, 0, 120),
         ':r'   => json_encode($clean, JSON_UNESCAPED_SLASHES),
+        ':ip'  => $ipHash,
     ]);
 
     return ['client_id' => $clientId, 'client_secret' => $secret, 'redirect_uris' => $clean];

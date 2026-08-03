@@ -165,6 +165,53 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </div>
 
+<?php if ($oauthReady && $clients): ?>
+<?php
+// Clients register themselves, so this list grows on its own — and a client
+// stuck in a retry loop shows up here as a burst of rows within one hour,
+// which is the fastest way to recognise it. The registration endpoint
+// rate-limits per caller; that limit is what this makes visible.
+$lastHour = 0;
+foreach ($clients as $c) {
+    if (strtotime((string)$c['created_at']) > time() - 3600) $lastHour++;
+}
+?>
+<div class="card">
+    <h3 style="margin-top:0;">Registered applications</h3>
+    <p class="muted small">
+        Clients register themselves the first time they connect — that is how OAuth works
+        here, and a client_id on its own grants nothing until somebody signs in.
+        <?php if ($lastHour > 5): ?>
+            <br><strong style="color:#c62828;"><?= (int)$lastHour ?> registered in the last hour.</strong>
+            That usually means a client is retrying in a loop and failing somewhere after
+            registration — check <em>Recent activity</em> and the PHP error log.
+        <?php endif; ?>
+    </p>
+    <div style="overflow-x:auto;">
+    <table class="table">
+        <thead><tr>
+            <th>Application</th><th>Type</th><th>Registered</th><th>Last used</th><th>Live sessions</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach (array_slice($clients, 0, 25) as $c): ?>
+            <tr>
+                <td><?= e((string)($c['client_name'] ?: 'Unnamed')) ?></td>
+                <td class="small"><?= $c['secret_hash'] !== null ? 'Confidential' : 'Public (PKCE)' ?></td>
+                <td class="small"><?= e((string)$c['created_at']) ?></td>
+                <td class="small"><?= $c['last_used_at'] ? e((string)$c['last_used_at'])
+                        : '<span class="muted">never</span>' ?></td>
+                <td><?= (int)$c['live_sessions'] ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+    <?php if (count($clients) > 25): ?>
+        <p class="muted small"><?= count($clients) - 25 ?> older ones not shown.</p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="card">
     <h3 style="margin-top:0;">Issue a token</h3>
     <p class="muted small">
