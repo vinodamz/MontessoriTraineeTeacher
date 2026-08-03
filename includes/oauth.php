@@ -44,6 +44,27 @@ const OAUTH_CODE_TTL     = 60;          // seconds — a redirect hop, nothing m
 const OAUTH_ACCESS_TTL   = 3600;        // 1 hour
 const OAUTH_REFRESH_TTL  = 2592000;     // 30 days
 
+/*
+ * How long a just-rotated refresh token stays usable.
+ *
+ * Rotation plus reuse-detection is the right design, but taken literally it
+ * breaks every honest client that has more than one request in flight. When
+ * the access token expires, several queued requests all get a 401 at once,
+ * all reach for the same refresh token, and all send it. One wins. The others
+ * look exactly like a stolen token being replayed — so the chain gets revoked,
+ * including the token the winner just handed back. The connection dies about
+ * an hour after it was made, every time, and the client can only say
+ * "connection issue".
+ *
+ * Inside this window a second presentation of a token we ourselves rotated is
+ * treated as the race it almost certainly is, and answered with a fresh pair.
+ * Outside it — or if the successor has since been revoked — it is still
+ * treated as a breach and the chain still goes down. A thief would have to be
+ * using the token within seconds of the real client to benefit, which is a far
+ * better trade than disconnecting everyone hourly.
+ */
+const OAUTH_REFRESH_GRACE = 30;         // seconds
+
 /** An OAuth failure that must be rendered as a spec-shaped error. */
 class OAuthError extends Exception
 {
@@ -370,9 +391,14 @@ function oauth_access_token_check(string $token): ?array
 /**
  * Exchange a refresh token for a new pair.
  *
- * The refresh token rotates: the old one dies the moment it is used. If a
- * *already-rotated* refresh token turns up, two parties hold it — the whole
- * chain for that user and client is revoked, and they sign in again.
+ * The refresh token rotates: the old one dies the moment it is used. If an
+ * *already-rotated* refresh token turns up long after the fact, two parties
+ * hold it — the whole chain for that user and client is revoked, and they
+ * sign in again.
+ *
+ * The exception is OAUTH_REFRESH_GRACE, above: a token we rotated seconds ago,
+ * whose successor is still live, is a client racing itself rather than a
+ * thief, and gets a pair of its own.
  */
 function oauth_refresh(string $refresh, string $clientId): array
 {
@@ -385,7 +411,9 @@ function oauth_refresh(string $refresh, string $clientId): array
         throw new OAuthError('invalid_grant', 'This refresh token belongs to a different client.');
     }
 
-    if ($row['replaced_by'] !== null || $row['revoked_at'] !== null) {
+    $spent = $row['replaced_by'] !== null || $row['revoked_at'] !== null;
+
+    if ($spent && !oauth_refresh_within_grace($row)) {
         db()->prepare(
             "UPDATE oauth_tokens SET revoked_at = NOW()
               WHERE user_id = :u AND client_id = :c AND revoked_at IS NULL"
@@ -405,11 +433,44 @@ function oauth_refresh(string $refresh, string $clientId): array
     }
 
     // Retire the old row, then mint its successor.
-    db()->prepare("UPDATE oauth_tokens SET revoked_at = NOW() WHERE id = :i")
-        ->execute([':i' => (int)$row['id']]);
+    //
+    // On the grace path the row is already retired and already points at the
+    // successor it lost the race to, so it is left alone: overwriting
+    // replaced_by would lose the first winner and make the chain unreadable.
+    // The two siblings then live side by side until they expire, and whichever
+    // one the client kept is the one that works.
+    if (!$spent) {
+        db()->prepare("UPDATE oauth_tokens SET revoked_at = NOW() WHERE id = :i")
+            ->execute([':i' => (int)$row['id']]);
+    }
 
     return oauth_token_issue((string)$row['client_id'], (int)$row['user_id'],
-                             (string)$row['scope'], (int)$row['id']);
+                             (string)$row['scope'], $spent ? null : (int)$row['id']);
+}
+
+/**
+ * Was this refresh token rotated by us, moments ago, into a successor that is
+ * still alive? That is a client racing itself, not a replay.
+ *
+ * Every clause matters. `replaced_by` set means *we* rotated it, rather than
+ * it being revoked by a disconnect or by an earlier breach. The successor
+ * still being live means the chain has not already been torn down — once it
+ * has, every straggler must be refused, or a thief could ride the grace window
+ * straight back in. And the window itself is measured from the moment of
+ * rotation, so it cannot be stretched by repeated attempts.
+ */
+function oauth_refresh_within_grace(array $row): bool
+{
+    if ($row['replaced_by'] === null || $row['revoked_at'] === null) return false;
+
+    $rotatedAt = strtotime((string)$row['revoked_at']);
+    if ($rotatedAt === false || $rotatedAt < time() - OAUTH_REFRESH_GRACE) return false;
+
+    $s = db()->prepare("SELECT revoked_at FROM oauth_tokens WHERE id = :i");
+    $s->execute([':i' => (int)$row['replaced_by']]);
+    $successor = $s->fetch();
+
+    return $successor !== false && $successor['revoked_at'] === null;
 }
 
 function oauth_token_revoke(string $token): void
