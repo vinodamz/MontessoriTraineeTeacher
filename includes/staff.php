@@ -103,9 +103,299 @@ function staff_leave_statuses(): array
     ];
 }
 
+// ---- Leave balance: accrual model ---------------------------------------
+//
+// Leave accrues — one day per completed month by default — carries forward,
+// and is drawn down by approved paid leave. Nothing about the balance is
+// stored except the events an admin creates:
+//
+//     balance(as_of) = opening + accrual + adjustments − paid leave taken
+//
+// Accrual is computed, never written. A monthly row would need a scheduler
+// this host cannot be relied on to run, and a month it missed would quietly
+// underpay somebody. Counting completed months at read time cannot drift.
+//
+// The "opening" entry is the important one: it lets an admin say "as of
+// today, this person has 7 days" without reconstructing history. The latest
+// opening on or before the date being asked about wins, and everything
+// before it is ignored.
+
+const STAFF_LEAVE_ACCRUAL_DEFAULT = 1.0;
+
+/** Days earned per completed month. Clamped to something sane. */
+function staff_leave_accrual_rate(): float
+{
+    $v = (float)app_setting('staff_leave_accrual_per_month', (string)STAFF_LEAVE_ACCRUAL_DEFAULT);
+    if ($v < 0) $v = 0.0;
+    if ($v > 31) $v = 31.0;
+    return $v;
+}
+
+/** Leave types that draw on the balance. 'unpaid' deliberately does not. */
+function staff_leave_paid_types(): array
+{
+    return ['casual', 'sick', 'earned', 'other'];
+}
+
+/** Record an opening balance or an adjustment. */
+function staff_leave_ledger_add(int $userId, string $date, string $kind,
+                                float $days, string $note, ?int $by): void
+{
+    if (!in_array($kind, ['opening', 'adjust'], true)) $kind = 'adjust';
+    db()->prepare(
+        "INSERT INTO staff_leave_ledger (user_id, entry_date, kind, days, note, created_by)
+         VALUES (:u, :d, :k, :n, :note, :by)"
+    )->execute([
+        ':u' => $userId, ':d' => $date, ':k' => $kind,
+        ':n' => round($days, 2), ':note' => mb_substr(trim($note), 0, 255) ?: null, ':by' => $by,
+    ]);
+}
+
+/** The opening balance in force for a date, or null if none has been set. */
+function staff_leave_opening(int $userId, string $asOf): ?array
+{
+    $s = db()->prepare(
+        "SELECT * FROM staff_leave_ledger
+          WHERE user_id = :u AND kind = 'opening' AND entry_date <= :d
+          ORDER BY entry_date DESC, id DESC LIMIT 1"
+    );
+    $s->execute([':u' => $userId, ':d' => $asOf]);
+    return $s->fetch() ?: null;
+}
+
 /**
- * Compute leave balance for a user for a given year. For each type returns
- * total / used / remaining. "Used" counts approved requests only.
+ * Completed calendar months between two dates.
+ *
+ * "Completed" means the day-of-month has come round again: 15 Jan → 14 Feb is
+ * zero months, 15 Jan → 15 Feb is one. Accrual is credited at the end of a
+ * month of service, not the start, so nobody is paid for time not yet served.
+ */
+function staff_leave_months_completed(string $from, string $to): int
+{
+    $a = new DateTimeImmutable($from);
+    $b = new DateTimeImmutable($to);
+    if ($b <= $a) return 0;
+    return (int)$a->diff($b)->m + ((int)$a->diff($b)->y * 12);
+}
+
+/** Approved paid leave taken in a window (excludes unpaid, which never draws). */
+function staff_leave_taken(int $userId, string $from, string $to): float
+{
+    $types = staff_leave_paid_types();
+    $in    = implode(',', array_map(fn($i) => ':t' . $i, array_keys($types)));
+    $p     = [':u' => $userId, ':f' => $from, ':e' => $to];
+    foreach ($types as $i => $t) $p[':t' . $i] = $t;
+
+    $s = db()->prepare(
+        "SELECT COALESCE(SUM(days_count - lop_days), 0)
+           FROM staff_leave_requests
+          WHERE user_id = :u AND status = 'approved'
+            AND leave_type IN ($in)
+            AND start_date >= :f AND start_date <= :e"
+    );
+    $s->execute($p);
+    return (float)$s->fetchColumn();
+}
+
+/** Manual adjustments in a window. */
+function staff_leave_adjustments(int $userId, string $from, string $to): float
+{
+    $s = db()->prepare(
+        "SELECT COALESCE(SUM(days), 0) FROM staff_leave_ledger
+          WHERE user_id = :u AND kind = 'adjust' AND entry_date >= :f AND entry_date <= :e"
+    );
+    $s->execute([':u' => $userId, ':f' => $from, ':e' => $to]);
+    return (float)$s->fetchColumn();
+}
+
+/**
+ * The balance as at a date, with the working shown — the page needs to be
+ * able to explain the number, not just print it.
+ */
+function staff_leave_balance_at(int $userId, ?string $asOf = null): array
+{
+    $asOf = $asOf ?: date('Y-m-d');
+    $open = staff_leave_opening($userId, $asOf);
+
+    // With no opening entry, accrual has to start somewhere. The schema has
+    // no staff joining date — only students have one — so the account's
+    // creation date is the closest thing we know, falling back to the start
+    // of the current year. Never the epoch, which would hand somebody a
+    // decade of leave on their first day.
+    //
+    // This is a guess, and the page says so. Setting an opening balance
+    // replaces it with a real figure, which is the intended path.
+    if ($open) {
+        $since   = (string)$open['entry_date'];
+        $opening = (float)$open['days'];
+    } else {
+        $s = db()->prepare("SELECT DATE(created_at) AS d FROM users WHERE id = :i");
+        $s->execute([':i' => $userId]);
+        $created = (string)($s->fetchColumn() ?: '');
+        $since   = ($created !== '' && $created > '2000-01-01') ? $created : date('Y-01-01');
+        $opening = 0.0;
+    }
+    if ($since > $asOf) { $since = $asOf; }
+
+    $rate    = staff_leave_accrual_rate();
+    $months  = staff_leave_months_completed($since, $asOf);
+    $accrued = round($months * $rate, 2);
+    $adjust  = staff_leave_adjustments($userId, $since, $asOf);
+    $taken   = staff_leave_taken($userId, $since, $asOf);
+
+    return [
+        'as_of'     => $asOf,
+        'since'     => $since,
+        'from_open' => $open !== null,
+        'opening'   => round($opening, 2),
+        'rate'      => $rate,
+        'months'    => $months,
+        'accrued'   => $accrued,
+        'adjust'    => round($adjust, 2),
+        'taken'     => round($taken, 2),
+        'balance'   => round($opening + $accrued + $adjust - $taken, 2),
+    ];
+}
+
+/**
+ * Split a month's approved leave into paid days and LOP days.
+ *
+ * Requests are walked oldest-first and drawn against the balance as it stood
+ * at the start of the month; once it runs out the rest is LOP. Chronological
+ * order matters — whoever booked first should be the one who is covered.
+ *
+ * Accrual for the month itself is not credited mid-month, so a person cannot
+ * spend a day they have not finished earning.
+ */
+function staff_leave_month_split(int $userId, int $year, int $month): array
+{
+    $start = sprintf('%04d-%02d-01', $year, $month);
+    $end   = date('Y-m-t', strtotime($start));
+    $prev  = date('Y-m-d', strtotime($start . ' -1 day'));
+
+    $bal   = staff_leave_balance_at($userId, $prev);
+    $avail = max(0.0, (float)$bal['balance']);
+
+    $s = db()->prepare(
+        "SELECT * FROM staff_leave_requests
+          WHERE user_id = :u AND status = 'approved'
+            AND start_date >= :s AND start_date <= :e
+          ORDER BY start_date, id"
+    );
+    $s->execute([':u' => $userId, ':s' => $start, ':e' => $end]);
+
+    $paid = 0.0; $lop = 0.0; $unpaid = 0.0; $lines = [];
+    foreach ($s->fetchAll() as $r) {
+        $days = (float)$r['days_count'];
+        if (!in_array($r['leave_type'], staff_leave_paid_types(), true)) {
+            $unpaid += $days;                      // unpaid leave is LOP by definition
+            $lop    += $days;
+            $thisPaid = 0.0; $thisLop = $days;
+        } else {
+            $thisPaid = min($days, $avail);
+            $thisLop  = round($days - $thisPaid, 2);
+            $avail    = round($avail - $thisPaid, 2);
+            $paid    += $thisPaid;
+            $lop     += $thisLop;
+        }
+        $lines[] = [
+            'id'    => (int)$r['id'],
+            'type'  => (string)$r['leave_type'],
+            'from'  => (string)$r['start_date'],
+            'to'    => (string)$r['end_date'],
+            'days'  => $days,
+            'paid'  => round($thisPaid, 2),
+            'lop'   => round($thisLop, 2),
+        ];
+    }
+
+    return [
+        'opening_balance' => round((float)$bal['balance'], 2),
+        'paid_days'       => round($paid, 2),
+        'lop_days'        => round($lop, 2),
+        'unpaid_days'     => round($unpaid, 2),
+        'closing_balance' => round($avail, 2),
+        'lines'           => $lines,
+    ];
+}
+
+/**
+ * Recompute lop_days on every approved request in a month and write it back.
+ *
+ * A single request's LOP cannot be decided on its own: it depends on what
+ * else was approved that month and in what order. Deciding it at approval
+ * time from the balance on that day gives a different answer from the one
+ * payroll reaches — the admin would be shown one figure and the payslip would
+ * use another.
+ *
+ * So approval stores an estimate, and this immediately corrects every request
+ * in the month against the same allocation payroll uses. Call it after any
+ * change to a month's approved leave.
+ */
+function staff_leave_resync_month(int $userId, int $year, int $month): void
+{
+    $split = staff_leave_month_split($userId, $year, $month);
+    if (!$split['lines']) return;
+    $upd = db()->prepare("UPDATE staff_leave_requests SET lop_days = :l WHERE id = :i");
+    foreach ($split['lines'] as $line) {
+        $upd->execute([':l' => $line['lop'], ':i' => $line['id']]);
+    }
+}
+
+/**
+ * Write 'leave' attendance rows across an approved request's dates.
+ *
+ * Days already marked are left alone: somebody who actually came in and was
+ * marked present should stay present, and overwriting a real record with an
+ * inferred one is how attendance data stops being trustworthy. Returns the
+ * number of days newly marked.
+ */
+function staff_leave_mark_attendance(array $req, ?int $markedBy): int
+{
+    $cur = new DateTimeImmutable((string)$req['start_date']);
+    $end = new DateTimeImmutable((string)$req['end_date']);
+    $n   = 0;
+    $ins = db()->prepare(
+        "INSERT IGNORE INTO staff_attendance (user_id, att_date, status, notes, marked_by)
+         VALUES (:u, :d, 'leave', :n, :by)"
+    );
+    while ($cur <= $end) {
+        $ins->execute([
+            ':u'  => (int)$req['user_id'],
+            ':d'  => $cur->format('Y-m-d'),
+            ':n'  => 'Approved ' . (staff_leave_types()[$req['leave_type']] ?? 'leave') . ' leave',
+            ':by' => $markedBy,
+        ]);
+        $n += $ins->rowCount();
+        $cur = $cur->modify('+1 day');
+    }
+    return $n;
+}
+
+/**
+ * Undo the above when a request stops being approved. Only rows still marked
+ * 'leave' are removed — if somebody has since been marked present, that is a
+ * real observation and stays.
+ */
+function staff_leave_unmark_attendance(array $req): int
+{
+    $s = db()->prepare(
+        "DELETE FROM staff_attendance
+          WHERE user_id = :u AND status = 'leave'
+            AND att_date BETWEEN :a AND :b"
+    );
+    $s->execute([
+        ':u' => (int)$req['user_id'],
+        ':a' => (string)$req['start_date'],
+        ':b' => (string)$req['end_date'],
+    ]);
+    return $s->rowCount();
+}
+
+/**
+ * LEGACY — the fixed per-year, per-type allowance the accrual model replaces.
+ * Kept so historical allowance rows can still be displayed; not used to
+ * decide anything. staff_leave_balance_at() is the live balance.
  */
 function staff_leave_balance(int $userId, int $year): array
 {
@@ -143,11 +433,19 @@ function staff_leave_balance(int $userId, int $year): array
     return $out;
 }
 
-/** Compute days between two dates inclusive. Returns float (whole days only for now). */
-function staff_leave_days(string $startDate, string $endDate): float
+/**
+ * Days between two dates inclusive.
+ *
+ * A half day is only meaningful on a single date — "half a day off" across a
+ * week is not a thing anyone means — so $half is ignored unless start and end
+ * are the same day.
+ */
+function staff_leave_days(string $startDate, string $endDate, string $half = ''): float
 {
     $a = new DateTimeImmutable($startDate);
     $b = new DateTimeImmutable($endDate);
+    if ($b < $a) return 0.0;
+    if ($half !== '' && $startDate === $endDate) return 0.5;
     return (float)($a->diff($b)->days + 1);
 }
 
@@ -697,10 +995,23 @@ function staff_payslip_draft(int $userId, int $year, int $month): array
     $basis       = $pay ? (int)$pay['payable_days_basis'] : 30;
     if ($basis <= 0) $basis = $daysInMonth;
 
-    // Paid = present + late + wfh + paid leave + holidays. LOP = absent.
-    $paidLeave = (int)($att['leave'] ?? 0);
+    // LOP has two sources and they must not double-count.
+    //
+    //   · Leave — split into paid and LOP by the balance, from the leave
+    //     requests themselves rather than from attendance. Attendance counts
+    //     whole days; a half-day would be lost, and unpaid leave marked
+    //     'leave' would otherwise be paid.
+    //   · Absence — days marked absent with no approved leave behind them.
+    //
+    // Approving leave marks those days 'leave', not 'absent', so the two
+    // sources cannot overlap.
+    $split     = staff_leave_month_split($userId, $year, $month);
+    $paidLeave = (float)$split['paid_days'];
+    $lopLeave  = (float)$split['lop_days'];
+    $lopAbsent = (float)($att['absent'] ?? 0);
+
     $present   = (int)($att['present'] ?? 0) + (int)($att['late'] ?? 0) + (int)($att['wfh'] ?? 0);
-    $lopDays   = (int)($att['absent'] ?? 0);
+    $lopDays   = round($lopLeave + $lopAbsent, 2);
 
     $earnings = [];
     foreach (staff_pay_earnings() as $k => $_) $earnings[$k] = $pay ? (float)$pay[$k] : 0.0;
@@ -720,6 +1031,9 @@ function staff_payslip_draft(int $userId, int $year, int $month): array
         'present_days'     => $present,
         'paid_leave_days'  => $paidLeave,
         'lop_days'         => $lopDays,
+        'lop_leave_days'   => round($lopLeave, 2),
+        'lop_absent_days'  => round($lopAbsent, 2),
+        'leave_split'      => $split,
         'hours_worked'     => $hours['hours'],
         'earnings'         => $earnings,
         'deductions'       => $deductions,

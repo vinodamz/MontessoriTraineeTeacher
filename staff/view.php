@@ -50,7 +50,7 @@ $year    = (int)date('Y');
 $month   = (int)date('n');
 
 $attendance = staff_attendance_summary($id, $year, $month);
-$balance    = staff_leave_balance($id, $year);
+$balance    = staff_leave_balance_at($id);
 $hours      = staff_hours_summary($id, $year, $month);
 $currentPay = staff_current_pay($id, date('Y-m-d'));
 
@@ -286,23 +286,24 @@ $relRelation = $profile['relative_relation'] !== '' ? (staff_relations()[$profil
     </div>
 
     <div class="card" style="flex: 1 1 280px;">
-        <h3>Leave balance — <?= (int)$year ?></h3>
-        <table class="admin-table">
-            <thead><tr><th>Type</th><th>Total</th><th>Used</th><th>Left</th></tr></thead>
-            <tbody>
-                <?php foreach ($balance as $code => $b): ?>
-                    <tr>
-                        <td><?= e($b['label']) ?></td>
-                        <td><?= e((string)$b['total']) ?></td>
-                        <td><?= e((string)$b['used']) ?></td>
-                        <td><strong><?= e((string)$b['remaining']) ?></strong></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+        <h3>Leave balance</h3>
+        <?php $d = fn($v) => rtrim(rtrim(number_format((float)$v, 1), '0'), '.'); ?>
+        <p style="font-size:1.6rem;margin:.2rem 0;">
+            <strong><?= e($d($balance['balance'])) ?></strong>
+            <span class="muted" style="font-size:1rem;">day<?= $balance['balance'] == 1 ? '' : 's' ?> available</span>
+        </p>
+        <p class="muted small">
+            <?= e($d($balance['opening'])) ?> from <?= e((string)$balance['since']) ?>
+            + <?= e($d($balance['accrued'])) ?> earned
+            (<?= (int)$balance['months'] ?> &times; <?= e($d($balance['rate'])) ?>/month)
+            <?php if (abs((float)$balance['adjust']) > 0.001): ?>
+                <?= $balance['adjust'] > 0 ? '+' : '−' ?> <?= e($d(abs((float)$balance['adjust']))) ?> adjusted
+            <?php endif; ?>
+            − <?= e($d($balance['taken'])) ?> taken
+        </p>
         <?php if ($isAdmin): ?>
             <div class="actions section-h-spaced">
-                <a class="btn btn-ghost" href="/staff/leave.php?user_id=<?= $id ?>#allowances">Edit allowances</a>
+                <a class="btn btn-ghost" href="/staff/leave.php?user_id=<?= $id ?>#balance">Manage leave balance</a>
             </div>
         <?php endif; ?>
     </div>
