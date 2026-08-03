@@ -26,8 +26,15 @@ mcp_debug_watch('oauth: authorize / consent');
 start_session_once();
 oauth_gc();
 
-/** A dead end the client never sees — rendered for the person at the browser. */
-function authorize_page_error(string $title, string $detail): void
+/**
+ * A dead end the client never sees — rendered for the person at the browser.
+ *
+ * $diagnosis is for an admin who is setting a client up by hand and has hit a
+ * refusal they cannot see the cause of. It is shown only to a signed-in admin
+ * because it names what the server has on file; the visitor-supplied half of
+ * it is escaped like anything else.
+ */
+function authorize_page_error(string $title, string $detail, string $diagnosis = ''): void
 {
     http_response_code(400);
     header('Content-Type: text/html; charset=utf-8');
@@ -36,12 +43,48 @@ function authorize_page_error(string $title, string $detail): void
        . '<title>' . e($title) . '</title></head>'
        . '<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;'
        . 'background:#fff5fa;color:#2b2b2b;display:flex;min-height:100vh;align-items:center;justify-content:center;">'
-       . '<div style="text-align:center;padding:2rem;max-width:460px;">'
+       . '<div style="text-align:center;padding:2rem;max-width:560px;">'
        . '<div style="font-size:2.6rem;">🔒</div>'
        . '<h1 style="color:#ad1457;font-size:1.25rem;margin:.5rem 0;">' . e($title) . '</h1>'
        . '<p style="color:#666;font-size:.95rem;">' . e($detail) . '</p>'
+       . $diagnosis
        . '</div></body></html>';
     exit;
+}
+
+/**
+ * The redirect-URI refusal, spelled out for whoever can act on it.
+ *
+ * This is the mistake that hand-registering a client actually produces: the
+ * address is right to the eye and wrong by a trailing slash. Saying only "it
+ * never registered that" leaves an admin with nothing to compare, so for an
+ * admin — and only an admin — both strings are printed together.
+ */
+function authorize_redirect_diagnosis(array $client, string $presented): string
+{
+    $me = current_user();
+    if (!$me || ($me['role'] ?? '') !== 'admin') return '';
+
+    $rows = '';
+    foreach ((array)$client['redirect_uris'] as $u) {
+        $rows .= '<li><code>' . e((string)$u) . '</code></li>';
+    }
+    if ($rows === '') $rows = '<li class="muted">none</li>';
+
+    return '<div style="text-align:left;background:#fff;border:1px solid #f3c6dd;border-radius:.5rem;'
+         . 'padding:1rem;margin-top:1rem;font-size:.85rem;word-break:break-all;">'
+         . '<p style="margin:0 0 .4rem;"><strong>You are signed in as an admin, so here is the detail.</strong></p>'
+         . '<p style="margin:.4rem 0 .2rem;">It asked to be sent to:</p>'
+         . '<code>' . e($presented) . '</code>'
+         . '<p style="margin:.8rem 0 .2rem;">'
+         . e((string)$client['client_name']) . ' is registered for:</p>'
+         . '<ul style="margin:.2rem 0;padding-left:1.1rem;">' . $rows . '</ul>'
+         . '<p style="margin:.8rem 0 0;color:#666;">These have to match exactly — a trailing slash '
+         . 'or <code>http</code> for <code>https</code> is enough to fail. Correct it under '
+         . '<em>Registered applications</em> in <a href="/mcp_admin.php#apps">MCP API</a>: '
+         . 'create the application again with the address above, then put the new ID and secret '
+         . 'into the assistant\'s settings.</p>'
+         . '</div>';
 }
 
 /** Hand an error back to the client, which is where the spec wants it. */
@@ -91,7 +134,8 @@ foreach ($client['redirect_uris'] as $registered) {
 if ($matched === null) {
     authorize_page_error('Bad redirect address',
         'This application asked to be sent back to an address it never registered. '
-      . 'Nothing has been shared. If you did not start this, you can close the page.');
+      . 'Nothing has been shared. If you did not start this, you can close the page.',
+        authorize_redirect_diagnosis($client, $redirectUri));
 }
 
 if ($responseTy !== 'code') {
