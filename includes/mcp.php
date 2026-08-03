@@ -45,11 +45,22 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';        // db() — functions.php does not pull this in
 require_once __DIR__ . '/functions.php';
 
-/** MCP spec revision this server implements. */
-const MCP_PROTOCOL_VERSION = '2025-06-18';
+/**
+ * MCP spec revision this server implements.
+ *
+ * The protocol is dated, and clients advertise the revision they want. A
+ * server that has never heard of a newer revision negotiates the client
+ * downwards, and a client that requires the newer one then disconnects —
+ * which looks, from the far end, exactly like the server being unreachable.
+ *
+ * This list was written against the revision current at the time and went
+ * stale: a client asking for 2025-11-25 was answered with 2025-06-18 and
+ * gave up. Keep the newest first, and add to it rather than replacing.
+ */
+const MCP_PROTOCOL_VERSION = '2025-11-25';
 
-/** Protocol revisions we will accept from a client and echo back. */
-const MCP_SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+/** Revisions we will accept from a client and echo back unchanged. */
+const MCP_SUPPORTED_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
 /** Default and maximum rows returned by a read. */
 const MCP_ROWS_DEFAULT = 200;
@@ -248,6 +259,40 @@ function mcp_debug_record(string $method, string $path, array $headers,
     } catch (Throwable $e) {
         // Diagnostics must never be the reason a request fails.
     }
+}
+
+/**
+ * Record this request whatever happens to it.
+ *
+ * The endpoints this is used from exit through many paths — reg_fail(),
+ * token_fail(), a redirect, a fatal — so the recording is hung off a
+ * shutdown function rather than repeated at each one. http_response_code()
+ * at shutdown is the status that was actually sent.
+ *
+ * The body is deliberately NOT captured here. These endpoints carry
+ * authorization codes, PKCE verifiers and client secrets, and they read
+ * php://input themselves — a stream that can only be consumed once. Query
+ * parameters are kept but the sensitive ones are masked.
+ */
+function mcp_debug_watch(string $label): void
+{
+    try { if (!mcp_debug_active()) return; } catch (Throwable $e) { return; }
+
+    register_shutdown_function(function () use ($label) {
+        $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
+        // code / token / secret in a query string must not land in a log.
+        $uri = (string)preg_replace(
+            '/\b(code|token|client_secret|code_verifier|refresh_token)=[^&]*/i',
+            '$1=[masked]', $uri);
+        mcp_debug_record(
+            (string)($_SERVER['REQUEST_METHOD'] ?? '?'),
+            $uri,
+            mcp_request_headers(),
+            '',                                  // never the body: it holds secrets
+            (int)(http_response_code() ?: 0),
+            $label
+        );
+    });
 }
 
 function mcp_debug_recent(int $limit = 50): array
