@@ -40,6 +40,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mcp_token_revoke((int)($_POST['id'] ?? 0));
             flash_set('ok', 'Token revoked. Any client using it stops working immediately.');
             redirect('/mcp_admin.php');
+        } elseif ($op === 'debug_on') {
+            $until = mcp_debug_enable((int)($_POST['minutes'] ?? 15));
+            flash_set('ok', 'Recording incoming requests until '
+                          . date('H:i', $until) . '. Try connecting now, then reload this page.');
+            redirect('/mcp_admin.php#debug');
+        } elseif ($op === 'debug_off') {
+            mcp_debug_disable();
+            flash_set('ok', 'Recording stopped.');
+            redirect('/mcp_admin.php#debug');
+        } elseif ($op === 'debug_clear') {
+            mcp_debug_clear();
+            flash_set('ok', 'Recorded requests cleared.');
+            redirect('/mcp_admin.php#debug');
         } elseif ($op === 'disconnect') {
             oauth_session_revoke((int)($_POST['id'] ?? 0));
             flash_set('ok', 'Disconnected. That client will have to sign in again.');
@@ -75,6 +88,13 @@ try {
 }
 
 $baseUrl = app_base_url() . '/mcp.php';
+
+$debugOn = false; $debugRows = []; $debugUntil = 0;
+try {
+    $debugOn    = mcp_debug_active();
+    $debugUntil = (int)app_setting('mcp_debug_until', '0');
+    $debugRows  = mcp_debug_recent(40);
+} catch (Throwable $e) { /* migration 060 not applied yet */ }
 
 $pageTitle  = 'MCP API';
 $wideLayout = true;
@@ -334,6 +354,73 @@ foreach ($clients as $c) {
         <li><strong>This page's own tables are off limits to the API.</strong> A log the audited
             party can erase isn't a log.</li>
     </ul>
+</div>
+
+<div class="card" id="debug">
+    <h3 style="margin-top:0;">Record incoming requests</h3>
+    <p class="muted small">
+        When a client says it cannot connect and everything here looks healthy, the question
+        that matters is whether the request reaches this server at all — and if it does, what
+        it looks like. The activity log above only shows calls that got as far as running a
+        tool, so anything failing earlier leaves no trace at either end.
+        <br><br>
+        Switch this on, try connecting, then reload. <strong>The Authorization value is never
+        stored</strong> — only whether one arrived. Recording stops on its own.
+    </p>
+
+    <?php if ($debugOn): ?>
+        <p><strong style="color:#c62828;">Recording until <?= e(date('H:i', $debugUntil)) ?>.</strong></p>
+        <form method="post" style="display:inline;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="debug_off">
+            <button class="btn btn-ghost" type="submit">Stop recording</button>
+        </form>
+    <?php else: ?>
+        <form method="post" style="display:inline;">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="debug_on">
+            <input type="hidden" name="minutes" value="15">
+            <button class="btn btn-primary" type="submit">Record for 15 minutes</button>
+        </form>
+    <?php endif; ?>
+    <?php if ($debugRows): ?>
+        <form method="post" style="display:inline;"
+              onsubmit="return confirm('Clear the recorded requests?');">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="op" value="debug_clear">
+            <button class="btn btn-ghost" type="submit">Clear</button>
+        </form>
+    <?php endif; ?>
+
+    <?php if ($debugRows): ?>
+        <h4 style="margin-bottom:.3rem;">What arrived</h4>
+        <?php foreach ($debugRows as $d): ?>
+            <details style="margin:.4rem 0; border:1px solid #eee; border-radius:6px; padding:.5rem;">
+                <summary>
+                    <code><?= e((string)$d['method']) ?></code>
+                    <?= e((string)$d['path']) ?>
+                    → <strong><?= (int)$d['status'] ?></strong>
+                    <span class="muted small">
+                        <?= e((string)$d['created_at']) ?>
+                        <?= $d['note'] ? '· ' . e((string)$d['note']) : '' ?>
+                    </span>
+                </summary>
+                <p class="small" style="margin:.4rem 0 .2rem;"><strong>Headers</strong></p>
+                <pre class="small" style="white-space:pre-wrap;word-break:break-all;background:#fafafa;padding:.4rem;"><?= e((string)$d['headers']) ?></pre>
+                <?php if (trim((string)$d['body']) !== ''): ?>
+                    <p class="small" style="margin:.4rem 0 .2rem;"><strong>Body</strong></p>
+                    <pre class="small" style="white-space:pre-wrap;word-break:break-all;background:#fafafa;padding:.4rem;"><?= e((string)$d['body']) ?></pre>
+                <?php endif; ?>
+            </details>
+        <?php endforeach; ?>
+    <?php elseif ($debugOn): ?>
+        <p class="muted">Nothing recorded yet. Try connecting, then reload this page.</p>
+        <p class="muted small">
+            If you try to connect and <em>still</em> nothing appears here, the request is not
+            reaching this server at all — the problem is between the client and the host, not
+            in this application.
+        </p>
+    <?php endif; ?>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
