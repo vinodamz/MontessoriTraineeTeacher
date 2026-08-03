@@ -351,14 +351,29 @@ function mcp_dispatch(array $msg, ?int $tokenId, ?int $userId, ?int $oauthId): ?
                     'name'    => (string)app_setting('app_name', 'Little Graduates') . ' MCP',
                     'version' => '1.0.0',
                 ],
-                'instructions'    => "This server reads and writes the school's live database.\n"
-                                   . "Call `schema` first to learn the tables and columns — do not guess them.\n"
-                                   . "`query` runs a single read-only SELECT.\n"
-                                   . "`insert`, `update` and `delete` write. update and delete REQUIRE a where "
-                                   . "clause and refuse when more rows match than max_rows, so check the count "
-                                   . "with `query` before a broad change.\n"
-                                   . "This is real data about real children and families. Prefer reading over "
-                                   . "writing, and when a write is ambiguous, ask the user before making it.",
+                'instructions'    => "This server reads and writes the school's live database — students, "
+                                   . "attendance, fees, expenses, staff, payroll and leave, CRM leads, "
+                                   . "tasks, inventory, parent surveys and feedback.\n\n"
+                                   . "Start with `schema`. Called with no arguments it lists every table "
+                                   . "grouped by area, with row counts. Called with one or more table names "
+                                   . "it returns each column's type and, importantly, which column it "
+                                   . "references and which columns reference it — so a join can be written "
+                                   . "correctly the first time. Ask for a whole area at once, e.g. "
+                                   . "table: \"students,attendance,fees\". Do not guess table or column "
+                                   . "names: a join onto the wrong table returns no rows rather than an "
+                                   . "error, which reads as \"no data\" instead of \"wrong question\".\n\n"
+                                   . "`query` runs a single read-only SELECT. Use named parameters (:name) "
+                                   . "with the params object; the same placeholder may appear only ONCE per "
+                                   . "statement.\n"
+                                   . "`insert`, `update` and `delete` write. update and delete REQUIRE a "
+                                   . "where clause and refuse when more rows match than max_rows, so check "
+                                   . "the count with `query` before a broad change. Previous values are "
+                                   . "recorded, so a mistake can be undone.\n\n"
+                                   . "Password and PIN columns always read as [redacted] and cannot be "
+                                   . "written — do not try to set or verify anyone's credentials here.\n\n"
+                                   . "This is real data about real children and families. Prefer reading "
+                                   . "over writing, and when a write is ambiguous, ask the user before "
+                                   . "making it.",
             ]);
         }
 
