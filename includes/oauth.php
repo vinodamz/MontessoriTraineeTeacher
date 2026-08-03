@@ -505,6 +505,48 @@ function oauth_sessions(): array
     )->fetchAll();
 }
 
+/**
+ * May a client register itself?
+ *
+ * On, which is the default, any MCP client can POST its own metadata to
+ * /oauth/register.php and get a client_id. That is how MCP is designed to
+ * work, and it is safe on its own terms: a client_id grants nothing until a
+ * human signs in at the consent screen.
+ *
+ * Off, only applications created by hand in /mcp_admin.php can start a
+ * sign-in — the school decides in advance which software is allowed to ask.
+ * Anything else is refused at the door with no consent screen shown at all.
+ */
+function oauth_open_registration(): bool
+{
+    try { return app_setting('oauth_open_registration', '1') !== '0'; }
+    catch (Throwable $e) { return true; }
+}
+
+function oauth_open_registration_set(bool $on): void
+{
+    db()->prepare(
+        "INSERT INTO app_settings (setting_key, setting_value) VALUES ('oauth_open_registration', :v)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+    )->execute([':v' => $on ? '1' : '0']);
+    app_setting_clear_cache();
+}
+
+/**
+ * Retire an application. Its client_id stops working and every session it
+ * holds is cut, but the row stays so the audit trail still has a name to
+ * print against past activity.
+ */
+function oauth_client_disable(string $clientId): void
+{
+    db()->prepare("UPDATE oauth_clients SET disabled_at = NOW()
+                    WHERE client_id = :c AND disabled_at IS NULL")
+        ->execute([':c' => $clientId]);
+    db()->prepare("UPDATE oauth_tokens SET revoked_at = NOW()
+                    WHERE client_id = :c AND revoked_at IS NULL")
+        ->execute([':c' => $clientId]);
+}
+
 function oauth_clients_all(): array
 {
     return db()->query(
