@@ -609,10 +609,8 @@ function survey_set_active(int $surveyId, bool $active): void
 /** Absolute URL of a survey's public form. */
 function survey_url(string $token): string
 {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? '');
-    if ($host === '') return '/survey.php?t=' . $token;
-    return $scheme . '://' . $host . '/survey.php?t=' . $token;
+    if (empty($_SERVER['HTTP_HOST'])) return '/survey.php?t=' . $token;
+    return app_base_url() . '/survey.php?t=' . $token;
 }
 
 // ---- Responses -----------------------------------------------------------

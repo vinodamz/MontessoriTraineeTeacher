@@ -195,9 +195,10 @@ function _notify_send_email_now(int $notifId, int $userId, string $title, string
     $fromAddress = app_setting('email_from_address', 'no-reply@thelittlegraduates.in');
     $appName     = app_name();
 
-    $scheme = !empty($_SERVER['HTTPS']) ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'mtt.thelittlegraduates.in';
-    $linkAbs = $link ? ($link[0] === '/' ? $scheme . '://' . $host . $link : $link) : null;
+    $base    = !empty($_SERVER['HTTP_HOST'])
+             ? app_base_url()
+             : 'https://mtt.thelittlegraduates.in';   // cron has no request
+    $linkAbs = $link ? ($link[0] === '/' ? $base . $link : $link) : null;
 
     $subject = sprintf('[%s] %s', $appName, $title);
     $html    = _notify_email_html($appName, $title, $body, $linkAbs);

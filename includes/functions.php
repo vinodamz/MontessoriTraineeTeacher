@@ -41,6 +41,57 @@ function app_setting_clear_cache(): void
     $GLOBALS['_app_setting_dirty'] = true;
 }
 
+/**
+ * Is this request https?
+ *
+ * $_SERVER['HTTPS'] on its own is not enough here. This app sits behind
+ * Hostgator's reverse proxy, which terminates TLS and does not reliably pass
+ * that variable through — the note in .htaccess about %{HTTPS} being
+ * unreliable is the same problem seen from Apache's side.
+ *
+ * Getting this wrong is not cosmetic. Anything that builds an absolute URL
+ * ends up advertising http://, and for OAuth that means a client is told to
+ * POST its registration to an http endpoint, which the Force-HTTPS redirect
+ * then 301s — and a redirect on POST drops the body.
+ */
+function app_is_https(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') return true;
+    if (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')   return true;
+    if (strtolower((string)($_SERVER['HTTP_X_FORWARDED_SSL']   ?? '')) === 'on')      return true;
+    if (strtolower((string)($_SERVER['REQUEST_SCHEME']         ?? '')) === 'https')   return true;
+    if ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)                                  return true;
+    if ((int)($_SERVER['HTTP_X_FORWARDED_PORT'] ?? 0) === 443)                        return true;
+
+    // Nothing said https, but nothing reliable said http either. A public
+    // host is https in practice, and guessing http breaks OAuth outright
+    // while guessing https merely produces a link that redirects. Loopback
+    // and .test/.local are genuinely plain http, so leave those alone.
+    $host = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+    $host = (string)preg_replace('/:\d+$/', '', $host);
+    if ($host === '' || $host === 'localhost' || $host === '127.0.0.1' || $host === '[::1]'
+        || str_ends_with($host, '.test') || str_ends_with($host, '.local')
+        || str_ends_with($host, '.localhost')) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * The site's public origin, e.g. https://mtt.thelittlegraduates.in
+ *
+ * `site_base_url` in app_settings overrides detection entirely. Detection is
+ * a best guess about someone else's proxy; a value typed by a human is not.
+ */
+function app_base_url(): string
+{
+    $configured = trim((string)app_setting('site_base_url', ''));
+    if ($configured !== '' && preg_match('~^https?://[^/\s]+~i', $configured)) {
+        return rtrim($configured, '/');
+    }
+    return (app_is_https() ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? '');
+}
+
 /** App display name (DB-backed, falls back to config.php's `app.name`). */
 function app_name(): string
 {

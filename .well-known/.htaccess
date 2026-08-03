@@ -1,0 +1,28 @@
+# OAuth discovery, served from inside .well-known/ as well as from the root
+# .htaccess.
+#
+# Belt and braces on purpose. cPanel's AutoSSL creates a real .well-known
+# directory for ACME challenges, and a physical directory can shadow a
+# rewrite defined at the root — which would make discovery 404 or 403 and
+# leave a client reporting only "couldn't connect to the server", with
+# nothing to go on. A rule that lives inside the directory applies whether
+# or not the directory was there first.
+#
+# acme-challenge is excluded explicitly: those are real files that AutoSSL
+# writes and then fetches, and rewriting them would break certificate
+# renewal — a far worse failure than the one this is fixing.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /.well-known/
+
+    RewriteCond %{REQUEST_URI} !acme-challenge [NC]
+    RewriteRule ^oauth-authorization-server(/.*)?$ /oauth/meta.php?doc=as [L,QSA]
+
+    RewriteCond %{REQUEST_URI} !acme-challenge [NC]
+    RewriteRule ^oauth-protected-resource(/.*)?$ /oauth/meta.php?doc=rs [L,QSA]
+</IfModule>
+
+# The root .htaccess turns directory listings off globally; be explicit here
+# too, since this directory is reachable by name.
+Options -Indexes
