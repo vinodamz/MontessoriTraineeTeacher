@@ -60,11 +60,46 @@ header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept, '
 header('Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id');
 header('Access-Control-Max-Age: 86400');
 
+/*
+ * Request recorder.
+ *
+ * Read the body here, once, and hand it on: php://input can only be consumed
+ * once, and this has to run before anything that might reject the request —
+ * a preflight, a bad body, a missing token — because those are precisely the
+ * failures that otherwise leave no trace anywhere.
+ *
+ * Off unless an admin opened a window at /mcp_admin.php, and that window
+ * closes by itself.
+ */
+$MCP_RAW = '';
+try {
+    $MCP_RAW = (string)@file_get_contents('php://input');
+    if ($MCP_RAW === '' && PHP_SAPI === 'cli') $MCP_RAW = (string)@file_get_contents('php://stdin');
+} catch (Throwable $e) { $MCP_RAW = ''; }
+
+$MCP_DEBUG = false;
+try { $MCP_DEBUG = mcp_debug_active(); } catch (Throwable $e) { $MCP_DEBUG = false; }
+
+/** Record and return the status, so call sites read as `exit(mcp_trace(...))`. */
+function mcp_trace(int $status, string $note = ''): void
+{
+    if (!($GLOBALS['MCP_DEBUG'] ?? false)) return;
+    mcp_debug_record(
+        (string)($_SERVER['REQUEST_METHOD'] ?? '?'),
+        (string)($_SERVER['REQUEST_URI'] ?? '/mcp.php'),
+        mcp_request_headers(),
+        (string)($GLOBALS['MCP_RAW'] ?? ''),
+        $status,
+        $note
+    );
+}
+
 // Answered before authentication, deliberately: a preflight never carries the
 // Authorization header, so demanding one here would fail every cross-origin
 // client before it had a chance to send credentials at all.
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
+    mcp_trace(204, 'CORS preflight');
     exit;
 }
 
@@ -136,12 +171,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'error' => 'This is an MCP endpoint. POST JSON-RPC to it with an '
                  . 'Authorization: Bearer <token> header.',
     ]);
+    mcp_trace(405, 'GET — no SSE stream offered');
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     header('Allow: POST');
     echo json_encode(['error' => 'POST only']);
+    mcp_trace(405, 'method not allowed');
     exit;
 }
 
@@ -218,6 +255,8 @@ if ($actor === null) {
         'error'   => ['code' => -32001,
                       'message' => 'Unauthorized — sign in, or present a valid API token.'],
     ]);
+    mcp_trace(401, $presented === '' ? 'no credential presented'
+                                     : 'credential presented but not recognised');
     exit;
 }
 
@@ -243,9 +282,10 @@ function mcp_request_body(): string
     return $raw;
 }
 
-$raw = mcp_request_body();
+$raw = $MCP_RAW !== '' ? $MCP_RAW : mcp_request_body();
 $req = json_decode($raw, true);
 if (!is_array($req)) {
+    mcp_trace(400, 'body was not valid JSON');
     rpc_error(null, -32700, 'Parse error — body was not valid JSON.', 400);
 }
 
@@ -268,10 +308,13 @@ foreach ($messages as $msg) {
 
 if ($out === []) {
     http_response_code(202);   // notifications only — nothing to say back
+    mcp_trace(202, 'notification only');
     exit;
 }
 echo json_encode($isBatch ? $out : $out[0],
                  JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+mcp_trace(200, 'handled: ' . implode(', ', array_map(
+    fn($m) => (string)($m['method'] ?? '?'), $messages)));
 exit;
 
 // ----------------------------------------------------------------- dispatch

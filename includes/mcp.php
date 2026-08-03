@@ -174,6 +174,113 @@ function mcp_audit_log(?int $tokenId, string $tool, array $args, bool $ok,
     }
 }
 
+// ---- Request recorder ----------------------------------------------------
+//
+// mcp_audit only sees calls that got as far as running a tool. Everything
+// that fails earlier — a preflight, a malformed body, a request that never
+// authenticated — leaves no trace at either end, and the client says only
+// "couldn't connect to the server".
+//
+// This records what actually arrives, for a window an admin opens
+// deliberately and which closes on its own.
+
+/** Is recording currently switched on? */
+function mcp_debug_active(): bool
+{
+    $until = (int)app_setting('mcp_debug_until', '0');
+    return $until > time();
+}
+
+/** Open the window. Minutes are clamped: this captures request bodies. */
+function mcp_debug_enable(int $minutes = 15): int
+{
+    $minutes = max(1, min(60, $minutes));
+    $until   = time() + ($minutes * 60);
+    db()->prepare(
+        "INSERT INTO app_settings (setting_key, setting_value) VALUES ('mcp_debug_until', :v)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+    )->execute([':v' => (string)$until]);
+    app_setting_clear_cache();
+    return $until;
+}
+
+function mcp_debug_disable(): void
+{
+    db()->prepare(
+        "INSERT INTO app_settings (setting_key, setting_value) VALUES ('mcp_debug_until','0')
+         ON DUPLICATE KEY UPDATE setting_value = '0'"
+    )->execute();
+    app_setting_clear_cache();
+}
+
+/**
+ * Record one request.
+ *
+ * The Authorization value is never stored — only whether one arrived and how
+ * long it was. A debug log holding live credentials would be a worse problem
+ * than the one it was opened to investigate.
+ */
+function mcp_debug_record(string $method, string $path, array $headers,
+                          string $body, int $status, string $note = ''): void
+{
+    try {
+        $safe = [];
+        foreach ($headers as $k => $v) {
+            $lk = strtolower((string)$k);
+            if ($lk === 'authorization' || $lk === 'cookie') {
+                $safe[$k] = '[' . strlen((string)$v) . ' chars, not stored]';
+            } else {
+                $safe[$k] = mb_substr((string)$v, 0, 300);
+            }
+        }
+        db()->prepare(
+            "INSERT INTO mcp_debug_log (method, path, headers, body, status, note, ip_hash)
+             VALUES (:m, :p, :h, :b, :s, :n, :ip)"
+        )->execute([
+            ':m'  => mb_substr($method, 0, 10),
+            ':p'  => mb_substr($path, 0, 255),
+            ':h'  => json_encode($safe, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
+            ':b'  => mb_substr($body, 0, 4000),
+            ':s'  => $status,
+            ':n'  => $note !== '' ? mb_substr($note, 0, 255) : null,
+            ':ip' => hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? '')),
+        ]);
+    } catch (Throwable $e) {
+        // Diagnostics must never be the reason a request fails.
+    }
+}
+
+function mcp_debug_recent(int $limit = 50): array
+{
+    $limit = max(1, min(200, $limit));
+    return db()->query("SELECT * FROM mcp_debug_log ORDER BY id DESC LIMIT $limit")->fetchAll();
+}
+
+function mcp_debug_clear(): void
+{
+    try { db()->exec("DELETE FROM mcp_debug_log"); } catch (Throwable $e) {}
+}
+
+/** Every request header, however the SAPI chooses to expose them. */
+function mcp_request_headers(): array
+{
+    if (function_exists('getallheaders')) {
+        $h = getallheaders();
+        if (is_array($h) && $h) return $h;
+    }
+    $out = [];
+    foreach ($_SERVER as $k => $v) {
+        if (strpos($k, 'HTTP_') === 0) {
+            $name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($k, 5)))));
+            $out[$name] = (string)$v;
+        }
+    }
+    foreach (['CONTENT_TYPE' => 'Content-Type', 'CONTENT_LENGTH' => 'Content-Length'] as $k => $n) {
+        if (isset($_SERVER[$k])) $out[$n] = (string)$_SERVER[$k];
+    }
+    return $out;
+}
+
 /** Recent audit rows for the admin page. */
 function mcp_audit_recent(int $limit = 200): array
 {
