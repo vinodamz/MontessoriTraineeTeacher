@@ -57,6 +57,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             oauth_session_revoke((int)($_POST['id'] ?? 0));
             flash_set('ok', 'Disconnected. That client will have to sign in again.');
             redirect('/mcp_admin.php');
+        } elseif ($op === 'client_add') {
+            $name = trim((string)($_POST['client_name'] ?? ''));
+            if ($name === '') {
+                flash_set('error', 'Give the application a name, so the consent screen can say what is asking.');
+                redirect('/mcp_admin.php#apps');
+            }
+            // One URI per line is the shape people actually paste.
+            $uris = preg_split('/[\r\n]+/', (string)($_POST['redirect_uris'] ?? '')) ?: [];
+            $c = oauth_client_register($name, $uris, ($_POST['confidential'] ?? '') === '1', null);
+            start_session_once();
+            $_SESSION['mcp_fresh_client'] = $c;   // shown once, like a token
+            flash_set('ok', 'Application registered.');
+            redirect('/mcp_admin.php#apps');
+        } elseif ($op === 'client_disable') {
+            oauth_client_disable((string)($_POST['client_id'] ?? ''));
+            flash_set('ok', 'Application removed. Its client ID no longer works and its sessions are cut.');
+            redirect('/mcp_admin.php#apps');
+        } elseif ($op === 'open_reg') {
+            $on = (string)($_POST['on'] ?? '') === '1';
+            oauth_open_registration_set($on);
+            flash_set('ok', $on
+                ? 'Applications can register themselves again.'
+                : 'Self-registration is off. Only the applications listed here can sign in — '
+                . 'anything already connected keeps working.');
+            redirect('/mcp_admin.php#apps');
         }
     } catch (Throwable $e) {
         flash_set('error', 'Could not do that: ' . $e->getMessage());
@@ -69,6 +94,9 @@ start_session_once();
 $freshToken = (string)($_SESSION['mcp_fresh_token'] ?? '');
 unset($_SESSION['mcp_fresh_token']);   // shown once, then gone
 
+$freshClient = is_array($_SESSION['mcp_fresh_client'] ?? null) ? $_SESSION['mcp_fresh_client'] : null;
+unset($_SESSION['mcp_fresh_client']);  // the secret, likewise
+
 $ready = true;
 $tokens = $audit = $sessions = $clients = [];
 try {
@@ -80,11 +108,28 @@ try {
 // OAuth arrived a migration later than the token table, so an install that is
 // mid-upgrade can have one without the other.
 $oauthReady = true;
+$openReg = true;
 try {
     $sessions = oauth_sessions();
     $clients  = oauth_clients_all();
+    $openReg  = oauth_open_registration();
 } catch (Throwable $e) {
     $oauthReady = false;
+}
+
+/*
+ * What to put in the "create one by hand" box.
+ *
+ * A redirect URL cannot be guessed — it belongs to the client, and a wrong one
+ * is refused at the consent screen with nothing useful to show the person. But
+ * any client that has ever registered itself has already told us its real one,
+ * so the newest of those is by far the best default. Falls back to empty
+ * rather than to something invented.
+ */
+$suggestedRedirect = '';
+foreach ($clients as $c) {
+    $u = json_decode((string)$c['redirect_uris'], true);
+    if (is_array($u) && $u !== []) { $suggestedRedirect = implode("\n", $u); break; }
 }
 
 $baseUrl = app_base_url() . '/mcp.php';
@@ -185,7 +230,7 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </div>
 
-<?php if ($oauthReady && $clients): ?>
+<?php if ($oauthReady): ?>
 <?php
 // Clients register themselves, so this list grows on its own — and a client
 // stuck in a retry loop shows up here as a burst of rows within one hour,
@@ -196,31 +241,90 @@ foreach ($clients as $c) {
     if (strtotime((string)$c['created_at']) > time() - 3600) $lastHour++;
 }
 ?>
-<div class="card">
+<div class="card" id="apps">
     <h3 style="margin-top:0;">Registered applications</h3>
-    <p class="muted small">
-        Clients register themselves the first time they connect — that is how OAuth works
-        here, and a client_id on its own grants nothing until somebody signs in.
-        <?php if ($lastHour > 5): ?>
-            <br><strong style="color:#c62828;"><?= (int)$lastHour ?> registered in the last hour.</strong>
-            That usually means a client is retrying in a loop and failing somewhere after
-            registration — check <em>Recent activity</em> and the PHP error log.
-        <?php endif; ?>
-    </p>
+
+    <?php if ($freshClient): ?>
+        <div class="card" style="background:#fff5fa;border:2px solid #ad1457;">
+            <p style="margin:0 0 .5rem;"><strong>Copy these into the application's settings now.</strong>
+               <?php if ($freshClient['client_secret'] !== null): ?>
+                   The secret is shown once and is not stored in a form that can show it again.
+               <?php endif; ?></p>
+            <p class="small" style="margin:.4rem 0;">Client ID<br>
+               <code style="font-size:1rem;word-break:break-all;"><?= e((string)$freshClient['client_id']) ?></code></p>
+            <?php if ($freshClient['client_secret'] !== null): ?>
+                <p class="small" style="margin:.4rem 0;">Client secret<br>
+                   <code style="font-size:1rem;word-break:break-all;"><?= e((string)$freshClient['client_secret']) ?></code></p>
+            <?php endif; ?>
+            <p class="muted small" style="margin:.4rem 0 0;">
+                Redirect
+                <?= count($freshClient['redirect_uris']) === 1 ? 'URL' : 'URLs' ?>:
+                <?= e(implode(', ', $freshClient['redirect_uris'])) ?>
+            </p>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($openReg): ?>
+        <p class="muted small">
+            <strong>Any application may register itself.</strong> That is how MCP is meant to
+            work — a client asks for an ID the first time it connects, and the ID grants
+            nothing on its own until somebody signs in at the consent screen. It also means
+            you never have to hand out an ID by hand.
+            <?php if ($lastHour > 5): ?>
+                <br><strong style="color:#c62828;"><?= (int)$lastHour ?> registered in the last hour.</strong>
+                That usually means a client is retrying in a loop and failing somewhere after
+                registration — check <em>Recent activity</em> and the PHP error log.
+            <?php endif; ?>
+        </p>
+    <?php else: ?>
+        <p class="small" style="color:#ad1457;">
+            <strong>Self-registration is off.</strong> Only the applications listed below can
+            start a sign-in. Anything else is turned away before the consent screen, so a new
+            assistant needs an ID and secret created here and typed into its settings.
+        </p>
+    <?php endif; ?>
+
+    <form method="post" style="margin:0 0 1rem;">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="open_reg">
+        <input type="hidden" name="on" value="<?= $openReg ? '0' : '1' ?>">
+        <button class="btn <?= $openReg ? 'btn-ghost' : 'btn-primary' ?>" type="submit">
+            <?= $openReg ? 'Only allow applications I create here' : 'Let applications register themselves again' ?>
+        </button>
+    </form>
+
+    <?php if ($clients): ?>
     <div style="overflow-x:auto;">
     <table class="table">
         <thead><tr>
-            <th>Application</th><th>Type</th><th>Registered</th><th>Last used</th><th>Live sessions</th>
+            <th>Application</th><th>Client ID</th><th>Redirect</th><th>Type</th>
+            <th>Registered</th><th>Last used</th><th>Sessions</th><th></th>
         </tr></thead>
         <tbody>
         <?php foreach (array_slice($clients, 0, 25) as $c): ?>
-            <tr>
-                <td><?= e((string)($c['client_name'] ?: 'Unnamed')) ?></td>
-                <td class="small"><?= $c['secret_hash'] !== null ? 'Confidential' : 'Public (PKCE)' ?></td>
+            <?php $uris = json_decode((string)$c['redirect_uris'], true) ?: []; ?>
+            <tr<?= $c['disabled_at'] !== null ? ' style="opacity:.5;"' : '' ?>>
+                <td><?= e((string)($c['client_name'] ?: 'Unnamed')) ?>
+                    <?php if ($c['disabled_at'] !== null): ?>
+                        <br><span class="muted small">removed</span>
+                    <?php endif; ?></td>
+                <td class="small"><code style="word-break:break-all;"><?= e((string)$c['client_id']) ?></code></td>
+                <td class="small" style="word-break:break-all;max-width:18rem;"><?= e(implode(' ', $uris)) ?></td>
+                <td class="small"><?= $c['secret_hash'] !== null ? 'ID + secret' : 'ID only (PKCE)' ?></td>
                 <td class="small"><?= e((string)$c['created_at']) ?></td>
                 <td class="small"><?= $c['last_used_at'] ? e((string)$c['last_used_at'])
                         : '<span class="muted">never</span>' ?></td>
                 <td><?= (int)$c['live_sessions'] ?></td>
+                <td>
+                    <?php if ($c['disabled_at'] === null): ?>
+                    <form method="post" onsubmit="return confirm('Remove this application? Anything using it stops working immediately.');">
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="op" value="client_disable">
+                        <input type="hidden" name="client_id" value="<?= e((string)$c['client_id']) ?>">
+                        <button class="btn btn-ghost btn-small" type="submit">Remove</button>
+                    </form>
+                    <?php endif; ?>
+                </td>
             </tr>
         <?php endforeach; ?>
         </tbody>
@@ -229,6 +333,39 @@ foreach ($clients as $c) {
     <?php if (count($clients) > 25): ?>
         <p class="muted small"><?= count($clients) - 25 ?> older ones not shown.</p>
     <?php endif; ?>
+    <?php else: ?>
+        <p class="muted">No applications yet.</p>
+    <?php endif; ?>
+
+    <h4 style="margin:1.4rem 0 .4rem;">Create one by hand</h4>
+    <p class="muted small" style="margin-top:0;">
+        Use this when the assistant asks you for a Client ID, or when self-registration is
+        off. <strong>The redirect URL has to match what the application actually uses</strong>,
+        character for character — it is the address the sign-in sends the person back to, and
+        a mismatch is refused on purpose. If the application has connected before, copy the
+        redirect from its row above rather than typing one from memory.
+    </p>
+    <form method="post">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="client_add">
+        <p style="margin:.4rem 0;">
+            <label class="small">Application name<br>
+            <input type="text" name="client_name" maxlength="120" required
+                   style="width:100%;max-width:26rem;" placeholder="e.g. Claude"></label>
+        </p>
+        <p style="margin:.4rem 0;">
+            <label class="small">Redirect URL — one per line<br>
+            <textarea name="redirect_uris" rows="3" required
+                      style="width:100%;max-width:34rem;font-family:monospace;"
+                      placeholder="https://…"><?= e($suggestedRedirect) ?></textarea></label>
+        </p>
+        <p class="small" style="margin:.4rem 0;">
+            <label><input type="checkbox" name="confidential" value="1" checked>
+            Also issue a client secret</label>
+            <span class="muted">— leave ticked unless the application only asks for an ID.</span>
+        </p>
+        <button class="btn btn-primary" type="submit">Create application</button>
+    </form>
 </div>
 <?php endif; ?>
 

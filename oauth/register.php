@@ -44,6 +44,24 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 /*
+ * The school can close this door (MCP API → Registered applications).
+ *
+ * With it shut, only applications an admin created by hand may sign in, and
+ * the client_id and secret are handed over out of band. The wording matters:
+ * a client that is refused here shows it to the person setting it up, and
+ * "ask the school for a client ID" is the only useful thing they can be told.
+ */
+try {
+    if (!oauth_open_registration()) {
+        reg_fail('access_denied',
+            'This server does not accept self-registration. Ask the school administrator '
+          . 'for a client ID and secret, and enter them in your client\'s settings.', 403);
+    }
+} catch (PDOException $e) {
+    reg_fail('temporarily_unavailable', 'Registration is not available — the database is not ready.', 503);
+}
+
+/*
  * Flood guard, per caller.
  *
  * The first version of this computed an IP hash, discarded it, and counted
