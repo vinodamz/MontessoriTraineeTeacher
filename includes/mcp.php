@@ -405,6 +405,89 @@ function mcp_schema_map(): array
     return $map;
 }
 
+/**
+ * Which column points at which, in both directions.
+ *
+ * This is the part of a schema a model cannot guess. `key: MUL` says a column
+ * is indexed and nothing about what it means; `students.teacher_id` could
+ * point at `users`, at a `teachers` table that no longer exists, or at
+ * nothing. Without the answer the first few queries are guesses, and a join
+ * onto the wrong table returns zero rows rather than an error — which reads
+ * as "no data" instead of "wrong question".
+ *
+ * Returned as two maps: `out` for what a table's own columns reference, and
+ * `in` for what references the table, because "what hangs off a student"
+ * matters as much as "what does a student point at".
+ */
+function mcp_fk_map(): array
+{
+    static $fk = null;
+    if ($fk !== null) return $fk;
+
+    $fk = ['out' => [], 'in' => []];
+    try {
+        $rows = db()->query(
+            "SELECT TABLE_NAME AS t, COLUMN_NAME AS c,
+                    REFERENCED_TABLE_NAME AS rt, REFERENCED_COLUMN_NAME AS rc
+               FROM information_schema.KEY_COLUMN_USAGE
+              WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL
+              ORDER BY TABLE_NAME, COLUMN_NAME"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        return $fk;      // no privileges on KEY_COLUMN_USAGE: degrade, don't fail
+    }
+
+    foreach ($rows as $r) {
+        $fk['out'][$r['t']][$r['c']] = $r['rt'] . '.' . $r['rc'];
+        $fk['in'][$r['rt']][] = $r['t'] . '.' . $r['c'];
+    }
+    return $fk;
+}
+
+/**
+ * A guess at what a table is for, from its name.
+ *
+ * Deliberately a naming convention rather than a hand-written list: a list
+ * goes stale the first time somebody adds a table and forgets to update it,
+ * and a stale label is worse than none. Anything unrecognised is grouped as
+ * "other", which is honest.
+ */
+function mcp_table_area(string $table): string
+{
+    static $rules = [
+        'student'    => 'students',
+        'attendance' => 'attendance',
+        'grade'      => 'students',
+        'fee'        => 'fees',
+        'payment'    => 'fees',
+        'expense'    => 'fees',
+        'staff'      => 'staff',
+        'payslip'    => 'staff',
+        'shift'      => 'staff',
+        'inquiry'    => 'crm',
+        'lead'       => 'crm',
+        'task'       => 'tasks',
+        'inventory'  => 'inventory',
+        'survey'     => 'surveys',
+        'feedback'   => 'surveys',
+        'montessori' => 'montessori',
+        'mm_'        => 'montessori',
+        'user'       => 'people',
+        'auth'       => 'system',
+        'oauth'      => 'system',
+        'mcp_'       => 'system',
+        'app_'       => 'system',
+        'notif'      => 'system',
+        'token'      => 'system',
+        'schema_'    => 'system',
+    ];
+    $t = strtolower($table);
+    foreach ($rules as $needle => $area) {
+        if (strpos($t, $needle) !== false) return $area;
+    }
+    return 'other';
+}
+
 function mcp_table_exists(string $table): bool
 {
     return isset(mcp_schema_map()[$table]);
@@ -524,16 +607,27 @@ function mcp_tools(): array
     return [
         [
             'name'        => 'schema',
-            'description' => 'List the database tables, or the columns of one table. '
-                           . 'Call this FIRST when you do not already know the table or column names — '
-                           . 'guessing them wastes a round trip. Credential columns are listed but their '
-                           . 'values are never returned by query.',
+            'description' => 'Describe the database. Call this FIRST when you do not already know the '
+                           . 'table or column names — guessing them wastes a round trip, and a join onto '
+                           . 'the wrong table returns no rows rather than an error, which looks like '
+                           . '"no data" instead of "wrong question". With no arguments it lists every '
+                           . 'table grouped by what it is for, with row counts. With table set, it returns '
+                           . 'each column\'s type, whether it is nullable, and — the part you cannot '
+                           . 'guess — which column it references and which columns reference it, so joins '
+                           . 'can be written correctly the first time. Ask for several tables at once. '
+                           . 'Credential columns are listed but marked redacted: their values are never '
+                           . 'returned and cannot be written.',
             'inputSchema' => [
                 'type'       => 'object',
                 'properties' => [
-                    'table' => ['type' => 'string',
-                                'description' => 'Omit to list every table with its row count. '
-                                               . 'Give a table name for its full column list.'],
+                    'table' => ['description' => 'Omit to list every table, grouped by area. Give one name '
+                                               . 'for its columns and relationships, or several — '
+                                               . '"students,attendance,fees" or ["students","attendance"] — '
+                                               . 'to learn a whole area in one call. Up to 25.',
+                                'anyOf' => [
+                                    ['type' => 'string'],
+                                    ['type' => 'array', 'items' => ['type' => 'string']],
+                                ]],
                 ],
             ],
         ],
@@ -619,33 +713,79 @@ function mcp_tools(): array
 function mcp_tool_schema(array $a): array
 {
     $map = mcp_schema_map();
+    $fk  = mcp_fk_map();
 
-    if (empty($a['table'])) {
-        $tables = [];
+    // `table` accepts one name, a comma-separated list, or an array. Related
+    // tables are almost always needed together — a student, its attendance and
+    // its fees — and asking for them one at a time is three round trips to
+    // learn one thing.
+    $wanted = $a['table'] ?? ($a['tables'] ?? null);
+    if (is_string($wanted)) {
+        $wanted = array_values(array_filter(array_map('trim', explode(',', $wanted)), 'strlen'));
+    }
+    if (!is_array($wanted)) $wanted = [];
+
+    if ($wanted === []) {
+        $areas = [];
         foreach (array_keys($map) as $t) {
             try {
                 $n = (int)db()->query("SELECT COUNT(*) FROM `$t`")->fetchColumn();
             } catch (Throwable $e) {
                 $n = -1;   // a view, or no permission — still worth listing
             }
-            $tables[] = ['table' => $t, 'columns' => count($map[$t]), 'rows' => $n];
+            $areas[mcp_table_area($t)][] = [
+                'table'   => $t,
+                'columns' => count($map[$t]),
+                'rows'    => $n,
+            ];
         }
-        return ['tables' => $tables, 'count' => count($tables)];
-    }
-
-    $table = mcp_require_table((string)$a['table']);
-    $cols  = [];
-    foreach ($map[$table] as $name => $meta) {
-        $cols[] = [
-            'column'   => $name,
-            'type'     => $meta['type'],
-            'nullable' => $meta['nullable'],
-            'key'      => $meta['key'],
-            'extra'    => $meta['extra'],
-            'redacted' => mcp_is_secret_column($name) ?: null,
+        ksort($areas);
+        return [
+            'areas' => $areas,
+            'count' => count($map),
+            'next'  => 'Call schema again with table set to a name, or to several '
+                     . 'comma-separated names, for their columns and how they join.',
         ];
     }
-    return ['table' => $table, 'columns' => $cols];
+
+    if (count($wanted) > 25) {
+        throw new McpError('Ask for at most 25 tables at once.');
+    }
+
+    $out = [];
+    foreach ($wanted as $name) {
+        $table = mcp_require_table((string)$name);
+        $cols  = [];
+        foreach ($map[$table] as $col => $meta) {
+            $entry = [
+                'column'   => $col,
+                'type'     => $meta['type'],
+                'nullable' => $meta['nullable'],
+                'key'      => $meta['key'],
+                'extra'    => $meta['extra'],
+            ];
+            // Only present when true or known — a column list where every row
+            // carries "references": null is harder to read, not easier.
+            if (isset($fk['out'][$table][$col])) {
+                $entry['references'] = $fk['out'][$table][$col];
+            }
+            if (mcp_is_secret_column($col)) {
+                $entry['redacted'] = true;
+                $entry['note']     = 'Always returned as [redacted]. It cannot be read or written.';
+            }
+            $cols[] = $entry;
+        }
+
+        $one = ['table' => $table, 'area' => mcp_table_area($table), 'columns' => $cols];
+        if (!empty($fk['in'][$table])) {
+            $one['referenced_by'] = array_values(array_unique($fk['in'][$table]));
+        }
+        $out[] = $one;
+    }
+
+    // One table asked for, one table returned — a client that asked a simple
+    // question should not have to unwrap a list to read the answer.
+    return count($out) === 1 ? $out[0] : ['tables' => $out];
 }
 
 function mcp_tool_query(array $a): array
