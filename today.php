@@ -99,6 +99,26 @@ try {
 
 $hasLogbook = user_has_module($user, 'logbook');
 
+/*
+ * My own leave balance.
+ *
+ * Wrapped and allowed to come back null, because My Day is the page a teacher
+ * lands on every morning: if the leave tables are mid-migration, or the accrual
+ * arithmetic hits something it cannot make sense of, the card must go missing
+ * rather than take the whole page down with it.
+ */
+$myLeave = null; $myLeavePending = 0;
+try {
+    require_once __DIR__ . '/includes/staff.php';
+    $myLeave = staff_leave_balance_at((int)$user['id']);
+    $st = db()->prepare("SELECT COUNT(*) FROM staff_leave_requests
+                          WHERE user_id = :u AND status = 'pending'");
+    $st->execute([':u' => (int)$user['id']]);
+    $myLeavePending = (int)$st->fetchColumn();
+} catch (Throwable $e) {
+    $myLeave = null;
+}
+
 $pageTitle = 'My Day';
 require __DIR__ . '/includes/header.php';
 ?>
@@ -148,6 +168,32 @@ $out = $todayAttendance['check_out'] ?? null;
         </form>
     </div>
 </div>
+
+<?php /* ---- My leave ----
+         Next to check-in, because both are things a person does about their own
+         working day rather than about the class. The balance is shown rather
+         than just a link: "can I take Friday off" is the actual question, and
+         answering it here saves a page load. A pending request is surfaced
+         because the commonest follow-up is "has anyone looked at it yet". */ ?>
+<?php if ($myLeave !== null): ?>
+<div class="card">
+    <div class="checkin-body">
+        <div>
+            <div class="checkin-label">My leave</div>
+            <div class="checkin-status">
+                <strong><?= e(staff_leave_days_phrase((float)$myLeave['balance'])) ?></strong> available
+                <?php if ($myLeavePending > 0): ?>
+                    · <span class="pill pill-warn"><?= (int)$myLeavePending ?>
+                        request<?= $myLeavePending === 1 ? '' : 's' ?> awaiting approval</span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="checkin-action">
+            <a class="btn btn-primary" href="/staff/leave.php">Apply for leave</a>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php /* ---- Shortcuts: assessments + quick logbook ---- */ ?>
 <?php if ($pendingAssess > 0 || $hasLogbook): ?>

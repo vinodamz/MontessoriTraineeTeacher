@@ -58,6 +58,13 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                 <details class="more-menu">
                     <summary>More ▾</summary>
                     <div class="more-menu-list">
+                        <?php /* Applying for your own leave is not a module and not a
+                                  management function, so it belongs here unconditionally.
+                                  Anyone with the staff module reaches the same page
+                                  through Staff, listed above, and does not need it twice. */ ?>
+                        <?php if (!user_has_module($user, 'staff')): ?>
+                            <a href="/staff/leave.php">My leave</a>
+                        <?php endif; ?>
                         <?php foreach ($teacherExtras as [$mLabel, $mHref]): ?>
                             <a href="<?= e($mHref) ?>"><?= e($mLabel) ?></a>
                         <?php endforeach; ?>

@@ -339,6 +339,21 @@ if ($hasStaff) {
     if ($staffStats['pending_leave'] > 0) $stats[] = ['label' => $staffStats['pending_leave'] . ' leave', 'tone' => 'warn'];
     if ($staffStats['open_msgs']     > 0) $stats[] = ['label' => $staffStats['open_msgs'] . ' messages', 'tone' => ''];
     $apps[] = ['key' => 'staff', 'name' => 'Staff', 'subtitle' => 'Attendance · Leave · HR', 'href' => '/staff/index.php', 'stats' => $stats];
+} else {
+    // No module gates this one: everybody is entitled to leave, so everybody
+    // gets a card for it. Those with the staff module reach the same page
+    // through Staff, above, and do not need it listed twice.
+    $myPendingLeave = 0;
+    try {
+        $st = db()->prepare("SELECT COUNT(*) FROM staff_leave_requests
+                              WHERE user_id = :u AND status = 'pending'");
+        $st->execute([':u' => (int)$user['id']]);
+        $myPendingLeave = (int)$st->fetchColumn();
+    } catch (Throwable $e) { /* pre-migration */ }
+    $apps[] = ['key' => 'staff', 'name' => 'My leave', 'subtitle' => 'Balance · Apply · History',
+               'href' => '/staff/leave.php',
+               'stats' => $myPendingLeave > 0
+                   ? [['label' => $myPendingLeave . ' awaiting approval', 'tone' => 'warn']] : []];
 }
 if ($hasFees || $hasExpenses) {
     $apps[] = ['key' => 'money', 'name' => 'Money overview', 'subtitle' => 'Collections · Dues · Spend', 'href' => '/money.php', 'stats' => []];
