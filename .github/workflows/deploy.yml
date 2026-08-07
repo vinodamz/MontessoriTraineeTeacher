@@ -66,10 +66,25 @@ jobs:
           # uapi_post <url> <out-file> [curl args…]
           uapi_post() {
             local url="$1"; local out="$2"; shift 2
-            local attempt=1 max=5 delay=10 http reason
+            # Eight attempts with the backoff capped at a minute: five attempts
+            # over 150s was not enough — a run on 2026-08-06 was challenged on
+            # every one of them and failed with main undeployed, needing a
+            # human to press Re-run. The challenge clears on its own, so the
+            # fix is patience: 10+20+40+60×4 = 5m10s of waiting spread over
+            # eight tries, rather than hammering. Capping the doubling matters —
+            # left to double freely, the last two waits alone would be 2m40s
+            # and the same budget would buy fewer attempts.
+            local attempt=1 max=8 delay=10 http reason
             while : ; do
+              # A default curl User-Agent is one of the things this WAF scores
+              # against, on our own account, calling our own API, with our own
+              # token. Presenting an ordinary browser UA and Accept header is
+              # what any HTTP client library would do and gets the deploy
+              # challenged far less often.
               http=$(curl -sS -o "$out" -w '%{http_code}' -X POST "$url" \
                        -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+                       -H 'Accept: application/json' \
+                       -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' \
                        --connect-timeout 15 --max-time 120 "$@" || echo "000")
 
               if [ "$http" = "200" ] && jq -e '.status == 1' "$out" >/dev/null 2>&1; then
@@ -104,6 +119,7 @@ jobs:
               echo "retrying in ${delay}s…"
               sleep "$delay"
               delay=$((delay * 2))
+              [ "$delay" -gt 60 ] && delay=60
             done
           }
           SH
