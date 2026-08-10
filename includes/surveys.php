@@ -657,7 +657,16 @@ function survey_student_search(string $query, array $filter = [], int $limit = S
 
     try {
         $sql = "SELECT id, first_name, last_name, grade FROM students WHERE 1=1";
-        $params = [':q' => $like . '%', ':q2' => '% ' . $like . '%'];
+        // Unique placeholders only — PDO with ATTR_EMULATE_PREPARES=false
+        // (see includes/db.php) rejects reusing the same :name twice.
+        $prefix = $like . '%';
+        $word   = '% ' . $like . '%';
+        $params = [
+            ':q_first' => $prefix,
+            ':q_last'  => $prefix,
+            ':q_full'  => $prefix,
+            ':q_word'  => $word,
+        ];
         if ($activeOnly) $sql .= " AND is_active = 1";
         if ($statuses) {
             $in = [];
@@ -679,10 +688,10 @@ function survey_student_search(string $query, array $filter = [], int $limit = S
         }
         // Match start of first name, last name, or any word in the full name.
         $sql .= " AND (
-                    first_name LIKE :q
-                 OR last_name  LIKE :q
-                 OR CONCAT(TRIM(first_name), ' ', TRIM(last_name)) LIKE :q
-                 OR CONCAT(TRIM(first_name), ' ', TRIM(last_name)) LIKE :q2
+                    first_name LIKE :q_first
+                 OR last_name  LIKE :q_last
+                 OR CONCAT(TRIM(first_name), ' ', TRIM(last_name)) LIKE :q_full
+                 OR CONCAT(TRIM(first_name), ' ', TRIM(last_name)) LIKE :q_word
                   )";
         $sql .= " ORDER BY first_name, last_name LIMIT " . (int)$limit;
         $st = db()->prepare($sql);
@@ -702,6 +711,7 @@ function survey_student_search(string $query, array $filter = [], int $limit = S
         }
         return $out;
     } catch (Throwable $e) {
+        error_log('survey_student_search failed: ' . $e->getMessage());
         return [];
     }
 }
@@ -734,7 +744,16 @@ function survey_parent_search(string $query, array $filter = [], int $limit = SU
                   FROM student_parents p
                   JOIN students s ON s.id = p.student_id
                  WHERE 1=1";
-        $params = [':q' => $like . '%', ':q2' => '% ' . $like . '%'];
+        // Unique placeholders — native PDO prepares cannot reuse :name.
+        $prefix = $like . '%';
+        $word   = '% ' . $like . '%';
+        $params = [
+            ':q_pname'  => $prefix,
+            ':q_pword'  => $word,
+            ':q_sfirst' => $prefix,
+            ':q_slast'  => $prefix,
+            ':q_sfull'  => $prefix,
+        ];
         if ($activeOnly) $sql .= " AND s.is_active = 1";
         if ($statuses) {
             $in = [];
@@ -755,11 +774,11 @@ function survey_parent_search(string $query, array $filter = [], int $limit = SU
             $sql .= " AND s.grade IN (" . implode(',', $in) . ")";
         }
         $sql .= " AND (
-                    p.name LIKE :q
-                 OR p.name LIKE :q2
-                 OR s.first_name LIKE :q
-                 OR s.last_name LIKE :q
-                 OR CONCAT(TRIM(s.first_name), ' ', TRIM(s.last_name)) LIKE :q
+                    p.name LIKE :q_pname
+                 OR p.name LIKE :q_pword
+                 OR s.first_name LIKE :q_sfirst
+                 OR s.last_name LIKE :q_slast
+                 OR CONCAT(TRIM(s.first_name), ' ', TRIM(s.last_name)) LIKE :q_sfull
                   )";
         $sql .= " ORDER BY p.name, s.first_name LIMIT " . (int)$limit;
         $st = db()->prepare($sql);
@@ -784,6 +803,7 @@ function survey_parent_search(string $query, array $filter = [], int $limit = SU
         }
         return $out;
     } catch (Throwable $e) {
+        error_log('survey_parent_search failed: ' . $e->getMessage());
         return [];
     }
 }
