@@ -40,12 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/surveys/index.php');
 }
 
-// Each spec gets its live row, created on first sight.
+// Each known spec (PHP + MCP/DB) gets its live row, created on first sight.
 $rows = [];
-foreach (survey_specs() as $key => $spec) {
+foreach (survey_all_specs() as $key => $entry) {
+    $spec = $entry['spec'];
     $survey = survey_ensure($key, (int)$user['id']);
     $rows[] = [
         'spec'   => $spec,
+        'source' => $entry['source'],
         'survey' => $survey,
         'count'  => $survey ? survey_response_count((int)$survey['id']) : 0,
     ];
@@ -61,7 +63,7 @@ require __DIR__ . '/../includes/header.php';
         <h1>Parent surveys</h1>
         <p class="muted">
             Share a link, collect responses, read them here. Responses are visible to
-            admins only.
+            admins only. New surveys can also be created via the MCP API (JSON).
         </p>
     </div>
 </div>
@@ -77,6 +79,7 @@ require __DIR__ . '/../includes/header.php';
             · <?= count(survey_questions($spec)) ?> questions
             · <?= count(survey_columns($spec)) ?> spreadsheet columns
             · <strong><?= (int)$r['count'] ?></strong> response<?= (int)$r['count'] === 1 ? '' : 's' ?>
+            · <span class="pill"><?= $r['source'] === 'mcp' ? 'MCP / JSON' : 'Built-in' ?></span>
         </p>
 
         <?php if (!$survey): ?>

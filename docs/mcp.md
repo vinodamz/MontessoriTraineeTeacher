@@ -106,10 +106,73 @@ https, a literal loopback address, or a reverse-DNS private scheme.
 | `insert` | One row. Column names checked against the real table. |
 | `update` | Rows matching a `WHERE`. Refuses if more rows match than `max_rows`. |
 | `delete` | Same rules as `update`. |
+| `survey_spec_validate` | Dry-run a parent-survey JSON definition. |
+| `survey_spec_upsert` | Save a new/updated JSON survey (never overwrites PHP-built surveys). |
+| `survey_spec_get` | Fetch one definition + publish status. |
+| `survey_spec_list` | List built-in + MCP surveys. |
+| `survey_publish` | Mint/open/close the shareable `/survey.php?t=…` link. |
+| `survey_prefill_links` | Per-child signed URLs that autofill identity fields. |
 
-Five tools rather than one per operation: the schema has ~68 tables, the whole
-catalogue is sent to the model on **every** request, and clients degrade badly
-long before a few hundred tools.
+Generic tools cover ~68 tables. Survey **creation** must use the `survey_*`
+domain tools — inserting into `surveys` alone does not register questions, and
+`survey_definitions` is not writable through `insert`/`update`/`delete`.
+
+### Creating a survey from JSON
+
+```text
+survey_spec_validate → survey_spec_upsert → survey_publish
+                 (optional) survey_prefill_links
+```
+
+Example `spec` argument:
+
+```json
+{
+  "key": "sports_day_2026",
+  "title": "Sports Day Consent",
+  "one_per_child": true,
+  "roster": true,
+  "roster_consent_key": "consent",
+  "sections": [
+    {
+      "title": "Who is this for?",
+      "questions": [
+        {
+          "key": "student_id_pick",
+          "type": "student_picker",
+          "label": "Select your child",
+          "required": true,
+          "options_filter": { "grades": ["Nursery", "Junior KG"] },
+          "fills": {
+            "child_name": "full_name",
+            "class": "grade",
+            "parent_name": "primary_parent"
+          }
+        },
+        { "key": "parent_name", "type": "text", "label": "Parent name", "required": true },
+        { "key": "child_name", "type": "text", "label": "Child name", "required": true },
+        { "key": "class", "type": "radio", "label": "Class", "required": true, "options": "classes" }
+      ]
+    },
+    {
+      "title": "Consent",
+      "questions": [
+        {
+          "key": "consent",
+          "type": "radio",
+          "label": "I consent to participation",
+          "required": true,
+          "options": { "yes": "Yes", "no": "No" }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Dynamic option sources: `classes`, `students`, `parents`. Scope with
+`options_filter` (`grades`, `enrollment_status`). Built-in keys
+`orientation_2026_27` and `field_trip` stay PHP-owned and cannot be upserted.
 
 ## What the rails do and don't do
 
