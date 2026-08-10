@@ -395,10 +395,10 @@ function survey_spec_orientation_2026_27(): array
  *    a survey about the school. Here it would silently invite Daycare parents
  *    to consent to a trip their child is not on.
  *
- * 2. Photograph permission is ONE required radio with four escalating levels,
- *    not a set of tickboxes. An untouched checkbox cannot be told apart from a
- *    declined one, and "we assumed the blank meant yes" is not a sentence
- *    anybody wants to say to a parent. One required choice is auditable.
+ * 2. Photograph permission is ONE required yes/no radio, not a checkbox. An
+ *    untouched checkbox cannot be told apart from a declined one, and "we
+ *    assumed the blank meant yes" is not a sentence anybody wants to say to
+ *    a parent. A required radio has no unanswered state to misread.
  *
  * 3. Photograph permission is asked *after* the trip consent and framed as
  *    standing rather than trip-specific, so a parent can say yes to the trip
@@ -491,25 +491,20 @@ function survey_spec_field_trip(): array
                 'title' => '3. Photographs and videos of your child',
                 'questions' => [
                     ['key' => 'media_consent', 'type' => 'radio', 'required' => true, 'short' => 'Photos',
-                     'label' => 'Where are you happy for photographs or videos of your child to be used?',
+                     'label' => 'Do you give permission for the school to photograph or film your '
+                              . 'child, and use that for the school\'s own purposes — such as notice '
+                              . 'boards, newsletters, the website and the school\'s social media?',
                      'help'  => 'We photograph and film children during the school day, at '
                               . 'celebrations and on trips, because those moments are worth keeping '
-                              . 'and sharing. Please choose the one option you are comfortable with. '
-                              . 'This is your standing preference for the whole year, not just this '
-                              . 'trip, and you can change it at any time by telling the school '
-                              . 'office. We never publish your child\'s full name, class or any '
-                              . 'contact detail alongside a picture, and we never share images with '
-                              . 'anyone outside the school for their own use.',
+                              . 'and sharing. This is your standing preference for the whole year, '
+                              . 'not just this trip. Consent already on file is not changed by '
+                              . 'submitting this form again — tell the school office if you would '
+                              . 'like it changed. We never publish your child\'s full name, class or '
+                              . 'any contact detail alongside a picture, and we never share images '
+                              . 'with anyone outside the school for their own use.',
                      'options' => [
-                         'public'   => 'Anywhere, including the school\'s social media, website and '
-                                     . 'publicity material such as brochures and banners',
-                         'social'   => 'The school\'s own social media and website, but not printed '
-                                     . 'publicity or advertising',
-                         'parents'  => 'Inside school, and privately with the parents of my child\'s '
-                                     . 'class — but nowhere public',
-                         'internal' => 'Inside school only — classroom displays and my child\'s own '
-                                     . 'portfolio and reports',
-                         'none'     => 'Nowhere — please do not photograph or film my child',
+                         'yes' => 'Yes — the school may photograph or film my child',
+                         'no'  => 'No — please do not photograph or film my child',
                      ]],
                 ],
             ],
