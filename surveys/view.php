@@ -15,6 +15,34 @@ require_once __DIR__ . '/../includes/surveys.php';
 $user = require_admin();
 
 $id  = (int)($_GET['id'] ?? 0);
+
+/*
+ * Withdrawing a response.
+ *
+ * The field trip form takes one consent per child, which without this would be
+ * a trap: a mistyped name, or a parent who changes their mind, and the form
+ * says "we already have this" with nobody able to clear it. Deleting rather
+ * than editing is deliberate — the answers are the parent's own words, and an
+ * admin quietly rewriting a consent record is not the same thing as a parent
+ * filling the form in again.
+ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    if ((string)($_POST['op'] ?? '') === 'delete') {
+        $gone   = survey_response($id);
+        $backTo = $gone ? '/surveys/responses.php?id=' . (int)$gone['survey_id'] : '/surveys/index.php';
+        if ($gone && survey_response_delete($id)) {
+            flash_set('ok', 'Response withdrawn' . ((string)$gone['child_name'] !== ''
+                ? ' for ' . (string)$gone['child_name'] : '')
+                . '. The form can be filled in again — tell the family they may resubmit.');
+        } else {
+            flash_set('error', 'That response no longer exists.');
+        }
+        redirect($backTo);
+    }
+    redirect('/surveys/view.php?id=' . $id);
+}
+
 $row = survey_response($id);
 
 $survey = null;
@@ -105,5 +133,27 @@ require __DIR__ . '/../includes/header.php';
         </dl>
     </div>
 <?php endforeach; ?>
+
+<?php if (!empty($spec['one_per_child'])): ?>
+<div class="card">
+    <h3 style="margin-top:0;">Withdraw this response</h3>
+    <p class="muted small" style="margin-top:0;">
+        This form takes one response per child, so
+        <strong><?= e((string)$row['child_name'] ?: 'this child') ?></strong> cannot be submitted
+        again while this one exists. Withdraw it if the name was mistyped, if it was filled in for
+        the wrong child, or if the family want to change their answers — then tell them they can
+        fill the form in again using the same link.
+    </p>
+    <p class="muted small">
+        The answers are deleted, not archived. If you only need to correct a detail, note it down
+        first.
+    </p>
+    <form method="post" onsubmit="return confirm('Withdraw this response? The answers are deleted and the family will need to fill the form in again.');">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="delete">
+        <button class="btn btn-ghost" type="submit">Withdraw response</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
