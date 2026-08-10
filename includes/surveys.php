@@ -89,6 +89,7 @@ function survey_specs(): array
 {
     return [
         'orientation_2026_27' => survey_spec_orientation_2026_27(),
+        'field_trip'          => survey_spec_field_trip(),
     ];
 }
 
@@ -369,6 +370,143 @@ function survey_spec_orientation_2026_27(): array
                      'label' => '10.2 What would help you feel confident about the year ahead?'],
                     ['key' => 'anything_else', 'type' => 'textarea',
                      'label' => '10.3 Is there anything else you would like to share with us?'],
+                ],
+            ],
+        ],
+    ];
+}
+
+/**
+ * Field Trip — parent consent.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this one is not shaped like the orientation survey
+ * ---------------------------------------------------------------------------
+ * That one gathers opinion, so every question is optional: a half-finished
+ * form still tells us something. This one is a permission slip. A blank answer
+ * is not a small gap in the data, it is the difference between a child getting
+ * on the bus and not, so the questions that decide that are required and the
+ * wording has to be unambiguous months later when somebody reads the row back.
+ *
+ * Three deliberate choices:
+ *
+ * 1. The class list is frozen to the four classes going. Elsewhere it comes
+ *    from /grades.php so a new grade appears automatically, which is right for
+ *    a survey about the school. Here it would silently invite Daycare parents
+ *    to consent to a trip their child is not on.
+ *
+ * 2. Photograph permission is ONE required radio with four escalating levels,
+ *    not a set of tickboxes. An untouched checkbox cannot be told apart from a
+ *    declined one, and "we assumed the blank meant yes" is not a sentence
+ *    anybody wants to say to a parent. One required choice is auditable.
+ *
+ * 3. Photograph permission is asked *after* the trip consent and framed as
+ *    standing rather than trip-specific, so a parent can say yes to the trip
+ *    and no to social media without feeling the two are linked.
+ */
+function survey_spec_field_trip(): array
+{
+    // Frozen on purpose — see (1) above.
+    $classes = [
+        'Playgroup' => 'Playgroup',
+        'Nursery'   => 'Nursery',
+        'LKG'       => 'LKG',
+        'UKG'       => 'UKG',
+    ];
+
+    return [
+        'key'      => 'field_trip',
+        'title'    => 'Field Trip — Parent Consent',
+        'subtitle' => 'Playgroup · Nursery · LKG · UKG',
+        'intro'    => "We are planning a field trip for Playgroup, Nursery, LKG and UKG, and we "
+                    . "need your written permission before your child can join.\n\n"
+                    . "TRIP DETAILS — destination, date, departure and return times, how the "
+                    . "children will travel, and any cost — TO BE CONFIRMED BEFORE THIS FORM IS "
+                    . "SENT TO PARENTS.\n\n"
+                    . "Children will be supervised by their own class teachers throughout, and "
+                    . "our usual staff-to-child ratios apply. Please complete one form per child.",
+        'thanks'   => "Thank you. Your consent has been recorded.\n\n"
+                    . "If anything changes — your emergency contact, something we should know "
+                    . "about your child that day, or if you change your mind about the trip or "
+                    . "about photographs — please tell the school office and we will update our "
+                    . "records. You do not need to fill this form in again.",
+        'sections' => [
+            [
+                'title' => 'Your details',
+                'questions' => [
+                    ['key' => 'parent_name', 'type' => 'text', 'required' => true,
+                     'label' => 'Your name (parent or guardian)'],
+                    ['key' => 'child_name', 'type' => 'text', 'required' => true,
+                     'label' => "Your child's full name"],
+                    ['key' => 'class', 'type' => 'radio', 'required' => true,
+                     'label' => "Your child's class", 'options' => $classes],
+                ],
+            ],
+            [
+                'title' => '1. Consent for the trip',
+                'questions' => [
+                    ['key' => 'consent', 'type' => 'radio', 'required' => true, 'short' => 'Consent',
+                     'label' => 'Do you give permission for your child to take part in this field trip?',
+                     'options' => [
+                         'yes' => 'Yes — I give permission for my child to attend',
+                         'no'  => 'No — my child will not be attending',
+                     ]],
+                    ['key' => 'emergency_contact', 'type' => 'text', 'short' => 'Emergency no.',
+                     'label' => 'A phone number we can reach you on during the trip',
+                     'help'  => 'Please give a number that will be answered on the day, even if it '
+                              . 'is different from the one we usually use.'],
+                    ['key' => 'health_notes', 'type' => 'textarea', 'short' => 'To know',
+                     'label' => 'Is there anything we should know for the day?',
+                     'help'  => 'Allergies, medication, travel sickness, dietary needs, or anything '
+                              . 'that would help us look after your child well. Write "nothing" if '
+                              . 'there is nothing.'],
+                ],
+            ],
+            [
+                'title' => '2. Coming along to help',
+                'questions' => [
+                    ['key' => 'volunteer', 'type' => 'checkbox', 'short' => 'Volunteer',
+                     'label' => 'Would you be willing to come along as a parent volunteer?',
+                     'help'  => 'We may not need everyone who offers, and we will confirm nearer '
+                              . 'the day. Ticking this does not commit you.',
+                     'options' => [
+                         'yes' => 'Yes — I am willing to help supervise on the trip if you need me',
+                     ]],
+                    ['key' => 'volunteer_phone', 'type' => 'text', 'short' => 'Vol. phone',
+                     'label' => 'If you ticked that, the best number to reach you on to arrange it'],
+                ],
+            ],
+            [
+                'title' => '3. Photographs and videos of your child',
+                'questions' => [
+                    ['key' => 'media_consent', 'type' => 'radio', 'required' => true, 'short' => 'Photos',
+                     'label' => 'Where are you happy for photographs or videos of your child to be used?',
+                     'help'  => 'We photograph and film children during the school day, at '
+                              . 'celebrations and on trips, because those moments are worth keeping '
+                              . 'and sharing. Please choose the one option you are comfortable with. '
+                              . 'This is your standing preference for the whole year, not just this '
+                              . 'trip, and you can change it at any time by telling the school '
+                              . 'office. We never publish your child\'s full name, class or any '
+                              . 'contact detail alongside a picture, and we never share images with '
+                              . 'anyone outside the school for their own use.',
+                     'options' => [
+                         'public'   => 'Anywhere, including the school\'s social media, website and '
+                                     . 'publicity material such as brochures and banners',
+                         'social'   => 'The school\'s own social media and website, but not printed '
+                                     . 'publicity or advertising',
+                         'parents'  => 'Inside school, and privately with the parents of my child\'s '
+                                     . 'class — but nowhere public',
+                         'internal' => 'Inside school only — classroom displays and my child\'s own '
+                                     . 'portfolio and reports',
+                         'none'     => 'Nowhere — please do not photograph or film my child',
+                     ]],
+                ],
+            ],
+            [
+                'title' => '4. Anything else',
+                'questions' => [
+                    ['key' => 'anything_else', 'type' => 'textarea',
+                     'label' => 'Any questions or anything else you would like to tell us?'],
                 ],
             ],
         ],
