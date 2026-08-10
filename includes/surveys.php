@@ -739,14 +739,23 @@ function survey_by_token(string $token): ?array
     return $row;
 }
 
-/** Mint a fresh token, retiring the old link. */
-function survey_reissue_token(int $surveyId): string
-{
-    $token = bin2hex(random_bytes(32));
-    db()->prepare("UPDATE surveys SET token = :t WHERE id = :id")
-        ->execute([':t' => $token, ':id' => $surveyId]);
-    return $token;
-}
+/*
+ * There is deliberately no function here that changes an existing survey's
+ * token.
+ *
+ * A survey link is shared outside the app — pasted into CuePilot, forwarded
+ * in a WhatsApp group, printed on a notice. Every one of those copies is a
+ * screenshot or a message nobody can recall. Minting a new token orphans all
+ * of them at once: a parent who taps a link they saved yesterday lands on
+ * "survey not available" with no way to tell why, and support has to work
+ * out which of several copies floating around is still valid.
+ *
+ * If a link needs to stop working, use survey_set_active() below — Close
+ * keeps the token but refuses new responses, which is reversible and doesn't
+ * silently break a copy someone still has open in a browser tab. If a token
+ * is believed to be actually compromised, that is an incident, not a
+ * button — talk to whoever built this rather than routing around it here.
+ */
 
 /** Open or close a survey. A closed survey's link stops accepting responses. */
 function survey_set_active(int $surveyId, bool $active): void
@@ -784,7 +793,20 @@ function survey_child_key(string $childName): string
     return function_exists('mb_strtolower') ? mb_strtolower($k, 'UTF-8') : strtolower($k);
 }
 
-/** Thrown when a spec allows one response per child and one already exists. */
+/**
+ * Thrown when a spec allows one response per child and one already exists.
+ *
+ * This is also the entire mechanism behind a stricter rule: photograph and
+ * video consent, once given, is not something a parent can change by
+ * resubmitting the form. There is no update path for a saved response — see
+ * survey_response_delete() — only insert and delete, and delete is
+ * admin-only. So a second submission for the same child is always refused
+ * here, in full, not just for the photo question; the only way past it is an
+ * admin at the school choosing to withdraw the response first. Keep it that
+ * way: a scoped "let the parent edit just this one answer" endpoint would
+ * quietly reopen photo consent to being changed without anyone at the school
+ * seeing it happen.
+ */
 class SurveyDuplicateError extends Exception
 {
     public array $existing;
