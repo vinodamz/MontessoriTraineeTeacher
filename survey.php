@@ -80,11 +80,13 @@ if ($spec && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             . ', filled in by ' . (string)$dup->existing['parent_name']
                             . ($when ? ' on ' . date('j M', $when) . ' at ' . date('g:ia', $when) : '')
                             . '. Nothing further is needed — your child is on our list.';
-                    $dupHelp = 'If that was not you, or you would like to change the answers, '
-                             . 'please contact the school office and we will clear the form so it '
-                             . 'can be filled in again. If you are submitting for a second child, '
-                             . 'check the spelling of their name — a sibling needs their own form '
-                             . 'under their own name.';
+                    $dupHelp = 'If that was not you, or you would like to change the answers — '
+                             . 'including the photograph and video permission — please contact the '
+                             . 'school office. Consent already on file is only changed by school '
+                             . 'admin, not by submitting the form again, so someone at the office '
+                             . 'will need to clear this one before a new answer can be recorded. If '
+                             . 'you are submitting for a second child, check the spelling of their '
+                             . 'name — a sibling needs their own form under their own name.';
                 } catch (Throwable $e) {
                     $topErr = 'Something went wrong saving your response. Please try again.';
                 }

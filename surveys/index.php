@@ -8,7 +8,11 @@
  * orientation — open the page, copy the link, share it.
  *
  *   POST op=close / op=open  → stop / resume accepting responses
- *   POST op=reissue          → mint a new link and retire the old one
+ *
+ * There is no op that changes a survey's link. It is shared outside the app
+ * — CuePilot, WhatsApp, a printed notice — and every copy of it has to keep
+ * working for as long as the survey is open. See the comment above
+ * survey_set_active() in includes/surveys.php.
  */
 declare(strict_types=1);
 
@@ -29,9 +33,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($sid > 0 && $op === 'open') {
             survey_set_active($sid, true);
             flash_set('ok', 'Survey reopened.');
-        } elseif ($sid > 0 && $op === 'reissue') {
-            survey_reissue_token($sid);
-            flash_set('ok', 'New link generated. The previous link has stopped working — share the new one.');
         }
     } catch (Throwable $e) {
         flash_set('error', 'Could not update the survey: ' . $e->getMessage());
@@ -128,14 +129,6 @@ require __DIR__ . '/../includes/header.php';
                         <button class="btn" type="submit">Reopen</button>
                     </form>
                 <?php endif; ?>
-
-                <form method="post" class="inline-form"
-                      onsubmit="return confirm('Generate a new link? The link already shared with parents will stop working immediately.');">
-                    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-                    <input type="hidden" name="op" value="reissue">
-                    <input type="hidden" name="survey_id" value="<?= (int)$survey['id'] ?>">
-                    <button class="btn btn-ghost" type="submit">New link</button>
-                </form>
             </div>
         <?php endif; ?>
     </div>
@@ -146,9 +139,10 @@ require __DIR__ . '/../includes/header.php';
     <ul class="muted small" style="margin:0; padding-left:1.1rem;">
         <li>The link is public by design — no login, so a parent can fill it in on their phone
             in the hall. The random token in the URL is what makes it unguessable.</li>
-        <li><strong>Close</strong> when the window is over: the link stops accepting responses
-            but everything collected stays. <strong>New link</strong> is the one to use if a link
-            leaks somewhere it shouldn't have.</li>
+        <li>A survey's link never changes once it exists. It gets shared outside the app, and a
+            new token would break every copy already sent. <strong>Close</strong> when the window
+            is over: the link stops accepting responses but everything collected stays, and
+            <strong>Reopen</strong> undoes that without needing a new link.</li>
         <li>The <strong>Class</strong> options come from <a href="/grades.php">Grades</a>, so a
             grade added there is offered to parents straight away.</li>
         <li>Only the parent's name, the child's name and the class are required — the rest is
