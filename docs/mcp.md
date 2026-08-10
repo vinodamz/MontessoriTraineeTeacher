@@ -140,7 +140,7 @@ Example `spec` argument:
         {
           "key": "student_id_pick",
           "type": "student_picker",
-          "label": "Select your child",
+          "label": "Your child's name",
           "required": true,
           "options_filter": { "grades": ["Nursery", "Junior KG"] },
           "fills": {
@@ -169,6 +169,12 @@ Example `spec` argument:
   ]
 }
 ```
+
+`student_picker` (and `options: "students"` / `"parents"`) is a **privacy
+typeahead**, not a full dropdown: the public form never embeds the school
+roster. Parents type at least 3 letters; one match autofills, several matches
+show a short chooser (capped). Lookup goes through `/survey_lookup.php` with
+the live survey token.
 
 Dynamic option sources: `classes`, `students`, `parents`. Scope with
 `options_filter` (`grades`, `enrollment_status`). Built-in keys

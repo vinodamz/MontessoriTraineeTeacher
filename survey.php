@@ -168,7 +168,23 @@ if (!$survey || !$spec) {
       font: inherit; color: inherit; background: #fff; }
   select.sv-select { appearance: auto; }
   textarea { min-height: 4.5rem; resize: vertical; }
-  input[type=text]:focus, textarea:focus, select.sv-select:focus { outline: 2px solid #f8bbd0; border-color: var(--pink); }
+  input[type=text]:focus, textarea:focus, select.sv-select:focus,
+  .sv-typeahead-input:focus { outline: 2px solid #f8bbd0; border-color: var(--pink); }
+
+  /* Privacy typeahead: type 3+ letters, never a full child list. */
+  .sv-typeahead { position: relative; }
+  .sv-typeahead-input { width: 100%; padding: .6rem .7rem; border: 1px solid #dfd3da; border-radius: 8px;
+                        font: inherit; color: inherit; background: #fff; }
+  .sv-typeahead-status { margin: .35rem 0 0; font-size: .82rem; color: #7a7a7a; }
+  .sv-suggest { list-style: none; margin: .35rem 0 0; padding: 0; border: 1px solid #eadfe5;
+                border-radius: 8px; background: #fff; max-height: 220px; overflow: auto;
+                box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+  .sv-suggest[hidden] { display: none; }
+  .sv-suggest button { display: block; width: 100%; text-align: left; border: 0; background: transparent;
+                       padding: .65rem .75rem; font: inherit; cursor: pointer; color: inherit; }
+  .sv-suggest button:hover, .sv-suggest button:focus { background: #fff5fa; outline: none; }
+  .sv-suggest li + li button { border-top: 1px solid #f6ebf1; }
+  .sv-typeahead-chosen { margin-top: .35rem; font-size: .9rem; color: #22603c; font-weight: 600; }
 
   /* Choices are full-width tap targets — most parents fill this in on a phone. */
   .sv-choice { display: flex; align-items: flex-start; gap: .6rem; padding: .5rem .6rem;
@@ -301,21 +317,16 @@ if (!$survey || !$spec) {
         </div>
 
         <?php
-        // student_picker fill maps + roster data for client-side autofill
+        // Fill maps only — never embed the full roster (privacy).
         $pickerFillMaps = [];
-        $pickerRosters  = [];
         foreach (survey_questions($spec) as $pq) {
-            if (($pq['type'] ?? '') !== 'student_picker') continue;
-            $pk = (string)$pq['key'];
+            $pk = (string)($pq['key'] ?? '');
+            $ptype = (string)($pq['type'] ?? '');
+            $popts = $pq['options'] ?? null;
+            if ($ptype !== 'student_picker' && $popts !== 'students' && $popts !== 'parents') continue;
             $pickerFillMaps[$pk] = !empty($pq['fills']) && is_array($pq['fills'])
                 ? $pq['fills']
                 : ['child_name' => 'full_name', 'class' => 'grade', 'parent_name' => 'primary_parent'];
-            $roster = [];
-            foreach (array_keys(survey_options($pq)) as $sid) {
-                $d = survey_student_fill_data((int)$sid);
-                if ($d) $roster[(string)$sid] = $d;
-            }
-            $pickerRosters[$pk] = $roster;
         }
         ?>
 
@@ -333,14 +344,46 @@ if (!$survey || !$spec) {
                     $req   = !empty($q['required']);
                     $val   = survey_posted($posted, $key, $type === 'checkbox' || $type === 'matrix' ? [] : '');
                     $optsSource = $q['options'] ?? null;
-                    $useSelect = $type === 'student_picker' || $type === 'select'
-                              || $optsSource === 'students' || $optsSource === 'parents';
+                    $useTypeahead = $type === 'student_picker'
+                                 || $optsSource === 'students'
+                                 || $optsSource === 'parents';
                     if ($type === 'student_picker' && $hidePicker) {
                         // Prefill link: keep the chosen student id, hide the roster.
                         ?>
                         <input type="hidden" name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
                         <?php
                         continue;
+                    }
+                    $chosenLabel = '';
+                    if ($useTypeahead && (string)$val !== '') {
+                        if ($type === 'student_picker' || $optsSource === 'students') {
+                            $fd = survey_student_fill_data((int)$val);
+                            if ($fd) {
+                                $chosenLabel = $fd['full_name'];
+                                if ($fd['grade'] !== '') $chosenLabel .= ' (' . $fd['grade'] . ')';
+                            }
+                        } elseif ($optsSource === 'parents' && preg_match('/^(\d+):(\d+)$/', (string)$val, $pm)) {
+                            // Restore label after validation error without dumping the roster.
+                            try {
+                                $pst = db()->prepare(
+                                    "SELECT p.name AS parent_name, s.first_name, s.last_name, s.grade
+                                       FROM student_parents p
+                                       JOIN students s ON s.id = p.student_id
+                                      WHERE p.id = ? AND s.id = ? LIMIT 1"
+                                );
+                                $pst->execute([(int)$pm[1], (int)$pm[2]]);
+                                $prow = $pst->fetch();
+                                if ($prow) {
+                                    $child = trim((string)$prow['first_name'] . ' ' . (string)$prow['last_name']);
+                                    $chosenLabel = (string)$prow['parent_name'] . ' — ' . $child;
+                                    if ((string)$prow['grade'] !== '') {
+                                        $chosenLabel .= ' (' . (string)$prow['grade'] . ')';
+                                    }
+                                }
+                            } catch (Throwable $e) {
+                                $chosenLabel = '';
+                            }
+                        }
                     }
                 ?>
                     <div class="sv-q <?= $err !== '' ? 'sv-err' : '' ?>">
@@ -351,6 +394,8 @@ if (!$survey || !$spec) {
                         <?php endif; ?>
                         <?php if (!empty($q['help'])): ?>
                             <p class="sv-help"><?= e((string)$q['help']) ?></p>
+                        <?php elseif ($useTypeahead): ?>
+                            <p class="sv-help">Type at least 3 letters of the name. If several match, choose one from the list.</p>
                         <?php endif; ?>
 
                         <?php if ($type === 'text'): ?>
@@ -362,9 +407,28 @@ if (!$survey || !$spec) {
                             <textarea name="<?= e($key) ?>" maxlength="<?= SURVEY_TEXT_MAX ?>" rows="3"
                                       aria-labelledby="lbl-<?= e($key) ?>"><?= e((string)$val) ?></textarea>
 
-                        <?php elseif ($useSelect && ($type === 'radio' || $type === 'student_picker' || $type === 'select')): ?>
-                            <select class="sv-select" name="<?= e($key) ?>" aria-labelledby="lbl-<?= e($key) ?>"
-                                    <?php if ($type === 'student_picker'): ?>data-sv-picker="<?= e($key) ?>"<?php endif; ?>>
+                        <?php elseif ($useTypeahead): ?>
+                            <div class="sv-typeahead" data-sv-typeahead="<?= e($key) ?>">
+                                <input type="hidden" name="<?= e($key) ?>" value="<?= e((string)$val) ?>"
+                                       data-sv-picker-id="<?= e($key) ?>">
+                                <input type="text" class="sv-typeahead-input" autocomplete="off"
+                                       maxlength="<?= SURVEY_NAME_MAX ?>"
+                                       placeholder="Start typing a name…"
+                                       value="<?= e($chosenLabel) ?>"
+                                       aria-labelledby="lbl-<?= e($key) ?>"
+                                       aria-autocomplete="list"
+                                       aria-controls="sug-<?= e($key) ?>"
+                                       data-sv-picker-q="<?= e($key) ?>">
+                                <ul class="sv-suggest" id="sug-<?= e($key) ?>" role="listbox" hidden></ul>
+                                <p class="sv-typeahead-status" data-sv-picker-status="<?= e($key) ?>"></p>
+                                <p class="sv-typeahead-chosen" data-sv-picker-chosen="<?= e($key) ?>"
+                                   <?= $chosenLabel === '' ? 'hidden' : '' ?>>
+                                    Selected: <?= e($chosenLabel !== '' ? $chosenLabel : '') ?>
+                                </p>
+                            </div>
+
+                        <?php elseif ($type === 'select'): ?>
+                            <select class="sv-select" name="<?= e($key) ?>" aria-labelledby="lbl-<?= e($key) ?>">
                                 <option value=""><?= $req ? 'Please choose…' : '— optional —' ?></option>
                                 <?php foreach (survey_options($q) as $code => $label): ?>
                                     <option value="<?= e((string)$code) ?>"
@@ -452,8 +516,14 @@ if (!$survey || !$spec) {
         </p>
     </form>
     <div class="sv-saved" id="sv-saved" role="status" aria-live="polite">Saved</div>
+    <?php if ($pickerFillMaps !== []): ?>
     <script type="application/json" id="sv-picker-fills"><?= json_encode($pickerFillMaps, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
-    <script type="application/json" id="sv-picker-roster"><?= json_encode($pickerRosters, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+    <script type="application/json" id="sv-lookup-meta"><?= json_encode([
+        'token' => $token,
+        'min'   => SURVEY_LOOKUP_MIN_CHARS,
+        'url'   => '/survey_lookup.php',
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+    <?php endif; ?>
 
 <?php endif; ?>
 </main>
@@ -631,18 +701,21 @@ if (!$survey || !$spec) {
     form.addEventListener('submit', function () { drop(); });
 })();
 
-/* student_picker → fill mapped identity fields from the embedded roster. */
+/* Privacy typeahead: 3+ letters → lookup; multiple matches → choose. */
 (function () {
     var form = document.getElementById('sv-form');
-    if (!form) return;
+    if (!form || !window.fetch) return;
     var fillsEl = document.getElementById('sv-picker-fills');
-    var rosterEl = document.getElementById('sv-picker-roster');
-    if (!fillsEl || !rosterEl) return;
-    var fillsMap, rosterMap;
+    var metaEl  = document.getElementById('sv-lookup-meta');
+    if (!fillsEl || !metaEl) return;
+    var fillsMap = {}, meta = {};
     try {
         fillsMap = JSON.parse(fillsEl.textContent || '{}');
-        rosterMap = JSON.parse(rosterEl.textContent || '{}');
+        meta = JSON.parse(metaEl.textContent || '{}');
     } catch (e) { return; }
+    var minChars = meta.min || 3;
+    var lookupUrl = meta.url || '/survey_lookup.php';
+    var token = meta.token || '';
 
     function setField(name, value) {
         if (!name) return;
@@ -651,9 +724,7 @@ if (!$survey || !$spec) {
         value = value == null ? '' : String(value);
         if (field.length !== undefined && !field.tagName) {
             for (var i = 0; i < field.length; i++) {
-                if (field[i].type === 'radio') {
-                    field[i].checked = (field[i].value === value);
-                }
+                if (field[i].type === 'radio') field[i].checked = (field[i].value === value);
             }
             return;
         }
@@ -664,25 +735,127 @@ if (!$survey || !$spec) {
         field.value = value;
     }
 
-    function applyPicker(pickerKey) {
-        var sel = form.querySelector('[data-sv-picker="' + pickerKey + '"]');
-        if (!sel) return;
-        var sid = sel.value;
-        var data = (rosterMap[pickerKey] || {})[sid];
-        var fills = fillsMap[pickerKey] || {};
-        if (!data) return;
+    function applyFills(fills) {
+        if (!fills) return;
         for (var field in fills) {
             if (!Object.prototype.hasOwnProperty.call(fills, field)) continue;
-            var source = fills[field];
-            if (data[source] != null) setField(field, data[source]);
+            setField(field, fills[field]);
         }
     }
 
+    function letterCount(s) {
+        return String(s || '').replace(/[^\u00C0-\u024Fa-zA-Z0-9]/g, '').length;
+    }
+
     Object.keys(fillsMap || {}).forEach(function (pk) {
-        var sel = form.querySelector('[data-sv-picker="' + pk + '"]');
-        if (!sel) return;
-        sel.addEventListener('change', function () { applyPicker(pk); });
-        if (sel.value) applyPicker(pk);
+        var wrap = form.querySelector('[data-sv-typeahead="' + pk + '"]');
+        if (!wrap) return;
+        var hidden = wrap.querySelector('[data-sv-picker-id="' + pk + '"]');
+        var input  = wrap.querySelector('[data-sv-picker-q="' + pk + '"]');
+        var list   = wrap.querySelector('.sv-suggest');
+        var status = wrap.querySelector('[data-sv-picker-status="' + pk + '"]');
+        var chosen = wrap.querySelector('[data-sv-picker-chosen="' + pk + '"]');
+        if (!hidden || !input || !list) return;
+
+        var timer = null;
+        var seq = 0;
+
+        function setStatus(text) {
+            if (status) status.textContent = text || '';
+        }
+        function setChosen(label) {
+            if (!chosen) return;
+            if (label) {
+                chosen.hidden = false;
+                chosen.textContent = 'Selected: ' + label;
+            } else {
+                chosen.hidden = true;
+                chosen.textContent = '';
+            }
+        }
+        function clearSuggest() {
+            list.innerHTML = '';
+            list.hidden = true;
+        }
+        function pick(match) {
+            hidden.value = match.id;
+            input.value = match.label;
+            setChosen(match.label);
+            applyFills(match.fills || {});
+            clearSuggest();
+            setStatus('');
+            try { form.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+        }
+        function render(matches) {
+            list.innerHTML = '';
+            if (!matches || !matches.length) {
+                list.hidden = true;
+                setStatus('No matching names — try another spelling.');
+                return;
+            }
+            if (matches.length === 1) {
+                pick(matches[0]);
+                setStatus('Matched one name and filled it in. Change the text if that is not right.');
+                return;
+            }
+            matches.forEach(function (m) {
+                var li = document.createElement('li');
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = m.label;
+                btn.addEventListener('click', function () { pick(m); });
+                li.appendChild(btn);
+                list.appendChild(li);
+            });
+            list.hidden = false;
+            setStatus('Several names match — please choose one.');
+        }
+        function search() {
+            var q = input.value.replace(/^\s+|\s+$/g, '');
+            if (letterCount(q) < minChars) {
+                hidden.value = '';
+                setChosen('');
+                clearSuggest();
+                setStatus('Keep typing (at least ' + minChars + ' letters).');
+                return;
+            }
+            var my = ++seq;
+            setStatus('Looking up…');
+            var url = lookupUrl
+                + '?t=' + encodeURIComponent(token)
+                + '&field=' + encodeURIComponent(pk)
+                + '&q=' + encodeURIComponent(q);
+            fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (my !== seq) return;
+                    if (!data || !data.ok) {
+                        clearSuggest();
+                        setStatus('Could not look up names just now — try again.');
+                        return;
+                    }
+                    render(data.matches || []);
+                })
+                .catch(function () {
+                    if (my !== seq) return;
+                    clearSuggest();
+                    setStatus('Could not look up names just now — try again.');
+                });
+        }
+
+        input.addEventListener('input', function () {
+            // Typing again clears a previous selection until they pick again.
+            hidden.value = '';
+            setChosen('');
+            clearTimeout(timer);
+            timer = setTimeout(search, 280);
+        });
+        input.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') clearSuggest();
+        });
+        document.addEventListener('click', function (ev) {
+            if (!wrap.contains(ev.target)) clearSuggest();
+        });
     });
 })();
 
