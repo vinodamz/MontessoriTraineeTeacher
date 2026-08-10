@@ -40,6 +40,8 @@ $done    = false;   // submitted successfully → thank-you page
 $errors  = [];
 $posted  = [];      // what the parent typed, for re-rendering after an error
 $topErr  = '';
+$dupErr  = '';      // "we already have this child" — information, not a fault
+$dupHelp = '';
 
 if ($spec && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $posted = $_POST;
@@ -61,12 +63,35 @@ if ($spec && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$errors) {
             if ($trap === '') {
                 try {
-                    survey_save_response((int)$survey['id'], $answers);
+                    survey_save_response((int)$survey['id'], $answers, $spec);
+                } catch (SurveyDuplicateError $dup) {
+                    // Not an error the parent caused, and usually not a mistake
+                    // either — the other parent got there first, or they tapped
+                    // Submit twice. So: say what we already have, when it
+                    // arrived, and how to change it. A bare "duplicate" would
+                    // leave somebody wondering whether their child is on the
+                    // trip at all.
+                    // Escaped once, at render — not here.
+                    $when = strtotime((string)($dup->existing['submitted_at'] ?? ''));
+                    $dupErr = 'We already have a consent form for '
+                            . (string)$dup->existing['child_name']
+                            . (($dup->existing['class'] ?? '') !== ''
+                                ? ' (' . (string)$dup->existing['class'] . ')' : '')
+                            . ', filled in by ' . (string)$dup->existing['parent_name']
+                            . ($when ? ' on ' . date('j M', $when) . ' at ' . date('g:ia', $when) : '')
+                            . '. Nothing further is needed — your child is on our list.';
+                    $dupHelp = 'If that was not you, or you would like to change the answers, '
+                             . 'please contact the school office and we will clear the form so it '
+                             . 'can be filled in again. If you are submitting for a second child, '
+                             . 'check the spelling of their name — a sibling needs their own form '
+                             . 'under their own name.';
                 } catch (Throwable $e) {
                     $topErr = 'Something went wrong saving your response. Please try again.';
                 }
             }
-            if ($topErr === '') $done = true;
+            // A duplicate must not fall through to the thank-you page — the
+            // parent would leave believing a second form had been recorded.
+            if ($topErr === '' && $dupErr === '') $done = true;
         } else {
             $topErr = 'Please check the highlighted questions below.';
         }
@@ -159,6 +184,10 @@ if (!$survey || !$spec) {
   .sv-err-msg { color: #c2185b; font-size: .85rem; margin: .25rem 0 0; font-weight: 600; }
   .sv-flash { background: #fdecef; border: 1px solid #f7c9d6; color: #a01040;
               padding: .8rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-weight: 600; }
+  /* Green, not pink: "we already have this" is reassurance, not a fault. */
+  .sv-already { background: #edf7ee; border: 1px solid #c6e2c9; color: #205c28;
+                padding: .9rem 1rem; border-radius: 10px; margin-bottom: 1rem;
+                font-size: .95rem; line-height: 1.5; }
 
   .sv-submit { display: block; width: 100%; padding: .95rem 1rem; border: 0; border-radius: 10px;
                background: var(--pink); color: #fff; font-size: 1.05rem; font-weight: 700;
@@ -219,7 +248,16 @@ if (!$survey || !$spec) {
         <p class="sv-intro"><?= e((string)($spec['intro'] ?? '')) ?></p>
     </div>
 
-    <?php if ($topErr !== ''): ?>
+    <?php if ($dupErr !== ''): ?>
+        <?php /* Deliberately not styled as an error. Nothing has gone wrong for
+                  this parent — their child is on the list — so red would only
+                  worry them. It says what we hold, and what to do if it is
+                  wrong. */ ?>
+        <div class="sv-already">
+            <p style="margin:0 0 .4rem;"><strong><?= e($dupErr) ?></strong></p>
+            <p style="margin:0;"><?= e($dupHelp) ?></p>
+        </div>
+    <?php elseif ($topErr !== ''): ?>
         <div class="sv-flash"><?= e($topErr) ?></div>
     <?php endif; ?>
 

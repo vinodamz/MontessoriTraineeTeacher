@@ -418,6 +418,10 @@ function survey_spec_field_trip(): array
         'key'      => 'field_trip',
         'title'    => 'Field Trip — Parent Consent',
         'subtitle' => 'Playgroup · Nursery · LKG · UKG',
+        // One form per child. Two consent rows for the same child is not extra
+        // data, it is a question about which one counts — and the morning of
+        // the trip is the worst time to discover it.
+        'one_per_child' => true,
         'intro'    => "We are planning a field trip for Playgroup, Nursery, LKG and UKG, and we "
                     . "need your written permission before your child can join.\n\n"
                     . "TRIP DETAILS — destination, date, departure and return times, how the "
@@ -758,23 +762,118 @@ function survey_url(string $token): string
  * because they're what the office sorts, searches and de-duplicates on;
  * everything else rides along as JSON.
  */
-function survey_save_response(int $surveyId, array $answers): int
+/**
+ * A child's name reduced to something two parents will agree on.
+ *
+ * "Aarav  Nair", "aarav nair" and " Aarav Nair " are one child. Case and
+ * stray spaces are the whole of what this fixes, and that is on purpose: it
+ * does not try to guess that "Aarav" and "Aarav Nair" are the same person,
+ * because sometimes they are not, and a form that silently refuses a sibling
+ * is worse than one that lets a near-duplicate through for a human to spot.
+ */
+function survey_child_key(string $childName): string
 {
-    db()->prepare("
-        INSERT INTO survey_responses
-            (survey_id, parent_name, child_name, class, answers, ip_hash)
-        VALUES (:s, :p, :c, :g, :a, :ip)
-    ")->execute([
-        ':s'  => $surveyId,
-        ':p'  => (string)($answers['parent_name'] ?? ''),
-        ':c'  => (string)($answers['child_name'] ?? ''),
-        ':g'  => (string)($answers['class'] ?? ''),
-        ':a'  => json_encode($answers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        // Hashed, not stored raw: enough to spot one device submitting twenty
-        // times, without keeping identifiable network data about families.
-        ':ip' => hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? '')),
-    ]);
+    $k = trim(preg_replace('/\s+/u', ' ', $childName) ?? '');
+    return function_exists('mb_strtolower') ? mb_strtolower($k, 'UTF-8') : strtolower($k);
+}
+
+/** Thrown when a spec allows one response per child and one already exists. */
+class SurveyDuplicateError extends Exception
+{
+    public array $existing;
+    public function __construct(array $existing)
+    {
+        $this->existing = $existing;
+        parent::__construct('A response already exists for this child.');
+    }
+}
+
+/**
+ * The response already on file for this child, or null.
+ *
+ * Only meaningful for a spec with one_per_child — every other survey leaves
+ * child_key NULL, and NULL matches nothing.
+ */
+function survey_existing_for_child(int $surveyId, string $childName): ?array
+{
+    $key = survey_child_key($childName);
+    if ($key === '') return null;
+    try {
+        $s = db()->prepare("SELECT * FROM survey_responses
+                             WHERE survey_id = :s AND child_key = :k LIMIT 1");
+        $s->execute([':s' => $surveyId, ':k' => $key]);
+        $row = $s->fetch();
+        return $row === false ? null : $row;
+    } catch (PDOException $e) {
+        return null;      // pre-migration: behave as it did before
+    }
+}
+
+/**
+ * Store one response.
+ *
+ * For a spec marked one_per_child this refuses a second response for the same
+ * child and throws SurveyDuplicateError carrying the row already on file, so
+ * the form can tell the parent when they answered rather than just saying no.
+ * The check is made twice on purpose: once here for the message, and again by
+ * the unique index, which is the one that actually holds when two parents of
+ * the same child submit in the same second.
+ */
+function survey_save_response(int $surveyId, array $answers, ?array $spec = null): int
+{
+    $child    = (string)($answers['child_name'] ?? '');
+    $oneEach  = !empty($spec['one_per_child']);
+    $childKey = $oneEach ? survey_child_key($child) : '';
+
+    if ($oneEach && $childKey !== '') {
+        $existing = survey_existing_for_child($surveyId, $child);
+        if ($existing !== null) throw new SurveyDuplicateError($existing);
+    }
+
+    try {
+        db()->prepare("
+            INSERT INTO survey_responses
+                (survey_id, parent_name, child_name, child_key, class, answers, ip_hash)
+            VALUES (:s, :p, :c, :ck, :g, :a, :ip)
+        ")->execute([
+            ':s'  => $surveyId,
+            ':p'  => (string)($answers['parent_name'] ?? ''),
+            ':c'  => $child,
+            ':ck' => $childKey !== '' ? $childKey : null,
+            ':g'  => (string)($answers['class'] ?? ''),
+            ':a'  => json_encode($answers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            // Hashed, not stored raw: enough to spot one device submitting twenty
+            // times, without keeping identifiable network data about families.
+            ':ip' => hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? '')),
+        ]);
+    } catch (PDOException $e) {
+        // 23000 is the unique index doing its job — the race the check above
+        // cannot close. Re-read and report it as the duplicate it is, rather
+        // than as "something went wrong".
+        if ($oneEach && $e->getCode() === '23000') {
+            $existing = survey_existing_for_child($surveyId, $child);
+            if ($existing !== null) throw new SurveyDuplicateError($existing);
+        }
+        throw $e;
+    }
     return (int)db()->lastInsertId();
+}
+
+/**
+ * Withdraw a response so the family can submit again.
+ *
+ * Refusing duplicates without this would be a trap: one mistyped name, or one
+ * parent changing their mind, and there is no way back — the form says "we
+ * already have this" and nobody can clear it. Deleting is the right verb here
+ * rather than an edit, because the answers are the parent's own words and an
+ * admin should not be quietly rewriting a consent record; they remove it and
+ * the parent fills it in again.
+ */
+function survey_response_delete(int $responseId): bool
+{
+    $s = db()->prepare("DELETE FROM survey_responses WHERE id = :i");
+    $s->execute([':i' => $responseId]);
+    return $s->rowCount() > 0;
 }
 
 /** Responses for a survey, newest first. Each row gains a decoded `_a`. */
