@@ -75,7 +75,7 @@ const MCP_WRITE_CAP_MAX     = 5000;
 const MCP_WRITE_DENY_TABLES = [
     'mcp_audit'  => 'the audit log is append-only — a log the audited party can erase is not a log',
     'mcp_tokens' => 'API credentials are managed at /mcp_admin.php, not through the API itself',
-    'survey_definitions' => 'use survey_spec_upsert / survey_publish — raw row writes skip validation and cannot replace PHP-owned surveys',
+    'survey_definitions' => 'do not use insert/update/delete here — call survey_spec_upsert (then survey_publish). If those tools are missing from tools/list, reconnect the MCP server so it refreshes after deploy',
 ];
 
 /**
