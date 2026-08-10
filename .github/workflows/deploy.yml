@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-hostgator-lg
+  group: deploy-hostgator-mtt
   cancel-in-progress: false
 
 jobs:
