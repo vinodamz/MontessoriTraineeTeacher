@@ -115,6 +115,113 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if (!empty($spec['roster'])): ?>
+<?php
+/*
+ * Who has not answered.
+ *
+ * The grid below lists the forms we have, which cannot answer the question the
+ * office actually asks the day before a trip. This starts from the class
+ * roster instead, so a missing consent is a name on a page rather than
+ * something to work out by hand.
+ */
+$roster = survey_roster_status((int)$survey['id'], $spec);
+$total  = count($roster['consented']) + count($roster['declined']) + count($roster['waiting']);
+?>
+<div class="card" id="roster">
+    <h3 style="margin-top:0;">Consent by child
+        <span class="muted small" style="font-weight:400;">
+            — <?= implode(' · ', array_map('e', $roster['classes'])) ?></span>
+    </h3>
+
+    <?php if ($total === 0): ?>
+        <p class="muted">No enrolled children in those classes yet, so there is nothing to
+           compare against. Check the classes on <a href="/grades.php">/grades.php</a> and that
+           children are marked enrolled.</p>
+    <?php else: ?>
+    <div class="actionbar" style="margin:0 0 1rem;">
+        <span class="pill pill-ok"><?= count($roster['consented']) ?> consented</span>
+        <?php if ($roster['declined']): ?>
+            <span class="pill"><?= count($roster['declined']) ?> not attending</span>
+        <?php endif; ?>
+        <span class="pill <?= $roster['waiting'] ? 'pill-warn' : '' ?>">
+            <?= count($roster['waiting']) ?> still to reply</span>
+        <?php if ($roster['unmatched']): ?>
+            <span class="pill pill-warn"><?= count($roster['unmatched']) ?> needs checking</span>
+        <?php endif; ?>
+    </div>
+
+    <div style="overflow-x:auto;">
+    <table class="admin-table">
+        <thead><tr>
+            <th>Child</th><th>Class</th><th>Consent</th><th>Photographs</th>
+            <th>Volunteer</th><th></th>
+        </tr></thead>
+        <tbody>
+        <?php
+        // Waiting first: this table exists to be acted on, and the names to
+        // chase are the ones worth putting at the top.
+        $ordered = array_merge(
+            array_map(fn($c) => [$c, 'waiting'],   $roster['waiting']),
+            array_map(fn($c) => [$c, 'consented'], $roster['consented']),
+            array_map(fn($c) => [$c, 'declined'],  $roster['declined'])
+        );
+        $mediaLabels = [];
+        foreach (survey_questions($spec) as $q0) {
+            if (($q0['key'] ?? '') === 'media_consent') $mediaLabels = survey_options($q0);
+        }
+        ?>
+        <?php foreach ($ordered as [$child, $state]): ?>
+            <tr>
+                <td><a href="/students/view.php?id=<?= (int)$child['id'] ?>"><?= e((string)$child['full_name']) ?></a></td>
+                <td class="small"><?= e((string)$child['grade']) ?></td>
+                <td>
+                    <?php if ($state === 'consented'): ?>
+                        <span class="pill pill-ok">Yes</span>
+                    <?php elseif ($state === 'declined'): ?>
+                        <span class="pill">Not attending</span>
+                    <?php else: ?>
+                        <span class="pill pill-warn">No reply</span>
+                    <?php endif; ?>
+                </td>
+                <td class="small">
+                    <?php $mc = (string)($child['answers']['media_consent'] ?? ''); ?>
+                    <?= $mc !== '' ? e(mb_substr((string)($mediaLabels[$mc] ?? $mc), 0, 40)) : '<span class="muted">—</span>' ?>
+                </td>
+                <td class="small">
+                    <?= in_array('yes', (array)($child['answers']['volunteer'] ?? []), true)
+                        ? 'Offered' : '<span class="muted">—</span>' ?>
+                </td>
+                <td class="small">
+                    <?php if (!empty($child['response'])): ?>
+                        <a href="/surveys/view.php?id=<?= (int)$child['response']['id'] ?>">Open</a>
+                    <?php endif; ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($roster['unmatched']): ?>
+        <div class="card" style="background:#fff8e6;border:1px solid #f0dca8;margin-top:1rem;">
+            <p class="small" style="margin:0 0 .4rem;"><strong>These forms did not match a child on the roster.</strong>
+               Usually a spelling difference, or a name we hold differently. Until they match, the
+               child above still shows as “No reply” — so check these before chasing anybody.</p>
+            <ul class="small" style="margin:.3rem 0 0;padding-left:1.1rem;">
+            <?php foreach ($roster['unmatched'] as $u): ?>
+                <li><strong><?= e((string)$u['child_name']) ?></strong>
+                    <?= (string)$u['class'] !== '' ? '(' . e((string)$u['class']) . ')' : '' ?>
+                    — <?= e((string)$u['parent_name']) ?>
+                    · <a href="/surveys/view.php?id=<?= (int)$u['id'] ?>">open</a></li>
+            <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if (!$rows): ?>
     <div class="card">
         <h3>No responses yet</h3>
