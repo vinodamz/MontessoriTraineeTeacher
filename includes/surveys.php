@@ -422,13 +422,20 @@ function survey_spec_field_trip(): array
         // data, it is a question about which one counts — and the morning of
         // the trip is the worst time to discover it.
         'one_per_child' => true,
+        // Show the class roster against the replies, so "who has not answered"
+        // is a page rather than a manual comparison. Names the question that
+        // decides it.
+        'roster'             => true,
+        'roster_consent_key' => 'consent',
         'intro'    => "We are planning a field trip for Playgroup, Nursery, LKG and UKG, and we "
-                    . "need your written permission before your child can join.\n\n"
-                    . "TRIP DETAILS — destination, date, departure and return times, how the "
-                    . "children will travel, and any cost — TO BE CONFIRMED BEFORE THIS FORM IS "
-                    . "SENT TO PARENTS.\n\n"
-                    . "Children will be supervised by their own class teachers throughout, and "
-                    . "our usual staff-to-child ratios apply. Please complete one form per child.",
+                    . "need your permission before your child can join.\n\n"
+                    . "The full trip details — where we are going, the date, departure and return "
+                    . "times, what to send with your child and what to expect on the day — will be "
+                    . "shared separately on CuePilot, with a detailed message closer to the time. "
+                    . "Please keep an eye on CuePilot for that.\n\n"
+                    . "Children will be supervised by their own class teachers throughout, and our "
+                    . "usual staff-to-child ratios apply. Please complete one form per child — a "
+                    . "sibling needs their own form under their own name.",
         'thanks'   => "Thank you. Your consent has been recorded.\n\n"
                     . "If anything changes — your emergency contact, something we should know "
                     . "about your child that day, or if you change your mind about the trip or "
@@ -857,6 +864,103 @@ function survey_save_response(int $surveyId, array $answers, ?array $spec = null
         throw $e;
     }
     return (int)db()->lastInsertId();
+}
+
+/**
+ * Every child who should answer this survey, set against who has.
+ *
+ * The responses grid answers "what did parents say". For a consent form the
+ * urgent question is the opposite one — *who has not replied* — and a list of
+ * the forms you already have cannot tell you that. So this starts from the
+ * class roster and works outwards.
+ *
+ * Three groups come back, and the third matters as much as the others:
+ *
+ *   consented / declined / waiting — children on the roster, by what we hold
+ *   unmatched                      — responses whose child name matches no
+ *                                    child on the roster
+ *
+ * Without `unmatched`, a parent who typed "Aarav" instead of "Aarav Nair"
+ * would appear as a missing consent while their form sat in the table, and
+ * somebody would chase a family who had already answered. Name matching is
+ * the same normalisation the duplicate check uses — nothing smarter, because
+ * a wrong guess here is a child on or off a bus.
+ *
+ * `classes` defaults to the spec's own class options, so it cannot drift out
+ * of step with the form.
+ */
+function survey_roster_status(int $surveyId, array $spec, ?array $classes = null): array
+{
+    $consentKey = (string)($spec['roster_consent_key'] ?? 'consent');
+    if ($classes === null) {
+        $classes = [];
+        foreach (survey_questions($spec) as $q) {
+            if (($q['key'] ?? '') === 'class') { $classes = array_keys(survey_options($q)); break; }
+        }
+    }
+
+    $out = ['consented' => [], 'declined' => [], 'waiting' => [], 'unmatched' => [],
+            'classes' => $classes];
+    if (!$classes) return $out;
+
+    try {
+        $in = implode(',', array_fill(0, count($classes), '?'));
+        $st = db()->prepare(
+            "SELECT id, first_name, last_name, grade, admission_number
+               FROM students
+              WHERE is_active = 1 AND enrollment_status = 'enrolled' AND grade IN ($in)
+              ORDER BY grade, first_name, last_name"
+        );
+        $st->execute($classes);
+        $roster = $st->fetchAll();
+    } catch (Throwable $e) {
+        return $out;
+    }
+
+    // Index the responses by normalised child name.
+    $byChild = [];
+    foreach (survey_responses($surveyId) as $r) {
+        $k = survey_child_key((string)$r['child_name']);
+        if ($k !== '' && !isset($byChild[$k])) $byChild[$k] = $r;
+    }
+
+    $claimed = [];
+    foreach ($roster as $child) {
+        $full = trim((string)$child['first_name'] . ' ' . (string)$child['last_name']);
+        $k    = survey_child_key($full);
+        // A roster of "Aarav Nair" against a form filled in as "Aarav" is a
+        // real and common mismatch, so try the first name alone as well —
+        // but only when it is not ambiguous across the roster.
+        $r = $byChild[$k] ?? null;
+        if ($r === null) {
+            $firstKey = survey_child_key((string)$child['first_name']);
+            $sameFirst = 0;
+            foreach ($roster as $other) {
+                if (survey_child_key((string)$other['first_name']) === $firstKey) $sameFirst++;
+            }
+            if ($sameFirst === 1 && isset($byChild[$firstKey])) {
+                $r = $byChild[$firstKey];
+                $k = $firstKey;
+            }
+        }
+
+        $child['full_name'] = $full;
+        if ($r === null) { $out['waiting'][] = $child; continue; }
+
+        $claimed[$k]        = true;
+        $child['response']  = $r;
+        $answers            = is_array($r['_a'] ?? null) ? $r['_a'] : [];
+        $child['answers']   = $answers;
+        $said               = (string)($answers[$consentKey] ?? '');
+        if ($said === 'yes')     $out['consented'][] = $child;
+        elseif ($said === 'no')  $out['declined'][]   = $child;
+        else                     $out['waiting'][]    = $child;   // form without a decision
+    }
+
+    foreach ($byChild as $k => $r) {
+        if (!isset($claimed[$k])) $out['unmatched'][] = $r;
+    }
+    return $out;
 }
 
 /**
