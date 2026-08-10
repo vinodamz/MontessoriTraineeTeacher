@@ -44,6 +44,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';        // db() — functions.php does not pull this in
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/surveys.php';
 
 /**
  * MCP spec revision this server implements.
@@ -74,6 +75,7 @@ const MCP_WRITE_CAP_MAX     = 5000;
 const MCP_WRITE_DENY_TABLES = [
     'mcp_audit'  => 'the audit log is append-only — a log the audited party can erase is not a log',
     'mcp_tokens' => 'API credentials are managed at /mcp_admin.php, not through the API itself',
+    'survey_definitions' => 'use survey_spec_upsert / survey_publish — raw row writes skip validation and cannot replace PHP-owned surveys',
 ];
 
 /**
@@ -705,6 +707,92 @@ function mcp_tools(): array
                 ],
             ],
         ],
+        [
+            'name'        => 'survey_spec_validate',
+            'description' => 'Dry-run validate a parent-survey JSON definition without saving. Returns '
+                           . 'ok/errors and a normalized preview. Use this before survey_spec_upsert. '
+                           . 'Does NOT create or change any survey. Built-in PHP surveys '
+                           . '(orientation_2026_27, field_trip) cannot be replaced — pick a new key.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['spec'],
+                'properties' => [
+                    'spec' => ['type' => 'object',
+                               'description' => 'Full survey JSON: key, title, sections[].questions[]. '
+                                              . 'Question types: text, textarea, radio, checkbox, matrix, '
+                                              . 'student_picker, select. Dynamic options: classes, students, '
+                                              . 'parents. Optional options_filter and fills on student_picker.'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'survey_spec_upsert',
+            'description' => 'Create or update a JSON survey definition in the database. Refuses keys that '
+                           . 'are already defined in PHP (orientation_2026_27, field_trip, …). After upsert, '
+                           . 'call survey_publish to mint the shareable link. Existing built-in surveys are '
+                           . 'never modified by this tool.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['spec'],
+                'properties' => [
+                    'spec' => ['type' => 'object',
+                               'description' => 'Same shape as survey_spec_validate.spec.'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'survey_spec_get',
+            'description' => 'Fetch one survey definition by key (PHP or MCP/JSON) and whether a live '
+                           . 'share link (surveys row) exists.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['key'],
+                'properties' => [
+                    'key' => ['type' => 'string', 'description' => 'spec_key, e.g. sports_day_2026'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'survey_spec_list',
+            'description' => 'List every questionnaire: built-in PHP specs (read-only) and MCP/JSON '
+                           . 'definitions, with source and whether each is published.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'properties' => (object)[],
+            ],
+        ],
+        [
+            'name'        => 'survey_publish',
+            'description' => 'Ensure a live shareable surveys row exists for a spec_key and return the '
+                           . 'public URL. Optionally set active true/false. Works for both PHP and MCP specs.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['key'],
+                'properties' => [
+                    'key'    => ['type' => 'string'],
+                    'active' => ['type' => 'boolean',
+                                 'description' => 'If set, open (true) or close (false) the survey.'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'survey_prefill_links',
+            'description' => 'For a published survey, return signed per-student URLs (?pref=) that autofill '
+                           . 'child/parent/class without showing the full school roster on the public form. '
+                           . 'Pass student_ids, or omit them and filter with grades / enrollment_status.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['key'],
+                'properties' => [
+                    'key'               => ['type' => 'string'],
+                    'student_ids'       => ['type' => 'array', 'items' => ['type' => 'integer']],
+                    'grades'            => ['type' => 'array', 'items' => ['type' => 'string']],
+                    'enrollment_status' => ['type' => 'array', 'items' => ['type' => 'string']],
+                    'ttl_seconds'       => ['type' => 'integer',
+                                            'description' => 'Prefill link lifetime (default ~30 days).'],
+                ],
+            ],
+        ],
     ];
 }
 
@@ -908,6 +996,176 @@ function mcp_tool_delete(array $a): array
     ];
 }
 
+// --------------------------------------------------------- survey domain tools
+
+function mcp_tool_survey_spec_validate(array $a): array
+{
+    $spec = $a['spec'] ?? null;
+    if (!is_array($spec)) {
+        throw new McpError('spec must be a JSON object.');
+    }
+    $v = survey_definition_validate($spec);
+    $phpReserved = false;
+    $key = is_array($v['spec'] ?? null) ? (string)$v['spec']['key'] : trim((string)($spec['key'] ?? ''));
+    if ($key !== '' && survey_spec_is_php($key)) {
+        $phpReserved = true;
+        $v['errors'][] = "Key '$key' is a built-in PHP survey and cannot be upserted via MCP.";
+        $v['ok'] = false;
+    }
+    return [
+        'ok'           => (bool)$v['ok'],
+        'errors'       => $v['errors'],
+        'spec'         => $v['spec'],
+        'php_reserved' => $phpReserved,
+    ];
+}
+
+function mcp_tool_survey_spec_upsert(array $a, ?int $userId): array
+{
+    $spec = $a['spec'] ?? null;
+    if (!is_array($spec)) {
+        throw new McpError('spec must be a JSON object.');
+    }
+    try {
+        $saved = survey_definition_upsert($spec, $userId);
+    } catch (InvalidArgumentException $e) {
+        throw new McpError($e->getMessage());
+    } catch (PDOException $e) {
+        throw new McpError('Could not save survey definition (is migration 063 applied?): ' . $e->getMessage());
+    }
+    return [
+        'ok'      => true,
+        'key'     => (string)$saved['key'],
+        'title'   => (string)$saved['title'],
+        'source'  => 'mcp',
+        'spec'    => $saved,
+        'next'    => 'Call survey_publish with this key to mint the shareable URL.',
+        'rows_affected' => 1,
+    ];
+}
+
+function mcp_tool_survey_spec_get(array $a): array
+{
+    $key = trim((string)($a['key'] ?? ''));
+    if ($key === '') throw new McpError('key is required.');
+    $source = survey_spec_is_php($key) ? 'code' : 'mcp';
+    $spec = survey_spec($key);
+    if ($spec === null) {
+        throw new McpError("No survey definition for key '$key'.");
+    }
+    $live = null;
+    try {
+        $st = db()->prepare("SELECT id, token, active, created_at FROM surveys WHERE spec_key = :k ORDER BY id LIMIT 1");
+        $st->execute([':k' => $key]);
+        $live = $st->fetch() ?: null;
+    } catch (Throwable $e) {
+        $live = null;
+    }
+    return [
+        'key'     => $key,
+        'source'  => $source,
+        'spec'    => $spec,
+        'published' => $live ? [
+            'survey_id' => (int)$live['id'],
+            'active'    => (int)$live['active'] === 1,
+            'url'       => survey_url((string)$live['token']),
+            'created_at'=> (string)$live['created_at'],
+        ] : null,
+    ];
+}
+
+function mcp_tool_survey_spec_list(array $a): array
+{
+    $items = [];
+    foreach (survey_all_specs() as $key => $entry) {
+        $live = null;
+        try {
+            $st = db()->prepare("SELECT id, token, active FROM surveys WHERE spec_key = :k ORDER BY id LIMIT 1");
+            $st->execute([':k' => $key]);
+            $live = $st->fetch() ?: null;
+        } catch (Throwable $e) {
+            $live = null;
+        }
+        $items[] = [
+            'key'       => $key,
+            'title'     => (string)($entry['spec']['title'] ?? $key),
+            'source'    => $entry['source'],
+            'questions' => count(survey_questions($entry['spec'])),
+            'published' => $live ? [
+                'survey_id' => (int)$live['id'],
+                'active'    => (int)$live['active'] === 1,
+                'url'       => survey_url((string)$live['token']),
+            ] : null,
+        ];
+    }
+    return ['surveys' => $items, 'count' => count($items)];
+}
+
+function mcp_tool_survey_publish(array $a, ?int $userId): array
+{
+    $key = trim((string)($a['key'] ?? ''));
+    if ($key === '') throw new McpError('key is required.');
+    if (!survey_spec($key)) {
+        throw new McpError("No survey definition for key '$key'. Upsert a JSON spec first, or use a built-in key.");
+    }
+    $row = survey_ensure($key, $userId);
+    if (!$row) {
+        throw new McpError('Could not create the live survey row (tables missing?). Apply migrations through 063.');
+    }
+    if (array_key_exists('active', $a)) {
+        survey_set_active((int)$row['id'], !empty($a['active']));
+        $st = db()->prepare("SELECT * FROM surveys WHERE id = :id LIMIT 1");
+        $st->execute([':id' => (int)$row['id']]);
+        $row = $st->fetch() ?: $row;
+    }
+    return [
+        'key'           => $key,
+        'survey_id'     => (int)$row['id'],
+        'active'        => (int)$row['active'] === 1,
+        'url'           => survey_url((string)$row['token']),
+        'source'        => survey_spec_is_php($key) ? 'code' : 'mcp',
+        'rows_affected' => 1,
+    ];
+}
+
+function mcp_tool_survey_prefill_links(array $a): array
+{
+    $key = trim((string)($a['key'] ?? ''));
+    if ($key === '') throw new McpError('key is required.');
+    $spec = survey_spec($key);
+    if ($spec === null) throw new McpError("No survey definition for key '$key'.");
+
+    $st = db()->prepare("SELECT * FROM surveys WHERE spec_key = :k ORDER BY id LIMIT 1");
+    $st->execute([':k' => $key]);
+    $survey = $st->fetch();
+    if (!$survey) {
+        throw new McpError("Survey '$key' is not published yet. Call survey_publish first.");
+    }
+    if ((int)$survey['active'] !== 1) {
+        throw new McpError("Survey '$key' is closed. Re-open with survey_publish active=true.");
+    }
+
+    $filter = [];
+    if (!empty($a['grades']) && is_array($a['grades'])) {
+        $filter['grades'] = $a['grades'];
+    }
+    if (!empty($a['enrollment_status']) && is_array($a['enrollment_status'])) {
+        $filter['enrollment_status'] = $a['enrollment_status'];
+    }
+    $ids = null;
+    if (isset($a['student_ids']) && is_array($a['student_ids'])) {
+        $ids = array_map('intval', $a['student_ids']);
+    }
+    $ttl = isset($a['ttl_seconds']) ? (int)$a['ttl_seconds'] : null;
+    $links = survey_prefill_links($survey, $filter, $ids, $ttl);
+    return [
+        'key'       => $key,
+        'survey_id' => (int)$survey['id'],
+        'count'     => count($links),
+        'links'     => $links,
+    ];
+}
+
 // --------------------------------------------------------- write-side helpers
 
 function mcp_assert_writable(string $table): void
@@ -992,7 +1250,7 @@ function mcp_rows_matching(string $table, string $where, array $params, int $cap
 function mcp_call_tool(string $name, array $args, ?int $tokenId,
                        ?int $userId = null, ?int $oauthTokenId = null): array
 {
-    $writes  = ['insert', 'update', 'delete'];
+    $writes  = ['insert', 'update', 'delete', 'survey_spec_upsert', 'survey_publish'];
     $isWrite = in_array($name, $writes, true);
     $pdo     = db();
     $began   = false;
@@ -1006,6 +1264,12 @@ function mcp_call_tool(string $name, array $args, ?int $tokenId,
             case 'insert': $result = mcp_tool_insert($args); break;
             case 'update': $result = mcp_tool_update($args); break;
             case 'delete': $result = mcp_tool_delete($args); break;
+            case 'survey_spec_validate': $result = mcp_tool_survey_spec_validate($args); break;
+            case 'survey_spec_upsert':   $result = mcp_tool_survey_spec_upsert($args, $userId); break;
+            case 'survey_spec_get':      $result = mcp_tool_survey_spec_get($args); break;
+            case 'survey_spec_list':     $result = mcp_tool_survey_spec_list($args); break;
+            case 'survey_publish':       $result = mcp_tool_survey_publish($args, $userId); break;
+            case 'survey_prefill_links': $result = mcp_tool_survey_prefill_links($args); break;
             default:
                 throw new McpError("No such tool: '$name'.", -32601);
         }

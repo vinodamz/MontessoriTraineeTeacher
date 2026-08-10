@@ -42,7 +42,22 @@ $posted  = [];      // what the parent typed, for re-rendering after an error
 $topErr  = '';
 $dupErr  = '';      // "we already have this child" — information, not a fault
 $dupHelp = '';
+$prefill = null;    // signed ?pref= autofill for one student
+$hidePicker = false;
 
+if ($spec && $survey) {
+    $prefTok = (string)($_REQUEST['pref'] ?? '');
+    if ($prefTok !== '') {
+        $prefill = survey_prefill_for_form($survey, $spec, $prefTok);
+        if ($prefill) {
+            $hidePicker = !empty($prefill['hide_picker']);
+            // Prefill seeds the form on GET; POST uses what the parent submitted.
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                $posted = $prefill['values'];
+            }
+        }
+    }
+}
 if ($spec && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $posted = $_POST;
 
@@ -148,11 +163,12 @@ if (!$survey || !$spec) {
   .sv-help { color: #7a7a7a; font-size: .85rem; margin: 0 0 .5rem; }
   .sv-req { color: var(--pink); }
 
-  input[type=text], textarea, .sv-other input {
+  input[type=text], textarea, .sv-other input, select.sv-select {
       width: 100%; padding: .6rem .7rem; border: 1px solid #dfd3da; border-radius: 8px;
       font: inherit; color: inherit; background: #fff; }
+  select.sv-select { appearance: auto; }
   textarea { min-height: 4.5rem; resize: vertical; }
-  input[type=text]:focus, textarea:focus { outline: 2px solid #f8bbd0; border-color: var(--pink); }
+  input[type=text]:focus, textarea:focus, select.sv-select:focus { outline: 2px solid #f8bbd0; border-color: var(--pink); }
 
   /* Choices are full-width tap targets — most parents fill this in on a phone. */
   .sv-choice { display: flex; align-items: flex-start; gap: .6rem; padding: .5rem .6rem;
@@ -271,15 +287,37 @@ if (!$survey || !$spec) {
     <?php // data-restore is set only on a clean GET. After a failed submit the
           // server has already re-rendered what the parent typed, and letting the
           // saved draft overwrite that would undo their most recent edits. ?>
-    <form method="post" action="/survey.php?t=<?= e($token) ?>" novalidate
+    <form method="post" action="/survey.php?t=<?= e($token) ?><?= isset($_REQUEST['pref']) && (string)$_REQUEST['pref'] !== '' ? '&amp;pref=' . e(rawurlencode((string)$_REQUEST['pref'])) : '' ?>" novalidate
           id="sv-form" data-key="<?= e(substr($token, 0, 16)) ?>"
-          data-restore="<?= $posted ? '0' : '1' ?>">
+          data-restore="<?= $posted && !$prefill ? '0' : ($prefill ? '0' : '1') ?>">
         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="t" value="<?= e($token) ?>">
+        <?php if (!empty($_REQUEST['pref'])): ?>
+            <input type="hidden" name="pref" value="<?= e((string)$_REQUEST['pref']) ?>">
+        <?php endif; ?>
         <div class="sv-hp" aria-hidden="true">
             <label>Leave this field empty
                 <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
         </div>
+
+        <?php
+        // student_picker fill maps + roster data for client-side autofill
+        $pickerFillMaps = [];
+        $pickerRosters  = [];
+        foreach (survey_questions($spec) as $pq) {
+            if (($pq['type'] ?? '') !== 'student_picker') continue;
+            $pk = (string)$pq['key'];
+            $pickerFillMaps[$pk] = !empty($pq['fills']) && is_array($pq['fills'])
+                ? $pq['fills']
+                : ['child_name' => 'full_name', 'class' => 'grade', 'parent_name' => 'primary_parent'];
+            $roster = [];
+            foreach (array_keys(survey_options($pq)) as $sid) {
+                $d = survey_student_fill_data((int)$sid);
+                if ($d) $roster[(string)$sid] = $d;
+            }
+            $pickerRosters[$pk] = $roster;
+        }
+        ?>
 
         <?php foreach ($spec['sections'] as $sec): ?>
             <div class="sv-card">
@@ -294,6 +332,16 @@ if (!$survey || !$spec) {
                     $err   = $errors[$key] ?? '';
                     $req   = !empty($q['required']);
                     $val   = survey_posted($posted, $key, $type === 'checkbox' || $type === 'matrix' ? [] : '');
+                    $optsSource = $q['options'] ?? null;
+                    $useSelect = $type === 'student_picker' || $type === 'select'
+                              || $optsSource === 'students' || $optsSource === 'parents';
+                    if ($type === 'student_picker' && $hidePicker) {
+                        // Prefill link: keep the chosen student id, hide the roster.
+                        ?>
+                        <input type="hidden" name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
+                        <?php
+                        continue;
+                    }
                 ?>
                     <div class="sv-q <?= $err !== '' ? 'sv-err' : '' ?>">
                         <?php if ((string)($q['label'] ?? '') !== ''): ?>
@@ -307,17 +355,31 @@ if (!$survey || !$spec) {
 
                         <?php if ($type === 'text'): ?>
                             <input type="text" name="<?= e($key) ?>" maxlength="<?= SURVEY_NAME_MAX ?>"
-                                   value="<?= e((string)$val) ?>" aria-labelledby="lbl-<?= e($key) ?>">
+                                   value="<?= e((string)$val) ?>" aria-labelledby="lbl-<?= e($key) ?>"
+                                   <?php if (in_array($key, ['parent_name','child_name','class'], true)): ?>data-sv-fill="<?= e($key) ?>"<?php endif; ?>>
 
                         <?php elseif ($type === 'textarea'): ?>
                             <textarea name="<?= e($key) ?>" maxlength="<?= SURVEY_TEXT_MAX ?>" rows="3"
                                       aria-labelledby="lbl-<?= e($key) ?>"><?= e((string)$val) ?></textarea>
 
+                        <?php elseif ($useSelect && ($type === 'radio' || $type === 'student_picker' || $type === 'select')): ?>
+                            <select class="sv-select" name="<?= e($key) ?>" aria-labelledby="lbl-<?= e($key) ?>"
+                                    <?php if ($type === 'student_picker'): ?>data-sv-picker="<?= e($key) ?>"<?php endif; ?>>
+                                <option value=""><?= $req ? 'Please choose…' : '— optional —' ?></option>
+                                <?php foreach (survey_options($q) as $code => $label): ?>
+                                    <option value="<?= e((string)$code) ?>"
+                                        <?= (string)$val === (string)$code ? 'selected' : '' ?>>
+                                        <?= e((string)$label) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+
                         <?php elseif ($type === 'radio'): ?>
                             <?php foreach (survey_options($q) as $code => $label): ?>
                                 <label class="sv-choice">
                                     <input type="radio" name="<?= e($key) ?>" value="<?= e((string)$code) ?>"
-                                           <?= (string)$val === (string)$code ? 'checked' : '' ?>>
+                                           <?= (string)$val === (string)$code ? 'checked' : '' ?>
+                                           <?php if ($key === 'class'): ?>data-sv-fill-radio="class"<?php endif; ?>>
                                     <span><?= e((string)$label) ?></span>
                                 </label>
                             <?php endforeach; ?>
@@ -390,6 +452,8 @@ if (!$survey || !$spec) {
         </p>
     </form>
     <div class="sv-saved" id="sv-saved" role="status" aria-live="polite">Saved</div>
+    <script type="application/json" id="sv-picker-fills"><?= json_encode($pickerFillMaps, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+    <script type="application/json" id="sv-picker-roster"><?= json_encode($pickerRosters, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
 
 <?php endif; ?>
 </main>
@@ -415,7 +479,7 @@ if (!$survey || !$spec) {
 
     var KEY  = 'lg_survey_' + form.getAttribute('data-key');
     var MAXAGE = 30 * 24 * 60 * 60 * 1000;          // forget drafts after a month
-    var SKIP = { '_csrf': 1, 't': 1, 'website': 1 };
+    var SKIP = { '_csrf': 1, 't': 1, 'website': 1, 'pref': 1 };
 
     // localStorage throws in some private-browsing modes; a survey must never
     // break because of a storage quirk, so every access is guarded.
@@ -565,6 +629,61 @@ if (!$survey || !$spec) {
 
     // Once it's really submitted the draft has done its job.
     form.addEventListener('submit', function () { drop(); });
+})();
+
+/* student_picker → fill mapped identity fields from the embedded roster. */
+(function () {
+    var form = document.getElementById('sv-form');
+    if (!form) return;
+    var fillsEl = document.getElementById('sv-picker-fills');
+    var rosterEl = document.getElementById('sv-picker-roster');
+    if (!fillsEl || !rosterEl) return;
+    var fillsMap, rosterMap;
+    try {
+        fillsMap = JSON.parse(fillsEl.textContent || '{}');
+        rosterMap = JSON.parse(rosterEl.textContent || '{}');
+    } catch (e) { return; }
+
+    function setField(name, value) {
+        if (!name) return;
+        var field = form.elements[name];
+        if (!field) return;
+        value = value == null ? '' : String(value);
+        if (field.length !== undefined && !field.tagName) {
+            for (var i = 0; i < field.length; i++) {
+                if (field[i].type === 'radio') {
+                    field[i].checked = (field[i].value === value);
+                }
+            }
+            return;
+        }
+        if (field.type === 'radio' || field.type === 'checkbox') {
+            field.checked = (field.value === value);
+            return;
+        }
+        field.value = value;
+    }
+
+    function applyPicker(pickerKey) {
+        var sel = form.querySelector('[data-sv-picker="' + pickerKey + '"]');
+        if (!sel) return;
+        var sid = sel.value;
+        var data = (rosterMap[pickerKey] || {})[sid];
+        var fills = fillsMap[pickerKey] || {};
+        if (!data) return;
+        for (var field in fills) {
+            if (!Object.prototype.hasOwnProperty.call(fills, field)) continue;
+            var source = fills[field];
+            if (data[source] != null) setField(field, data[source]);
+        }
+    }
+
+    Object.keys(fillsMap || {}).forEach(function (pk) {
+        var sel = form.querySelector('[data-sv-picker="' + pk + '"]');
+        if (!sel) return;
+        sel.addEventListener('change', function () { applyPicker(pk); });
+        if (sel.value) applyPicker(pk);
+    });
 })();
 
 <?php if ($done): ?>

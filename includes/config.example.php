@@ -17,5 +17,8 @@ return [
         'max_pin_tries'  => 5,
         'lock_seconds'   => 30,
         'timezone'       => 'Asia/Kolkata',
+        // Optional. Used to sign per-student survey prefills (?pref=).
+        // If empty, a stable hash of the DB name+password is used instead.
+        // 'survey_prefill_secret' => 'change-me-to-a-long-random-string',
     ],
 ];

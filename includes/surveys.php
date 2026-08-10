@@ -93,10 +93,40 @@ function survey_specs(): array
     ];
 }
 
-/** One spec by key, or null. */
+/** One spec by key, or null. PHP catalogue wins; then DB definitions. */
 function survey_spec(string $key): ?array
 {
-    return survey_specs()[$key] ?? null;
+    $php = survey_specs()[$key] ?? null;
+    if ($php !== null) return $php;
+    return survey_definition_load($key);
+}
+
+/**
+ * Every known spec for the admin list: PHP first, then DB definitions whose
+ * keys are not already covered by PHP (PHP always wins on collision).
+ *
+ * Each entry: ['spec' => array, 'source' => 'code'|'mcp']
+ */
+function survey_all_specs(): array
+{
+    $out = [];
+    foreach (survey_specs() as $key => $spec) {
+        $out[$key] = ['spec' => $spec, 'source' => 'code'];
+    }
+    foreach (survey_definition_list() as $row) {
+        $key = (string)$row['spec_key'];
+        if (isset($out[$key])) continue;
+        $spec = survey_definition_decode((string)$row['definition']);
+        if ($spec === null) continue;
+        $out[$key] = ['spec' => $spec, 'source' => 'mcp'];
+    }
+    return $out;
+}
+
+/** True when this key is owned by PHP and must not be written via MCP/DB. */
+function survey_spec_is_php(string $key): bool
+{
+    return array_key_exists($key, survey_specs());
 }
 
 /**
@@ -525,8 +555,176 @@ function survey_spec_field_trip(): array
 function survey_options(array $q): array
 {
     $o = $q['options'] ?? [];
-    if ($o === 'classes') return survey_class_options();
+    if ($o === 'classes')  return survey_class_options();
+    if ($o === 'students') return survey_student_options($q['options_filter'] ?? []);
+    if ($o === 'parents')  return survey_parent_options($q['options_filter'] ?? []);
+    // student_picker always draws from the student roster (options may be omitted).
+    if (($q['type'] ?? '') === 'student_picker') {
+        return survey_student_options($q['options_filter'] ?? []);
+    }
     return is_array($o) ? $o : [];
+}
+
+/**
+ * Enrolled students as option map: student_id => "Name (Grade)".
+ * Filter keys: grades[], enrollment_status[] (default enrolled), active_only (default true).
+ */
+function survey_student_options(array $filter = []): array
+{
+    $grades = array_values(array_filter(array_map('strval', (array)($filter['grades'] ?? []))));
+    $statuses = array_values(array_filter(array_map('strval',
+        (array)($filter['enrollment_status'] ?? ['enrolled']))));
+    if ($statuses === []) $statuses = ['enrolled'];
+    $activeOnly = !array_key_exists('active_only', $filter) || !empty($filter['active_only']);
+
+    try {
+        $sql = "SELECT id, first_name, last_name, grade FROM students WHERE 1=1";
+        $params = [];
+        if ($activeOnly) {
+            $sql .= " AND is_active = 1";
+        }
+        if ($statuses) {
+            $in = [];
+            foreach ($statuses as $i => $st) {
+                $k = ':st' . $i;
+                $in[] = $k;
+                $params[$k] = $st;
+            }
+            $sql .= " AND enrollment_status IN (" . implode(',', $in) . ")";
+        }
+        if ($grades) {
+            $in = [];
+            foreach ($grades as $i => $g) {
+                $k = ':g' . $i;
+                $in[] = $k;
+                $params[$k] = $g;
+            }
+            $sql .= " AND grade IN (" . implode(',', $in) . ")";
+        }
+        $sql .= " ORDER BY grade, first_name, last_name LIMIT 500";
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll() as $row) {
+            $name = trim((string)$row['first_name'] . ' ' . (string)$row['last_name']);
+            $label = $name;
+            if ((string)$row['grade'] !== '') $label .= ' (' . (string)$row['grade'] . ')';
+            $out[(string)(int)$row['id']] = $label;
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Parents of matching students: "parent_id:student_id" => "Parent — Child (Grade)".
+ * Same filter shape as survey_student_options.
+ */
+function survey_parent_options(array $filter = []): array
+{
+    $grades = array_values(array_filter(array_map('strval', (array)($filter['grades'] ?? []))));
+    $statuses = array_values(array_filter(array_map('strval',
+        (array)($filter['enrollment_status'] ?? ['enrolled']))));
+    if ($statuses === []) $statuses = ['enrolled'];
+    $activeOnly = !array_key_exists('active_only', $filter) || !empty($filter['active_only']);
+
+    try {
+        $sql = "SELECT p.id AS parent_id, p.name AS parent_name, p.relation,
+                       s.id AS student_id, s.first_name, s.last_name, s.grade
+                  FROM student_parents p
+                  JOIN students s ON s.id = p.student_id
+                 WHERE 1=1";
+        $params = [];
+        if ($activeOnly) $sql .= " AND s.is_active = 1";
+        if ($statuses) {
+            $in = [];
+            foreach ($statuses as $i => $st) {
+                $k = ':st' . $i;
+                $in[] = $k;
+                $params[$k] = $st;
+            }
+            $sql .= " AND s.enrollment_status IN (" . implode(',', $in) . ")";
+        }
+        if ($grades) {
+            $in = [];
+            foreach ($grades as $i => $g) {
+                $k = ':g' . $i;
+                $in[] = $k;
+                $params[$k] = $g;
+            }
+            $sql .= " AND s.grade IN (" . implode(',', $in) . ")";
+        }
+        $sql .= " ORDER BY s.grade, s.first_name, s.last_name, p.is_primary DESC, p.name LIMIT 800";
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll() as $row) {
+            $child = trim((string)$row['first_name'] . ' ' . (string)$row['last_name']);
+            $label = (string)$row['parent_name'] . ' — ' . $child;
+            if ((string)$row['grade'] !== '') $label .= ' (' . (string)$row['grade'] . ')';
+            $code = (int)$row['parent_id'] . ':' . (int)$row['student_id'];
+            $out[$code] = $label;
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Autofill payload for one student (used by student_picker JS + signed prefills).
+ * Keys match the `fills` map targets: full_name, grade, primary_parent, …
+ */
+function survey_student_fill_data(int $studentId): ?array
+{
+    if ($studentId <= 0) return null;
+    try {
+        $st = db()->prepare("
+            SELECT id, first_name, last_name, grade, section, admission_number
+              FROM students WHERE id = :id LIMIT 1
+        ");
+        $st->execute([':id' => $studentId]);
+        $row = $st->fetch();
+        if (!$row) return null;
+        $full = trim((string)$row['first_name'] . ' ' . (string)$row['last_name']);
+        $parent = '';
+        $pst = db()->prepare("
+            SELECT name FROM student_parents
+             WHERE student_id = :id
+             ORDER BY is_primary DESC, id ASC LIMIT 1
+        ");
+        $pst->execute([':id' => $studentId]);
+        $prow = $pst->fetch();
+        if ($prow) $parent = (string)$prow['name'];
+        return [
+            'student_id'      => (int)$row['id'],
+            'full_name'       => $full,
+            'first_name'      => (string)$row['first_name'],
+            'last_name'       => (string)$row['last_name'],
+            'grade'           => (string)$row['grade'],
+            'section'         => (string)($row['section'] ?? ''),
+            'admission_number'=> (string)($row['admission_number'] ?? ''),
+            'primary_parent'  => $parent,
+        ];
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/** Map fills config + student data → field values to put on the form. */
+function survey_apply_fills(array $fills, array $data): array
+{
+    $out = [];
+    foreach ($fills as $field => $source) {
+        $field = (string)$field;
+        $source = (string)$source;
+        if ($field === '' || $source === '') continue;
+        if (array_key_exists($source, $data)) {
+            $out[$field] = (string)$data[$source];
+        }
+    }
+    return $out;
 }
 
 /** Every question in a spec, flat, in order. */
@@ -597,6 +795,8 @@ function survey_cell(array $col, array $answers): string
             $scale = $q['scale'] ?? [];
             return (string)($scale[$v] ?? $v);
         case 'radio':
+        case 'select':
+        case 'student_picker':
             $opts = survey_options($q);
             return (string)($opts[$v] ?? $v);
         case 'checkbox':
@@ -641,6 +841,8 @@ function survey_collect(array $spec, array $post): array
                 break;
 
             case 'radio':
+            case 'student_picker':
+            case 'select':
                 $opts = survey_options($q);
                 $v    = (string)($raw ?? '');
                 if ($v !== '' && array_key_exists($v, $opts)) $answers[$key] = $v;
@@ -1071,7 +1273,7 @@ function survey_tally(array $spec, array $rows): array
         $type = (string)($q['type'] ?? '');
         $key  = (string)$q['key'];
 
-        if ($type === 'radio' || $type === 'checkbox') {
+        if ($type === 'radio' || $type === 'checkbox' || $type === 'select' || $type === 'student_picker') {
             $opts   = survey_options($q);
             $counts = array_fill_keys(array_values($opts), 0);
             $answered = 0;
@@ -1106,6 +1308,335 @@ function survey_tally(array $spec, array $rows): array
                 ];
             }
         }
+    }
+    return $out;
+}
+
+// ---- MCP / JSON survey definitions --------------------------------------
+
+const SURVEY_DEF_KEY_MAX = 64;
+const SURVEY_DEF_ALLOWED_TYPES = ['text', 'textarea', 'radio', 'checkbox', 'matrix', 'student_picker', 'select'];
+const SURVEY_DEF_OPTION_SOURCES = ['classes', 'students', 'parents'];
+const SURVEY_PREFILL_TTL_DEFAULT = 60 * 60 * 24 * 30; // 30 days
+
+/** Decode a definition LONGTEXT into a spec array, or null. */
+function survey_definition_decode(string $json): ?array
+{
+    $data = json_decode($json, true);
+    return is_array($data) ? $data : null;
+}
+
+/** Load one DB definition as a spec array (no PHP fallback). */
+function survey_definition_load(string $key): ?array
+{
+    try {
+        $st = db()->prepare("SELECT definition FROM survey_definitions WHERE spec_key = :k LIMIT 1");
+        $st->execute([':k' => $key]);
+        $row = $st->fetch();
+        if (!$row) return null;
+        $spec = survey_definition_decode((string)$row['definition']);
+        if ($spec === null) return null;
+        $spec['key'] = $key;
+        return $spec;
+    } catch (Throwable $e) {
+        return null; // pre-migration
+    }
+}
+
+/** Raw rows from survey_definitions (may be empty / missing table). */
+function survey_definition_list(): array
+{
+    try {
+        return db()->query("SELECT spec_key, title, definition, created_by, created_at, updated_at
+                              FROM survey_definitions ORDER BY title, spec_key")->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function survey_definition_get(string $key): ?array
+{
+    try {
+        $st = db()->prepare("SELECT * FROM survey_definitions WHERE spec_key = :k LIMIT 1");
+        $st->execute([':k' => $key]);
+        $row = $st->fetch();
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * Validate a JSON spec. Returns ['ok' => bool, 'errors' => string[], 'spec' => ?array].
+ * Does not check PHP-key reservation (callers do that on upsert).
+ */
+function survey_definition_validate($raw): array
+{
+    $errors = [];
+    if (!is_array($raw)) {
+        return ['ok' => false, 'errors' => ['Spec must be a JSON object.'], 'spec' => null];
+    }
+    $key = trim((string)($raw['key'] ?? ''));
+    if ($key === '') {
+        $errors[] = 'key is required.';
+    } elseif (strlen($key) > SURVEY_DEF_KEY_MAX) {
+        $errors[] = 'key must be at most ' . SURVEY_DEF_KEY_MAX . ' characters.';
+    } elseif (!preg_match('/^[a-z][a-z0-9_]{1,62}$/', $key)) {
+        $errors[] = 'key must be lowercase snake_case starting with a letter (a-z0-9_).';
+    }
+
+    $title = trim((string)($raw['title'] ?? ''));
+    if ($title === '') $errors[] = 'title is required.';
+
+    $sections = $raw['sections'] ?? null;
+    if (!is_array($sections) || $sections === []) {
+        $errors[] = 'sections must be a non-empty array.';
+        $sections = [];
+    }
+
+    $seenKeys = [];
+    foreach ($sections as $si => $sec) {
+        if (!is_array($sec)) {
+            $errors[] = "sections[$si] must be an object.";
+            continue;
+        }
+        if (trim((string)($sec['title'] ?? '')) === '') {
+            $errors[] = "sections[$si].title is required.";
+        }
+        $questions = $sec['questions'] ?? null;
+        if (!is_array($questions) || $questions === []) {
+            $errors[] = "sections[$si].questions must be a non-empty array.";
+            continue;
+        }
+        foreach ($questions as $qi => $q) {
+            if (!is_array($q)) {
+                $errors[] = "sections[$si].questions[$qi] must be an object.";
+                continue;
+            }
+            $qk = trim((string)($q['key'] ?? ''));
+            if ($qk === '' || !preg_match('/^[a-z][a-z0-9_]{0,62}$/', $qk)) {
+                $errors[] = "sections[$si].questions[$qi].key must be lowercase snake_case.";
+            } elseif (isset($seenKeys[$qk])) {
+                $errors[] = "Duplicate question key '$qk'.";
+            } else {
+                $seenKeys[$qk] = true;
+            }
+            $type = (string)($q['type'] ?? 'text');
+            if (!in_array($type, SURVEY_DEF_ALLOWED_TYPES, true)) {
+                $errors[] = "Question '$qk' has unknown type '$type'.";
+            }
+            if (in_array($type, ['radio', 'checkbox', 'select'], true)) {
+                $opts = $q['options'] ?? null;
+                if (is_string($opts)) {
+                    if (!in_array($opts, SURVEY_DEF_OPTION_SOURCES, true)) {
+                        $errors[] = "Question '$qk' options source '$opts' is not allowed.";
+                    }
+                } elseif (!is_array($opts) || $opts === []) {
+                    $errors[] = "Question '$qk' needs options (map or classes|students|parents).";
+                }
+            }
+            if ($type === 'matrix') {
+                if (!is_array($q['scale'] ?? null) || ($q['scale'] ?? []) === []) {
+                    $errors[] = "Question '$qk' matrix needs a scale map.";
+                }
+                if (!is_array($q['rows'] ?? null) || ($q['rows'] ?? []) === []) {
+                    $errors[] = "Question '$qk' matrix needs a rows map.";
+                }
+            }
+            if ($type === 'student_picker' && isset($q['fills']) && !is_array($q['fills'])) {
+                $errors[] = "Question '$qk' fills must be an object.";
+            }
+            if (isset($q['options_filter']) && !is_array($q['options_filter'])) {
+                $errors[] = "Question '$qk' options_filter must be an object.";
+            }
+        }
+    }
+
+    if ($errors) {
+        return ['ok' => false, 'errors' => $errors, 'spec' => null];
+    }
+
+    $spec = [
+        'key'      => $key,
+        'title'    => $title,
+        'subtitle' => (string)($raw['subtitle'] ?? ''),
+        'intro'    => (string)($raw['intro'] ?? ''),
+        'thanks'   => (string)($raw['thanks'] ?? ''),
+        'sections' => $sections,
+    ];
+    if (!empty($raw['one_per_child'])) $spec['one_per_child'] = true;
+    if (!empty($raw['roster'])) {
+        $spec['roster'] = true;
+        $spec['roster_consent_key'] = (string)($raw['roster_consent_key'] ?? 'consent');
+    }
+
+    return ['ok' => true, 'errors' => [], 'spec' => $spec];
+}
+
+/**
+ * Create or update a DB survey definition. Throws InvalidArgumentException on
+ * validation failure or when the key is reserved by a PHP spec.
+ */
+function survey_definition_upsert(array $raw, ?int $byUserId = null): array
+{
+    $v = survey_definition_validate($raw);
+    if (!$v['ok']) {
+        throw new InvalidArgumentException(implode(' ', $v['errors']));
+    }
+    $spec = $v['spec'];
+    $key  = (string)$spec['key'];
+    if (survey_spec_is_php($key)) {
+        throw new InvalidArgumentException(
+            "Spec key '$key' is defined in PHP and cannot be created or changed via MCP. "
+          . "Choose a new key for a new survey."
+        );
+    }
+
+    $json = json_encode($spec, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        throw new InvalidArgumentException('Could not encode definition as JSON.');
+    }
+
+    db()->prepare("
+        INSERT INTO survey_definitions (spec_key, title, definition, created_by)
+        VALUES (:k, :t, :d, :by)
+        ON DUPLICATE KEY UPDATE
+            title = VALUES(title),
+            definition = VALUES(definition),
+            updated_at = CURRENT_TIMESTAMP
+    ")->execute([
+        ':k'  => $key,
+        ':t'  => (string)$spec['title'],
+        ':d'  => $json,
+        ':by' => $byUserId,
+    ]);
+
+    return $spec;
+}
+
+// ---- Signed per-student prefills ----------------------------------------
+
+function survey_prefill_secret(): string
+{
+    try {
+        $cfg = app_config();
+        $s = (string)($cfg['app']['survey_prefill_secret'] ?? '');
+        if ($s !== '') return $s;
+        // Stable fallback so prefills work before a dedicated secret is set.
+        return hash('sha256', 'survey-prefill|'
+            . (string)($cfg['db']['name'] ?? '') . '|'
+            . (string)($cfg['db']['password'] ?? 'x'));
+    } catch (Throwable $e) {
+        return hash('sha256', 'survey-prefill-fallback');
+    }
+}
+
+/**
+ * Build a signed pref payload for one student on one survey.
+ * Returns the opaque string to put in ?pref=
+ */
+function survey_prefill_sign(int $surveyId, int $studentId, ?int $ttlSeconds = null): string
+{
+    $ttl = $ttlSeconds ?? SURVEY_PREFILL_TTL_DEFAULT;
+    $exp = time() + max(60, $ttl);
+    $body = $surveyId . '.' . $studentId . '.' . $exp;
+    $sig  = hash_hmac('sha256', $body, survey_prefill_secret());
+    return rtrim(strtr(base64_encode($body . '.' . $sig), '+/', '-_'), '=');
+}
+
+/**
+ * Verify ?pref= and return ['survey_id'=>int,'student_id'=>int,'exp'=>int] or null.
+ */
+function survey_prefill_verify(string $token): ?array
+{
+    $token = trim($token);
+    if ($token === '') return null;
+    $pad = strlen($token) % 4;
+    if ($pad) $token .= str_repeat('=', 4 - $pad);
+    $raw = base64_decode(strtr($token, '-_', '+/'), true);
+    if ($raw === false) return null;
+    $parts = explode('.', $raw);
+    if (count($parts) !== 4) return null;
+    [$sid, $studentId, $exp, $sig] = $parts;
+    if (!ctype_digit($sid) || !ctype_digit($studentId) || !ctype_digit($exp)) return null;
+    $body = $sid . '.' . $studentId . '.' . $exp;
+    $expect = hash_hmac('sha256', $body, survey_prefill_secret());
+    if (!hash_equals($expect, $sig)) return null;
+    if ((int)$exp < time()) return null;
+    return [
+        'survey_id'  => (int)$sid,
+        'student_id' => (int)$studentId,
+        'exp'        => (int)$exp,
+    ];
+}
+
+/**
+ * Resolve prefills for the public form: identity field values + optional hide picker.
+ * Returns ['values' => [field => value], 'student_id' => int, 'hide_picker' => true] or null.
+ */
+function survey_prefill_for_form(array $survey, array $spec, string $prefToken): ?array
+{
+    $verified = survey_prefill_verify($prefToken);
+    if (!$verified) return null;
+    if ((int)$verified['survey_id'] !== (int)$survey['id']) return null;
+    $data = survey_student_fill_data((int)$verified['student_id']);
+    if ($data === null) return null;
+
+    // Collect fills from the first student_picker in the spec; fall back to
+    // the usual identity fields so a prefill link still helps bare forms.
+    $fills = [
+        'child_name'  => 'full_name',
+        'class'       => 'grade',
+        'parent_name' => 'primary_parent',
+    ];
+    $pickerKey = null;
+    foreach (survey_questions($spec) as $q) {
+        if (($q['type'] ?? '') === 'student_picker') {
+            $pickerKey = (string)$q['key'];
+            if (!empty($q['fills']) && is_array($q['fills'])) {
+                $fills = $q['fills'];
+            }
+            break;
+        }
+    }
+    $values = survey_apply_fills($fills, $data);
+    if ($pickerKey !== null) {
+        $values[$pickerKey] = (string)$data['student_id'];
+    }
+    return [
+        'values'     => $values,
+        'student_id' => (int)$data['student_id'],
+        'hide_picker'=> true,
+        'data'       => $data,
+    ];
+}
+
+/**
+ * Build share URLs with ?pref= for many students.
+ * $studentIds empty + optional grade filter → all matching enrolled students.
+ */
+function survey_prefill_links(array $survey, array $filter = [], ?array $studentIds = null, ?int $ttl = null): array
+{
+    $ids = $studentIds;
+    if ($ids === null) {
+        $opts = survey_student_options($filter);
+        $ids = array_map('intval', array_keys($opts));
+    }
+    $base = survey_url((string)$survey['token']);
+    $out = [];
+    foreach ($ids as $id) {
+        $id = (int)$id;
+        if ($id <= 0) continue;
+        $data = survey_student_fill_data($id);
+        if ($data === null) continue;
+        $pref = survey_prefill_sign((int)$survey['id'], $id, $ttl);
+        $out[] = [
+            'student_id' => $id,
+            'child_name' => $data['full_name'],
+            'class'      => $data['grade'],
+            'parent_name'=> $data['primary_parent'],
+            'url'        => $base . '&pref=' . rawurlencode($pref),
+        ];
     }
     return $out;
 }
