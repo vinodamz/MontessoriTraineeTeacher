@@ -9,10 +9,14 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Server-generated rsync log
+# Server-generated deploy / migrate / smoke logs (published into docroot by
+# .cpanel.yml for CI to fetch — never commit local copies).
 last-deploy.log
+last-migrate.log
+last-smoke.log
+last-*-smoke.log
 
-# User-uploaded files live in uploads/student_docs/ on the server.
+# User-uploaded files live under uploads/ on the server.
 # Track the directory structure + .htaccess + .gitkeep but never the
 # actual uploads.
 uploads/student_docs/*
@@ -27,3 +31,12 @@ uploads/student_photos/*
 !uploads/student_photos/.gitkeep
 uploads/material_media/*
 !uploads/material_media/.gitkeep
+uploads/task_attachments/*
+!uploads/task_attachments/.gitkeep
+uploads/staff_docs/*
+!uploads/staff_docs/.gitkeep
+uploads/recruit_docs/*
+!uploads/recruit_docs/.gitkeep
+
+# Lead PII dumps — keep out of fresh clones; also excluded from rsync.
+sql/odoo_dump/

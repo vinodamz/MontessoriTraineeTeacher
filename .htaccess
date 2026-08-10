@@ -1,7 +1,10 @@
-# Protect includes and sql directories from direct web access.
+# Protect includes, sql, and internal agent/docs files from direct web access.
 RewriteEngine On
 RewriteRule ^includes/.*$ - [F,L]
 RewriteRule ^sql/.*$      - [F,L]
+RewriteRule ^docs/.*$     - [F,L]
+RewriteRule ^CLAUDE\.md$  - [F,L]
+RewriteRule ^\.mcp\.json$ - [F,L]
 
 # OAuth discovery (RFC 8414 / RFC 9728). These URLs have no file extension, so
 # they are rewritten to the PHP that builds them. MCP clients also probe the

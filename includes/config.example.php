@@ -13,6 +13,8 @@ return [
     'app' => [
         'name'           => 'Little Graduates',
         'short_name'     => 'LG',
+        // Live includes/config.php is rsync-excluded. If the cookie is still
+        // MTT_SESSION, edit the live file to LG_SESSION (forces one re-login).
         'session_name'   => 'LG_SESSION',
         'max_pin_tries'  => 5,
         'lock_seconds'   => 30,
