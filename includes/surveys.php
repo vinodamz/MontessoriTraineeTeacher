@@ -568,6 +568,9 @@ function survey_options(array $q): array
 /**
  * Enrolled students as option map: student_id => "Name (Grade)".
  * Filter keys: grades[], enrollment_status[] (default enrolled), active_only (default true).
+ *
+ * Prefer survey_student_search() on public forms — this full list must not be
+ * embedded in HTML (it reveals how many children are enrolled).
  */
 function survey_student_options(array $filter = []): array
 {
@@ -610,6 +613,174 @@ function survey_student_options(array $filter = []): array
             $label = $name;
             if ((string)$row['grade'] !== '') $label .= ' (' . (string)$row['grade'] . ')';
             $out[(string)(int)$row['id']] = $label;
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Minimum characters before a public typeahead search runs. */
+const SURVEY_LOOKUP_MIN_CHARS = 3;
+/** Hard cap on matches returned to the public form (never expose full roster). */
+const SURVEY_LOOKUP_MAX = 8;
+
+/**
+ * Prefix search for the public student typeahead.
+ * Returns a list of ['id','label','data'] — never a total count of the school.
+ * Empty until the query has SURVEY_LOOKUP_MIN_CHARS letters/digits.
+ */
+function survey_lookup_like_prefix(string $query): string
+{
+    // Escape LIKE metacharacters so "a%" cannot dump the roster.
+    return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
+}
+
+function survey_student_search(string $query, array $filter = [], int $limit = SURVEY_LOOKUP_MAX): array
+{
+    $q = preg_replace('/\s+/u', ' ', trim($query)) ?? '';
+    // Count letters/digits so "adh" works; ignore punctuation length tricks.
+    $letters = preg_replace('/[^\p{L}\p{N}]+/u', '', $q) ?? '';
+    if (function_exists('mb_strlen')) {
+        if (mb_strlen($letters) < SURVEY_LOOKUP_MIN_CHARS) return [];
+    } elseif (strlen($letters) < SURVEY_LOOKUP_MIN_CHARS) {
+        return [];
+    }
+    $limit = max(1, min(SURVEY_LOOKUP_MAX, $limit));
+    $like = survey_lookup_like_prefix($q);
+
+    $grades = array_values(array_filter(array_map('strval', (array)($filter['grades'] ?? []))));
+    $statuses = array_values(array_filter(array_map('strval',
+        (array)($filter['enrollment_status'] ?? ['enrolled']))));
+    if ($statuses === []) $statuses = ['enrolled'];
+    $activeOnly = !array_key_exists('active_only', $filter) || !empty($filter['active_only']);
+
+    try {
+        $sql = "SELECT id, first_name, last_name, grade FROM students WHERE 1=1";
+        $params = [':q' => $like . '%', ':q2' => '% ' . $like . '%'];
+        if ($activeOnly) $sql .= " AND is_active = 1";
+        if ($statuses) {
+            $in = [];
+            foreach ($statuses as $i => $st) {
+                $k = ':st' . $i;
+                $in[] = $k;
+                $params[$k] = $st;
+            }
+            $sql .= " AND enrollment_status IN (" . implode(',', $in) . ")";
+        }
+        if ($grades) {
+            $in = [];
+            foreach ($grades as $i => $g) {
+                $k = ':g' . $i;
+                $in[] = $k;
+                $params[$k] = $g;
+            }
+            $sql .= " AND grade IN (" . implode(',', $in) . ")";
+        }
+        // Match start of first name, last name, or any word in the full name.
+        $sql .= " AND (
+                    first_name LIKE :q
+                 OR last_name  LIKE :q
+                 OR CONCAT(TRIM(first_name), ' ', TRIM(last_name)) LIKE :q
+                 OR CONCAT(TRIM(first_name), ' ', TRIM(last_name)) LIKE :q2
+                  )";
+        $sql .= " ORDER BY first_name, last_name LIMIT " . (int)$limit;
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll() as $row) {
+            $id = (int)$row['id'];
+            $data = survey_student_fill_data($id);
+            if (!$data) continue;
+            $label = $data['full_name'];
+            if ($data['grade'] !== '') $label .= ' (' . $data['grade'] . ')';
+            $out[] = [
+                'id'    => (string)$id,
+                'label' => $label,
+                'data'  => $data,
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Prefix search for parents (public typeahead). Same privacy rules as students.
+ * id is "parentId:studentId".
+ */
+function survey_parent_search(string $query, array $filter = [], int $limit = SURVEY_LOOKUP_MAX): array
+{
+    $q = preg_replace('/\s+/u', ' ', trim($query)) ?? '';
+    $letters = preg_replace('/[^\p{L}\p{N}]+/u', '', $q) ?? '';
+    if (function_exists('mb_strlen')) {
+        if (mb_strlen($letters) < SURVEY_LOOKUP_MIN_CHARS) return [];
+    } elseif (strlen($letters) < SURVEY_LOOKUP_MIN_CHARS) {
+        return [];
+    }
+    $limit = max(1, min(SURVEY_LOOKUP_MAX, $limit));
+    $like = survey_lookup_like_prefix($q);
+
+    $grades = array_values(array_filter(array_map('strval', (array)($filter['grades'] ?? []))));
+    $statuses = array_values(array_filter(array_map('strval',
+        (array)($filter['enrollment_status'] ?? ['enrolled']))));
+    if ($statuses === []) $statuses = ['enrolled'];
+    $activeOnly = !array_key_exists('active_only', $filter) || !empty($filter['active_only']);
+
+    try {
+        $sql = "SELECT p.id AS parent_id, p.name AS parent_name,
+                       s.id AS student_id, s.first_name, s.last_name, s.grade
+                  FROM student_parents p
+                  JOIN students s ON s.id = p.student_id
+                 WHERE 1=1";
+        $params = [':q' => $like . '%', ':q2' => '% ' . $like . '%'];
+        if ($activeOnly) $sql .= " AND s.is_active = 1";
+        if ($statuses) {
+            $in = [];
+            foreach ($statuses as $i => $st) {
+                $k = ':st' . $i;
+                $in[] = $k;
+                $params[$k] = $st;
+            }
+            $sql .= " AND s.enrollment_status IN (" . implode(',', $in) . ")";
+        }
+        if ($grades) {
+            $in = [];
+            foreach ($grades as $i => $g) {
+                $k = ':g' . $i;
+                $in[] = $k;
+                $params[$k] = $g;
+            }
+            $sql .= " AND s.grade IN (" . implode(',', $in) . ")";
+        }
+        $sql .= " AND (
+                    p.name LIKE :q
+                 OR p.name LIKE :q2
+                 OR s.first_name LIKE :q
+                 OR s.last_name LIKE :q
+                 OR CONCAT(TRIM(s.first_name), ' ', TRIM(s.last_name)) LIKE :q
+                  )";
+        $sql .= " ORDER BY p.name, s.first_name LIMIT " . (int)$limit;
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll() as $row) {
+            $child = trim((string)$row['first_name'] . ' ' . (string)$row['last_name']);
+            $label = (string)$row['parent_name'] . ' — ' . $child;
+            if ((string)$row['grade'] !== '') $label .= ' (' . (string)$row['grade'] . ')';
+            $id = (int)$row['parent_id'] . ':' . (int)$row['student_id'];
+            $out[] = [
+                'id'    => $id,
+                'label' => $label,
+                'data'  => [
+                    'parent_name'    => (string)$row['parent_name'],
+                    'full_name'      => $child,
+                    'grade'          => (string)$row['grade'],
+                    'primary_parent' => (string)$row['parent_name'],
+                    'student_id'     => (int)$row['student_id'],
+                ],
+            ];
         }
         return $out;
     } catch (Throwable $e) {

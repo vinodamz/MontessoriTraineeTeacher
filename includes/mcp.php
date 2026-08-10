@@ -721,7 +721,9 @@ function mcp_tools(): array
                                'description' => 'Full survey JSON: key, title, sections[].questions[]. '
                                               . 'Question types: text, textarea, radio, checkbox, matrix, '
                                               . 'student_picker, select. Dynamic options: classes, students, '
-                                              . 'parents. Optional options_filter and fills on student_picker.'],
+                                              . 'parents (students/parents are 3-letter typeahead on the '
+                                              . 'public form, not a full roster dropdown). Optional '
+                                              . 'options_filter and fills on student_picker.'],
                 ],
             ],
         ],
