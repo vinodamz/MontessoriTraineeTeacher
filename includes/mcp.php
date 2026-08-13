@@ -11,10 +11,10 @@
  * ---------------------------------------------------------------------------
  * The schema has ~68 tables. A tool per operation would mean hundreds of
  * tools, and the whole catalogue is sent to the model on every single
- * request — clients degrade badly long before that. So the surface is five
- * general tools (schema / query / insert / update / delete) plus a small
- * number of domain tools for operations where writing rows directly would
- * skip business logic.
+ * request — clients degrade badly long before that. So the surface is six
+ * general tools (schema / query / insert / upsert / update / delete) plus a
+ * small number of domain tools for operations where writing rows directly
+ * would skip business logic.
  *
  * ---------------------------------------------------------------------------
  * What stops this from being a loaded gun
@@ -76,9 +76,8 @@ const MCP_WRITE_CAP_MAX     = 5000;
 const MCP_WRITE_DENY_TABLES = [
     'mcp_audit'  => 'the audit log is append-only — a log the audited party can erase is not a log',
     'mcp_tokens' => 'API credentials are managed at /mcp_admin.php, not through the API itself',
-    'survey_definitions' => 'do not use insert/update/delete here — call survey_spec_upsert (then survey_publish). If those tools are missing from tools/list, reconnect the MCP server so it refreshes after deploy',
-    'staff_duty_templates' => 'do not insert/update/delete here — this server will route those calls to staff_duty_template_upsert / staff_duty_template_delete. If those tools are missing from tools/list, reconnect the MCP server',
-    'staff_duty_template_users' => 'assignees are set via staff_duty_template_upsert (audience + user_ids)',
+    'survey_definitions' => 'do not use insert/update/delete here — call survey_spec_upsert (or upsert with spec={...}, then survey_publish). If those tools are missing from tools/list, reconnect the MCP server so it refreshes after deploy',
+    'staff_duty_templates' => 'do not insert/update/delete here — this server will route those calls to staff_duty_template_upsert / staff_duty_template_delete (the generic upsert tool is also routed). If those tools are missing from tools/list, reconnect the MCP server',
     'staff_duty_template_users' => 'assignees are set via staff_duty_template_upsert (audience + user_ids)',
 ];
 
@@ -543,7 +542,7 @@ function mcp_assert_read_only(string $sql): void
         throw new McpError('Only a single statement is allowed — remove the ";".');
     }
     if (!preg_match('/^\s*(SELECT|WITH)\b/i', $body)) {
-        throw new McpError('The query tool runs SELECT only. Use insert, update or delete to write.');
+        throw new McpError('The query tool runs SELECT only. Use insert, upsert, update or delete to write.');
     }
     $banned = ['INTO OUTFILE', 'INTO DUMPFILE', 'LOAD_FILE', 'LOAD DATA',
                'BENCHMARK(', 'SLEEP(', 'GET_LOCK('];
@@ -671,6 +670,42 @@ function mcp_tools(): array
                     'table'  => ['type' => 'string'],
                     'values' => ['type' => 'object',
                                  'description' => 'column → value. Use null for SQL NULL.'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'upsert',
+            'description' => 'Create or update one row. Pass table + values. If values includes the '
+                           . 'primary key and that row exists it is updated; otherwise a new row is '
+                           . 'inserted. For duty lists this is the same as staff_duty_template_upsert '
+                           . '(table staff_duty_templates, or omit table and pass title/frequency/'
+                           . 'audience). For parent surveys use survey_spec_upsert.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'properties' => [
+                    'table'    => ['type' => 'string',
+                                   'description' => 'Table name. Default staff_duty_templates when title '
+                                                  . 'and frequency are present.'],
+                    'values'   => ['type' => 'object',
+                                   'description' => 'column → value. For duties you may also pass fields '
+                                                  . 'at the top level (title, frequency, audience, …).'],
+                    'title'      => ['type' => 'string'],
+                    'frequency'  => ['type' => 'string'],
+                    'audience'   => ['type' => 'string'],
+                    'id'         => ['type' => 'integer'],
+                    'notes'      => ['type' => 'string'],
+                    'user_ids'   => ['type' => 'array', 'items' => ['type' => 'integer']],
+                    'starts_on'  => ['type' => 'string'],
+                    'ends_on'    => ['type' => 'string'],
+                    'weekdays'   => ['type' => 'array'],
+                    'repeat_as'  => ['type' => 'string'],
+                    'is_active'  => ['type' => 'boolean'],
+                    'sort_order' => ['type' => 'integer'],
+                    'where'    => ['type' => 'string',
+                                   'description' => 'Optional. If set and rows match, update those '
+                                                  . '(same caps as update). If none match, insert.'],
+                    'params'   => ['type' => 'object'],
+                    'max_rows' => ['type' => 'integer'],
                 ],
             ],
         ],
@@ -1031,7 +1066,7 @@ function mcp_route_duty_write(string $verb, string $table, array $a, ?int $userI
     if ($table === 'staff_duty_template_users') {
         throw new McpError(
             'Do not write staff_duty_template_users directly. '
-            . 'Call staff_duty_template_upsert with audience="users" and user_ids=[...].'
+            . 'Call staff_duty_template_upsert (or upsert) with audience="users" and user_ids=[...].'
         );
     }
     if ($table !== 'staff_duty_templates') return null;
@@ -1084,6 +1119,156 @@ function mcp_tool_insert(array $a, ?int $userId = null): array
         'inserted_id'   => (int)db()->lastInsertId(),
         'rows_affected' => $stmt->rowCount(),
     ];
+}
+
+function mcp_duty_upsert_field_names(): array
+{
+    return [
+        'id', 'title', 'notes', 'frequency', 'audience', 'user_ids',
+        'starts_on', 'ends_on', 'weekdays', 'days_mask', 'repeat_as',
+        'is_active', 'sort_order',
+    ];
+}
+
+function mcp_merge_upsert_values(array $a, string $table = ''): array
+{
+    $values = is_array($a['values'] ?? null) ? $a['values'] : [];
+    if (array_key_exists('id', $a) && !array_key_exists('id', $values)) {
+        $values['id'] = $a['id'];
+    }
+    $duty = ($table === '' || $table === 'staff_duty_templates');
+    if ($duty) {
+        foreach (mcp_duty_upsert_field_names() as $k) {
+            if ($k === 'id') continue;
+            if (array_key_exists($k, $a) && !array_key_exists($k, $values)) {
+                $values[$k] = $a[$k];
+            }
+        }
+    }
+    return $values;
+}
+
+function mcp_looks_like_duty_upsert(array $a): bool
+{
+    $values = mcp_merge_upsert_values($a, 'staff_duty_templates');
+    $title = trim((string)($values['title'] ?? ''));
+    $freq  = trim((string)($values['frequency'] ?? ''));
+    return $title !== '' && $freq !== '';
+}
+
+function mcp_primary_key_columns(string $table): array
+{
+    $cols = [];
+    foreach (mcp_schema_map()[$table] as $name => $meta) {
+        if (($meta['key'] ?? '') === 'PRI') $cols[] = $name;
+    }
+    return $cols;
+}
+
+function mcp_pk_values_present(array $pkCols, array $values): bool
+{
+    if ($pkCols === []) return false;
+    foreach ($pkCols as $col) {
+        if (!array_key_exists($col, $values) || $values[$col] === null || $values[$col] === '') {
+            return false;
+        }
+        if ($col === 'id' && (int)$values[$col] <= 0) return false;
+    }
+    return true;
+}
+
+/**
+ * Create or update. Duty tables route to staff_duty_template_upsert;
+ * survey_definitions with a spec object routes to survey_spec_upsert.
+ */
+function mcp_tool_upsert(array $a, ?int $userId = null): array
+{
+    $tableRaw = trim((string)($a['table'] ?? ''));
+    if ($tableRaw === '' && mcp_looks_like_duty_upsert($a)) {
+        $tableRaw = 'staff_duty_templates';
+    }
+    if ($tableRaw === '') {
+        throw new McpError(
+            'table is required — or pass title and frequency to upsert a staff duty.'
+        );
+    }
+    $table = mcp_require_table($tableRaw);
+    $a['values'] = mcp_merge_upsert_values($a, $table);
+
+    if ($table === 'survey_definitions') {
+        $spec = $a['spec'] ?? ($a['values']['spec'] ?? null);
+        if (is_array($spec)) {
+            $out = mcp_tool_survey_spec_upsert(['spec' => $spec], $userId);
+            $out['routed'] = 'survey_spec_upsert';
+            return $out;
+        }
+        throw new McpError(
+            'Do not use generic upsert on survey_definitions — call survey_spec_upsert with spec={...}.'
+        );
+    }
+
+    $routed = mcp_route_duty_write('upsert', $table, $a, $userId);
+    if ($routed !== null) return $routed;
+    mcp_assert_writable($table);
+
+    $values = $a['values'];
+    if (!is_array($values) || $values === []) {
+        throw new McpError('values must be a non-empty object of column → value.');
+    }
+
+    $where = trim((string)($a['where'] ?? ''));
+    if ($where !== '') {
+        $params = mcp_params(is_array($a['params'] ?? null) ? $a['params'] : []);
+        $cap    = mcp_cap($a);
+        $before = mcp_rows_matching($table, mcp_assert_where($where), $params, $cap, 'upsert', false);
+        if ($before !== []) {
+            $upd = mcp_tool_update($a, $userId);
+            $upd['action'] = 'updated';
+            return $upd;
+        }
+        return mcp_tool_insert(['table' => $table, 'values' => $values], $userId)
+            + ['action' => 'inserted'];
+    }
+
+    $pkCols = mcp_primary_key_columns($table);
+    if (mcp_pk_values_present($pkCols, $values)) {
+        $clauses = [];
+        $params  = [];
+        foreach ($pkCols as $i => $col) {
+            $ph = ':pk' . $i;
+            $clauses[] = "`$col` = $ph";
+            $params[$ph] = mcp_scalar($values[$col], $col);
+        }
+        $pkWhere = implode(' AND ', $clauses);
+        $before  = mcp_rows_matching($table, $pkWhere, $params, 1, 'upsert', false);
+        if ($before !== []) {
+            $upd = mcp_tool_update([
+                'table'    => $table,
+                'values'   => $values,
+                'where'    => $pkWhere,
+                'params'   => $params,
+                'max_rows' => 1,
+            ], $userId);
+            $upd['action'] = 'updated';
+            return $upd;
+        }
+    }
+
+    $insertValues = $values;
+    $schema = mcp_schema_map()[$table];
+    foreach ($pkCols as $col) {
+        $extra = strtolower((string)($schema[$col]['extra'] ?? ''));
+        if (strpos($extra, 'auto_increment') === false) continue;
+        if (!array_key_exists($col, $insertValues)) continue;
+        $v = $insertValues[$col];
+        if ($v === null || $v === '' || (is_numeric($v) && (int)$v <= 0)) {
+            unset($insertValues[$col]);
+        }
+    }
+
+    $ins = mcp_tool_insert(['table' => $table, 'values' => $insertValues], $userId);
+    $ins['action'] = 'inserted';
+    return $ins;
 }
 
 function mcp_tool_update(array $a, ?int $userId = null): array
@@ -1506,7 +1691,7 @@ function mcp_cap(array $a): int
  * image in one pass. Fetches cap+1 so "more than the cap" is detectable
  * without a second round trip.
  */
-function mcp_rows_matching(string $table, string $where, array $params, int $cap, string $verb): array
+function mcp_rows_matching(string $table, string $where, array $params, int $cap, string $verb, bool $requireMatch = true): array
 {
     $sql  = "SELECT * FROM `$table` WHERE $where LIMIT " . ($cap + 1);
     try {
@@ -1524,7 +1709,7 @@ function mcp_rows_matching(string $table, string $where, array $params, int $cap
             . "$verb them all."
         );
     }
-    if ($rows === []) {
+    if ($requireMatch && $rows === []) {
         throw new McpError("Nothing matches that where clause — no rows to $verb.");
     }
     return $rows;
@@ -1539,7 +1724,7 @@ function mcp_rows_matching(string $table, string $where, array $params, int $cap
 function mcp_call_tool(string $name, array $args, ?int $tokenId,
                        ?int $userId = null, ?int $oauthTokenId = null): array
 {
-    $writes  = ['insert', 'update', 'delete', 'survey_spec_upsert', 'survey_publish',
+    $writes  = ['insert', 'upsert', 'update', 'delete', 'survey_spec_upsert', 'survey_publish',
                 'staff_duty_template_upsert', 'staff_duty_template_delete'];
     $isWrite = in_array($name, $writes, true);
     $pdo     = db();
@@ -1552,6 +1737,7 @@ function mcp_call_tool(string $name, array $args, ?int $tokenId,
             case 'schema': $result = mcp_tool_schema($args); break;
             case 'query':  $result = mcp_tool_query($args);  break;
             case 'insert': $result = mcp_tool_insert($args, $userId); break;
+            case 'upsert': $result = mcp_tool_upsert($args, $userId); break;
             case 'update': $result = mcp_tool_update($args, $userId); break;
             case 'delete': $result = mcp_tool_delete($args, $userId); break;
             case 'survey_spec_validate': $result = mcp_tool_survey_spec_validate($args); break;
