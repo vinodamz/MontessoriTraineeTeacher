@@ -142,9 +142,9 @@ Example:
 }
 ```
 
-`audience` is `all_teachers`, `all_staff`, or `users` (then pass `user_ids`).
-Teachers mark Done / Not done (reason required). They can add their own task;
-admins get a notification.
+`audience` is `all_teachers`, `all_non_teaching`, `all_staff`, or `users`
+(then pass `user_ids`). Teachers mark Done / Not done (reason required).
+They can add their own task; admins get a notification.
 
 ### Creating a survey from JSON
 

@@ -820,9 +820,10 @@ function mcp_tools(): array
         ],
         [
             'name'        => 'staff_duty_template_upsert',
-            'description' => 'Create or update one duty task. Assign with audience all_teachers, all_staff, '
-                           . 'or users (then pass user_ids from staff_duty_people). Frequency: daily, weekly, '
-                           . 'monthly. Do not insert into staff_duty_templates by hand.',
+            'description' => 'Create or update one duty task. Assign with audience all_teachers, '
+                           . 'all_non_teaching, all_staff, or users (then pass user_ids from '
+                           . 'staff_duty_people). Frequency: daily, weekly, monthly. Do not insert '
+                           . 'into staff_duty_templates by hand.',
             'inputSchema' => [
                 'type'       => 'object',
                 'required'   => ['title', 'frequency', 'audience'],
@@ -831,7 +832,8 @@ function mcp_tools(): array
                     'title'      => ['type' => 'string'],
                     'notes'      => ['type' => 'string', 'description' => 'Short help shown under the task.'],
                     'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly']],
-                    'audience'   => ['type' => 'string', 'enum' => ['all_teachers', 'all_staff', 'users']],
+                    'audience'   => ['type' => 'string',
+                                     'enum' => ['all_teachers', 'all_non_teaching', 'all_staff', 'users']],
                     'user_ids'   => ['type' => 'array', 'items' => ['type' => 'integer'],
                                      'description' => 'Required when audience is users.'],
                     'is_active'  => ['type' => 'boolean'],

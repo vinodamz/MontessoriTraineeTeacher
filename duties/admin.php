@@ -84,6 +84,8 @@ require __DIR__ . '/../includes/header.php';
 
 <?php if ($view === 'list'):
     $tpls = duty_templates();
+    $nameById = [];
+    foreach ($people as $p) $nameById[(int)$p['id']] = (string)$p['name'];
     ?>
     <?php if (!$tpls): ?>
         <div class="card"><p>No tasks yet. <a href="/duties/admin.php?view=edit">Add one</a>, or use MCP <code>staff_duty_template_upsert</code>.</p></div>
@@ -95,7 +97,7 @@ require __DIR__ . '/../includes/header.php';
                         <th>Task</th>
                         <th>When</th>
                         <th>Who</th>
-                        <th>People</th>
+                        <th>Goes to</th>
                         <th>On</th>
                         <th></th>
                     </tr>
@@ -109,7 +111,15 @@ require __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= e(duty_freq_label((string)$t['frequency'])) ?></td>
                         <td><?= e(duty_audience_label((string)$t['audience'])) ?></td>
-                        <td><?= (int)$t['assignee_count'] ?></td>
+                        <td>
+                            <?php
+                            $who = [];
+                            foreach (duty_assignee_ids($t) as $uid) {
+                                if (isset($nameById[$uid])) $who[] = $nameById[$uid];
+                            }
+                            echo $who ? e(implode(', ', $who)) : '—';
+                            ?>
+                        </td>
                         <td><?= (int)$t['is_active'] ? 'Yes' : 'No' ?></td>
                         <td>
                             <form method="post" onsubmit="return confirm('Remove this task from future lists? Past ticks stay.');">
@@ -135,7 +145,9 @@ require __DIR__ . '/../includes/header.php';
             'id' => 0, 'title' => '', 'notes' => '', 'frequency' => 'daily',
             'audience' => 'all_teachers', 'is_active' => 1, 'sort_order' => 0, 'user_ids' => [],
         ];
-        $picked = array_map('intval', (array)$t['user_ids']);
+        $picked = (string)$t['audience'] === 'users'
+            ? array_map('intval', (array)$t['user_ids'])
+            : duty_assignee_ids($t);
         ?>
         <div class="card">
             <h2><?= $editId ? 'Edit task' : 'New task' ?></h2>
@@ -166,11 +178,13 @@ require __DIR__ . '/../includes/header.php';
                         </label>
                     <?php endforeach; ?>
                 </fieldset>
-                <div class="duty-people">
-                    <p class="muted small">Named people (used when “Named people” is selected)</p>
+                <div class="duty-people" id="duty-people">
+                    <p class="muted small">Ticking a group auto-selects those people so you can see who it goes to. Change a name to switch to a custom list.</p>
+                    <p class="muted small" id="duty-who-count"></p>
                     <?php foreach ($people as $p): ?>
                         <label class="duty-person">
                             <input type="checkbox" name="user_ids[]" value="<?= (int)$p['id'] ?>"
+                                   data-role="<?= e((string)$p['role']) ?>"
                                 <?= in_array((int)$p['id'], $picked, true) ? 'checked' : '' ?>>
                             <?= e((string)$p['name']) ?>
                             <span class="muted small"><?= e(role_label((string)$p['role'])) ?></span>
@@ -187,6 +201,54 @@ require __DIR__ . '/../includes/header.php';
                 <button class="btn btn-primary" type="submit">Save</button>
             </form>
         </div>
+        <script>
+        (function () {
+            var form = document.querySelector('.duty-form');
+            if (!form) return;
+            var boxes = form.querySelectorAll('#duty-people input[type=checkbox]');
+            var radios = form.querySelectorAll('input[name=audience]');
+            var countEl = document.getElementById('duty-who-count');
+            var syncing = false;
+
+            function audience() {
+                var on = form.querySelector('input[name=audience]:checked');
+                return on ? on.value : 'users';
+            }
+            function matches(box, a) {
+                var role = box.getAttribute('data-role') || '';
+                if (a === 'all_staff') return true;
+                if (a === 'all_teachers') return role === 'teacher';
+                if (a === 'all_non_teaching') return role === 'non_teaching';
+                return box.checked;
+            }
+            function recount() {
+                var n = 0, names = [];
+                boxes.forEach(function (b) {
+                    if (b.checked) { n++; names.push((b.parentNode.textContent || '').replace(/\s+/g, ' ').trim()); }
+                });
+                if (countEl) countEl.textContent = n ? (n + ' selected — ' + names.join(', ')) : 'Nobody selected yet.';
+            }
+            function applyGroup(a) {
+                if (a === 'users') { recount(); return; }
+                syncing = true;
+                boxes.forEach(function (b) { b.checked = matches(b, a); });
+                syncing = false;
+                recount();
+            }
+            radios.forEach(function (r) {
+                r.addEventListener('change', function () { applyGroup(r.value); });
+            });
+            boxes.forEach(function (b) {
+                b.addEventListener('change', function () {
+                    if (syncing) return;
+                    var users = form.querySelector('input[name=audience][value=users]');
+                    if (users) users.checked = true;
+                    recount();
+                });
+            });
+            applyGroup(audience());
+        })();
+        </script>
     <?php } ?>
 
 <?php else:

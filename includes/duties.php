@@ -14,7 +14,7 @@ require_once __DIR__ . '/staff.php';
 require_once __DIR__ . '/notify.php';
 
 const DUTY_FREQUENCIES = ['daily', 'weekly', 'monthly'];
-const DUTY_AUDIENCES   = ['all_teachers', 'all_staff', 'users'];
+const DUTY_AUDIENCES   = ['all_teachers', 'all_non_teaching', 'all_staff', 'users'];
 const DUTY_STATUSES    = ['pending', 'done', 'not_done'];
 
 function duty_freq_label(string $freq): string
@@ -25,9 +25,10 @@ function duty_freq_label(string $freq): string
 function duty_audience_label(string $audience): string
 {
     return [
-        'all_teachers' => 'All teachers',
-        'all_staff'    => 'All staff',
-        'users'        => 'Named people',
+        'all_teachers'      => 'All teachers',
+        'all_non_teaching'  => 'All non-teaching',
+        'all_staff'         => 'All staff',
+        'users'             => 'Named people',
     ][$audience] ?? $audience;
 }
 
@@ -87,6 +88,10 @@ function duty_user_ids_for_audience(string $audience, array $userIds = []): arra
 {
     if ($audience === 'all_teachers') {
         $rows = db()->query("SELECT id FROM users WHERE active = 1 AND role = 'teacher' ORDER BY name")->fetchAll();
+        return array_map(static fn($r) => (int)$r['id'], $rows);
+    }
+    if ($audience === 'all_non_teaching') {
+        $rows = db()->query("SELECT id FROM users WHERE active = 1 AND role = 'non_teaching' ORDER BY name")->fetchAll();
         return array_map(static fn($r) => (int)$r['id'], $rows);
     }
     if ($audience === 'all_staff') {
@@ -157,7 +162,7 @@ function duty_template_upsert(array $in, ?int $byUserId): array
     }
     $audience = (string)($in['audience'] ?? 'all_teachers');
     if (!in_array($audience, DUTY_AUDIENCES, true)) {
-        throw new InvalidArgumentException('audience must be all_teachers, all_staff or users.');
+        throw new InvalidArgumentException('audience must be all_teachers, all_non_teaching, all_staff or users.');
     }
     $userIds = array_values(array_unique(array_filter(array_map('intval', (array)($in['user_ids'] ?? [])))));
     if ($audience === 'users' && $userIds === []) {
