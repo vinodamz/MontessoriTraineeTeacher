@@ -121,7 +121,8 @@ https, a literal loopback address, or a reverse-DNS private scheme.
 
 Generic tools cover ~68 tables. Survey **creation** must use the `survey_*`
 domain tools — inserting into `surveys` alone does not register questions, and
-`survey_definitions` is not writable through `insert`/`update`/`delete`.
+`survey_definitions` is not writable through `insert`/`update`/`delete`
+(generic `upsert` with a `spec` object is routed to `survey_spec_upsert`).
 
 Duty lists must use `staff_duty_*` tools. Generic `insert`/`upsert`/`update`/`delete`
 on `staff_duty_templates` is routed to `staff_duty_template_upsert` so a
