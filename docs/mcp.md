@@ -112,10 +112,39 @@ https, a literal loopback address, or a reverse-DNS private scheme.
 | `survey_spec_list` | List built-in + MCP surveys. |
 | `survey_publish` | Mint/open/close the shareable `/survey.php?t=…` link. |
 | `survey_prefill_links` | Per-child signed URLs that autofill identity fields. |
+| `staff_duty_people` | Active staff you can assign (id, name, role). |
+| `staff_duty_template_list` | Configured daily/weekly/monthly duty tasks. |
+| `staff_duty_template_upsert` | Create/update a duty and who it is for. |
+| `staff_duty_template_delete` | Remove a duty from future lists. |
+| `staff_duty_status` | Who ticked done / not done for a period. |
 
 Generic tools cover ~68 tables. Survey **creation** must use the `survey_*`
 domain tools — inserting into `surveys` alone does not register questions, and
 `survey_definitions` is not writable through `insert`/`update`/`delete`.
+
+Duty lists must use `staff_duty_*` tools — do not insert into
+`staff_duty_templates` by hand. Teachers tick at `/duties/index.php`.
+
+### Staff duty lists
+
+```text
+staff_duty_people → staff_duty_template_upsert → staff_duty_status
+```
+
+Example:
+
+```json
+{
+  "title": "Classroom ready by 8:30",
+  "frequency": "daily",
+  "audience": "all_teachers",
+  "notes": "Lights, materials on shelves, attendance sheet out"
+}
+```
+
+`audience` is `all_teachers`, `all_staff`, or `users` (then pass `user_ids`).
+Teachers mark Done / Not done (reason required). They can add their own task;
+admins get a notification.
 
 ### Creating a survey from JSON
 

@@ -63,6 +63,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <div class="actionbar">
         <a class="btn" href="/staff/attendance.php">Today's attendance</a>
+        <a class="btn" href="/duties/admin.php">Duty lists</a>
         <a class="btn" href="/staff/shifts.php">Working hours</a>
         <a class="btn" href="/staff/leave.php">Leave requests</a>
         <a class="btn" href="/staff/payroll.php">Payroll</a>
