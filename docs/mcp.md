@@ -122,8 +122,10 @@ Generic tools cover ~68 tables. Survey **creation** must use the `survey_*`
 domain tools — inserting into `surveys` alone does not register questions, and
 `survey_definitions` is not writable through `insert`/`update`/`delete`.
 
-Duty lists must use `staff_duty_*` tools — do not insert into
-`staff_duty_templates` by hand. Teachers tick at `/duties/index.php`.
+Duty lists must use `staff_duty_*` tools. Generic `insert`/`update`/`delete`
+on `staff_duty_templates` is routed to `staff_duty_template_upsert` so a
+client that writes a row still succeeds. `staff_duty_template_users` is not
+writable directly — pass `user_ids` on upsert.
 
 ### Staff duty lists
 

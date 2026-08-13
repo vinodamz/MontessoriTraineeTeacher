@@ -77,7 +77,8 @@ const MCP_WRITE_DENY_TABLES = [
     'mcp_audit'  => 'the audit log is append-only — a log the audited party can erase is not a log',
     'mcp_tokens' => 'API credentials are managed at /mcp_admin.php, not through the API itself',
     'survey_definitions' => 'do not use insert/update/delete here — call survey_spec_upsert (then survey_publish). If those tools are missing from tools/list, reconnect the MCP server so it refreshes after deploy',
-    'staff_duty_templates' => 'do not insert/update/delete here — call staff_duty_template_upsert / staff_duty_template_delete',
+    'staff_duty_templates' => 'do not insert/update/delete here — this server will route those calls to staff_duty_template_upsert / staff_duty_template_delete. If those tools are missing from tools/list, reconnect the MCP server',
+    'staff_duty_template_users' => 'assignees are set via staff_duty_template_upsert (audience + user_ids)',
     'staff_duty_template_users' => 'assignees are set via staff_duty_template_upsert (audience + user_ids)',
 ];
 
@@ -609,7 +610,7 @@ function mcp_bind_used(string $sql, array $params): array
  */
 function mcp_tools(): array
 {
-    return [
+    $tools = [
         [
             'name'        => 'schema',
             'description' => 'Describe the database. Call this FIRST when you do not already know the '
@@ -659,7 +660,10 @@ function mcp_tools(): array
         [
             'name'        => 'insert',
             'description' => 'Insert one row and return its new id. Column names are checked against '
-                           . 'the real table, so a typo fails loudly instead of being ignored.',
+                           . 'the real table, so a typo fails loudly instead of being ignored. '
+                           . 'For staff duty lists use staff_duty_template_upsert instead of inserting '
+                           . 'into staff_duty_templates — but insert is also routed there automatically. '
+                           . 'For parent surveys use survey_spec_upsert, not insert into survey_definitions.',
             'inputSchema' => [
                 'type'       => 'object',
                 'required'   => ['table', 'values'],
@@ -877,6 +881,23 @@ function mcp_tools(): array
             ],
         ],
     ];
+
+    $readonly = [
+        'schema', 'query',
+        'survey_spec_validate', 'survey_spec_get', 'survey_spec_list', 'survey_prefill_links',
+        'staff_duty_people', 'staff_duty_template_list', 'staff_duty_status',
+    ];
+    $destructive = ['delete', 'staff_duty_template_delete'];
+    foreach ($tools as &$t) {
+        $ro = in_array($t['name'], $readonly, true);
+        $t['annotations'] = [
+            'readOnlyHint'    => $ro,
+            'destructiveHint' => in_array($t['name'], $destructive, true),
+            'openWorldHint'   => false,
+        ];
+    }
+    unset($t);
+    return $tools;
 }
 
 // --------------------------------------------------------------- tool bodies
@@ -986,9 +1007,56 @@ function mcp_tool_query(array $a): array
     ];
 }
 
-function mcp_tool_insert(array $a): array
+function mcp_duty_id_from_write_args(array $a): int
+{
+    if (isset($a['values']['id'])) return (int)$a['values']['id'];
+    $where = (string)($a['where'] ?? '');
+    $params = mcp_params(is_array($a['params'] ?? null) ? $a['params'] : []);
+    if (preg_match('/\bid\s*=\s*:([A-Za-z0-9_]+)/', $where, $m)) {
+        $k = ':' . $m[1];
+        if (array_key_exists($k, $params)) return (int)$params[$k];
+    }
+    if (preg_match('/\bid\s*=\s*(\d+)/', $where, $m)) return (int)$m[1];
+    throw new McpError(
+        'Need the template id. Prefer staff_duty_template_upsert (with id) or staff_duty_template_delete.'
+    );
+}
+
+/**
+ * Generic insert/update/delete against duty config tables is routed to the
+ * domain tools so a client that only knows "write a row" still succeeds.
+ */
+function mcp_route_duty_write(string $verb, string $table, array $a, ?int $userId): ?array
+{
+    if ($table === 'staff_duty_template_users') {
+        throw new McpError(
+            'Do not write staff_duty_template_users directly. '
+            . 'Call staff_duty_template_upsert with audience="users" and user_ids=[...].'
+        );
+    }
+    if ($table !== 'staff_duty_templates') return null;
+
+    if ($verb === 'delete') {
+        return mcp_tool_staff_duty_template_delete(['id' => mcp_duty_id_from_write_args($a)]);
+    }
+    $values = is_array($a['values'] ?? null) ? $a['values'] : [];
+    if ($verb === 'update') {
+        $values['id'] = mcp_duty_id_from_write_args($a);
+    }
+    if (isset($values['user_ids']) && is_string($values['user_ids'])) {
+        $decoded = json_decode($values['user_ids'], true);
+        if (is_array($decoded)) $values['user_ids'] = $decoded;
+    }
+    $out = mcp_tool_staff_duty_template_upsert($values, $userId);
+    $out['routed'] = 'staff_duty_template_upsert';
+    return $out;
+}
+
+function mcp_tool_insert(array $a, ?int $userId = null): array
 {
     $table = mcp_require_table((string)($a['table'] ?? ''));
+    $routed = mcp_route_duty_write('insert', $table, $a, $userId);
+    if ($routed !== null) return $routed;
     mcp_assert_writable($table);
 
     $values = $a['values'] ?? null;
@@ -1018,9 +1086,11 @@ function mcp_tool_insert(array $a): array
     ];
 }
 
-function mcp_tool_update(array $a): array
+function mcp_tool_update(array $a, ?int $userId = null): array
 {
     $table = mcp_require_table((string)($a['table'] ?? ''));
+    $routed = mcp_route_duty_write('update', $table, $a, $userId);
+    if ($routed !== null) return $routed;
     mcp_assert_writable($table);
 
     $values = $a['values'] ?? null;
@@ -1056,9 +1126,11 @@ function mcp_tool_update(array $a): array
     ];
 }
 
-function mcp_tool_delete(array $a): array
+function mcp_tool_delete(array $a, ?int $userId = null): array
 {
     $table = mcp_require_table((string)($a['table'] ?? ''));
+    $routed = mcp_route_duty_write('delete', $table, $a, $userId);
+    if ($routed !== null) return $routed;
     mcp_assert_writable($table);
 
     $where  = mcp_assert_where((string)($a['where'] ?? ''));
@@ -1479,9 +1551,9 @@ function mcp_call_tool(string $name, array $args, ?int $tokenId,
         switch ($name) {
             case 'schema': $result = mcp_tool_schema($args); break;
             case 'query':  $result = mcp_tool_query($args);  break;
-            case 'insert': $result = mcp_tool_insert($args); break;
-            case 'update': $result = mcp_tool_update($args); break;
-            case 'delete': $result = mcp_tool_delete($args); break;
+            case 'insert': $result = mcp_tool_insert($args, $userId); break;
+            case 'update': $result = mcp_tool_update($args, $userId); break;
+            case 'delete': $result = mcp_tool_delete($args, $userId); break;
             case 'survey_spec_validate': $result = mcp_tool_survey_spec_validate($args); break;
             case 'survey_spec_upsert':   $result = mcp_tool_survey_spec_upsert($args, $userId); break;
             case 'survey_spec_get':      $result = mcp_tool_survey_spec_get($args); break;
