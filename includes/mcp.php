@@ -821,9 +821,10 @@ function mcp_tools(): array
         [
             'name'        => 'staff_duty_template_upsert',
             'description' => 'Create or update one duty task. Assign with audience all_teachers, '
-                           . 'all_non_teaching, all_staff, or users (then pass user_ids from '
-                           . 'staff_duty_people). Frequency: daily, weekly, monthly. Do not insert '
-                           . 'into staff_duty_templates by hand.',
+                           . 'all_non_teaching, all_staff, or users. Frequency: daily, weekly, monthly, '
+                           . 'or adhoc (needs starts_on). Optional ends_on, weekdays, and for adhoc '
+                           . 'repeat_as once|daily|weekly|monthly. Do not insert into '
+                           . 'staff_duty_templates by hand.',
             'inputSchema' => [
                 'type'       => 'object',
                 'required'   => ['title', 'frequency', 'audience'],
@@ -831,11 +832,19 @@ function mcp_tools(): array
                     'id'         => ['type' => 'integer', 'description' => 'Set to update an existing template.'],
                     'title'      => ['type' => 'string'],
                     'notes'      => ['type' => 'string', 'description' => 'Short help shown under the task.'],
-                    'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly']],
+                    'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly', 'adhoc']],
                     'audience'   => ['type' => 'string',
                                      'enum' => ['all_teachers', 'all_non_teaching', 'all_staff', 'users']],
                     'user_ids'   => ['type' => 'array', 'items' => ['type' => 'integer'],
                                      'description' => 'Required when audience is users.'],
+                    'starts_on'  => ['type' => 'string', 'description' => 'YYYY-MM-DD. Required for adhoc.'],
+                    'ends_on'    => ['type' => 'string', 'description' => 'YYYY-MM-DD. Defaults to starts_on for adhoc.'],
+                    'weekdays'   => ['type' => 'array',
+                                     'items' => ['type' => 'string'],
+                                     'description' => 'Sun..Sat or 0-6. Omit for every day.'],
+                    'days_mask'  => ['type' => 'integer', 'description' => 'Bitmask Sun=1 .. Sat=64. Alternative to weekdays.'],
+                    'repeat_as'  => ['type' => 'string', 'enum' => ['once', 'daily', 'weekly', 'monthly'],
+                                     'description' => 'Adhoc only: once in the window, or each day/week/month.'],
                     'is_active'  => ['type' => 'boolean'],
                     'sort_order' => ['type' => 'integer'],
                 ],
@@ -859,7 +868,7 @@ function mcp_tools(): array
             'inputSchema' => [
                 'type'       => 'object',
                 'properties' => [
-                    'frequency' => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly'],
+                    'frequency' => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly', 'adhoc'],
                                     'description' => 'Omit to return all three current periods.'],
                     'period'    => ['type' => 'string',
                                     'description' => 'daily YYYY-MM-DD, weekly YYYY-Www, monthly YYYY-MM.'],
@@ -1271,6 +1280,11 @@ function mcp_tool_staff_duty_template_list(array $a): array
             'title'          => (string)$t['title'],
             'notes'          => $t['notes'],
             'frequency'      => (string)$t['frequency'],
+            'repeat_as'      => (string)($t['repeat_as'] ?? 'once'),
+            'starts_on'      => $t['starts_on'] ?? null,
+            'ends_on'        => $t['ends_on'] ?? null,
+            'days_mask'      => (int)($t['days_mask'] ?? 127),
+            'schedule'       => duty_schedule_label($t),
             'audience'       => (string)$t['audience'],
             'user_ids'       => $t['user_ids'],
             'assignee_count' => (int)$t['assignee_count'],
@@ -1295,6 +1309,10 @@ function mcp_tool_staff_duty_template_upsert(array $a, ?int $userId): array
         'id'             => (int)$tpl['id'],
         'title'          => (string)$tpl['title'],
         'frequency'      => (string)$tpl['frequency'],
+        'repeat_as'      => (string)($tpl['repeat_as'] ?? 'once'),
+        'starts_on'      => $tpl['starts_on'] ?? null,
+        'ends_on'        => $tpl['ends_on'] ?? null,
+        'schedule'       => duty_schedule_label($tpl),
         'audience'       => (string)$tpl['audience'],
         'user_ids'       => $tpl['user_ids'] ?? [],
         'assignee_count' => count(duty_assignee_ids($tpl)),
@@ -1321,7 +1339,7 @@ function mcp_tool_staff_duty_status(array $a): array
     if (!empty($a['frequency'])) {
         $f = (string)$a['frequency'];
         if (!in_array($f, DUTY_FREQUENCIES, true)) {
-            throw new McpError('frequency must be daily, weekly or monthly.');
+            throw new McpError('frequency must be daily, weekly, monthly or adhoc.');
         }
         $freqs = [$f];
     }

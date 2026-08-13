@@ -77,7 +77,7 @@ foreach (DUTY_FREQUENCIES as $freq) {
     }
     $sections[$freq] = [
         'key'     => $key,
-        'label'   => duty_period_label($freq, $key),
+        'label'   => $freq === 'adhoc' ? 'Open now' : duty_period_label($freq, $key),
         'items'   => $items,
         'pending' => $pending,
         'note'    => duty_period_note($uid, $freq, $key),
@@ -139,6 +139,13 @@ $note = $sec['note'];
         </div>
         <?php if (!empty($it['notes'])): ?>
             <p class="muted small"><?= e((string)$it['notes']) ?></p>
+        <?php endif; ?>
+        <?php
+            $ws = (string)($it['window_start'] ?? '');
+            $we = (string)($it['window_end'] ?? '');
+            if ($ws !== '' || $we !== ''):
+        ?>
+            <p class="muted small"><?= e(trim($ws . ($we && $we !== $ws ? ' → ' . $we : ''))) ?></p>
         <?php endif; ?>
 
         <div class="duty-actions">

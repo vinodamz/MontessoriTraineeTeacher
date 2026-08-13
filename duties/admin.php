@@ -37,6 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'frequency'  => (string)($_POST['frequency'] ?? 'daily'),
                 'audience'   => (string)($_POST['audience'] ?? 'all_teachers'),
                 'user_ids'   => $ids,
+                'starts_on'  => (string)($_POST['starts_on'] ?? ''),
+                'ends_on'    => (string)($_POST['ends_on'] ?? ''),
+                'weekdays'   => (array)($_POST['weekdays'] ?? []),
+                'repeat_as'  => (string)($_POST['repeat_as'] ?? 'once'),
                 'is_active'  => !empty($_POST['is_active']),
                 'sort_order' => (int)($_POST['sort_order'] ?? 0),
             ], (int)$user['id']);
@@ -72,7 +76,7 @@ require __DIR__ . '/../includes/header.php';
 <div class="page-head">
     <div>
         <h1>Duty lists</h1>
-        <p class="muted">Daily, weekly and monthly ticks for teachers and staff. MCP can add or change these too.</p>
+        <p class="muted">Daily, weekly, monthly and adhoc ticks. Adhoc tasks have a start and end date.</p>
     </div>
     <div class="actionbar">
         <a class="btn" href="/duties/index.php">My ticks</a>
@@ -109,7 +113,7 @@ require __DIR__ . '/../includes/header.php';
                             <a href="/duties/admin.php?view=edit&amp;id=<?= (int)$t['id'] ?>"><?= e((string)$t['title']) ?></a>
                             <?php if (!empty($t['notes'])): ?><div class="muted small"><?= e((string)$t['notes']) ?></div><?php endif; ?>
                         </td>
-                        <td><?= e(duty_freq_label((string)$t['frequency'])) ?></td>
+                        <td><?= e(duty_schedule_label($t)) ?></td>
                         <td><?= e(duty_audience_label((string)$t['audience'])) ?></td>
                         <td>
                             <?php
@@ -144,7 +148,9 @@ require __DIR__ . '/../includes/header.php';
         $t = $t ?: [
             'id' => 0, 'title' => '', 'notes' => '', 'frequency' => 'daily',
             'audience' => 'all_teachers', 'is_active' => 1, 'sort_order' => 0, 'user_ids' => [],
+            'starts_on' => '', 'ends_on' => '', 'days_mask' => DAYS_ALL, 'repeat_as' => 'once',
         ];
+        $mask = (int)($t['days_mask'] ?? DAYS_ALL);
         $picked = (string)$t['audience'] === 'users'
             ? array_map('intval', (array)$t['user_ids'])
             : duty_assignee_ids($t);
@@ -162,12 +168,42 @@ require __DIR__ . '/../includes/header.php';
                     <input type="text" name="notes" maxlength="500" value="<?= e((string)($t['notes'] ?? '')) ?>">
                 </label>
                 <label>Frequency
-                    <select name="frequency">
+                    <select name="frequency" id="duty-freq">
                         <?php foreach (DUTY_FREQUENCIES as $f): ?>
                             <option value="<?= e($f) ?>" <?= $t['frequency'] === $f ? 'selected' : '' ?>><?= e(duty_freq_label($f)) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
+                <div class="duty-dates">
+                    <label>Start date
+                        <input type="date" name="starts_on" id="duty-start" value="<?= e((string)($t['starts_on'] ?? '')) ?>">
+                    </label>
+                    <label>End date
+                        <input type="date" name="ends_on" id="duty-end" value="<?= e((string)($t['ends_on'] ?? '')) ?>">
+                    </label>
+                </div>
+                <p class="muted small" id="duty-date-hint">Optional window. Leave blank for an ongoing daily/weekly/monthly list.</p>
+                <fieldset class="duty-audience" id="duty-repeat-wrap">
+                    <legend>For this window, show</legend>
+                    <?php foreach (DUTY_REPEAT_AS as $r): ?>
+                        <label class="sv-choice">
+                            <input type="radio" name="repeat_as" value="<?= e($r) ?>"
+                                   <?= ($t['repeat_as'] ?? 'once') === $r ? 'checked' : '' ?>>
+                            <span><?= e(duty_repeat_label($r)) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </fieldset>
+                <fieldset class="duty-audience" id="duty-days-wrap">
+                    <legend>Which days</legend>
+                    <?php for ($i = 0; $i < 7; $i++): ?>
+                        <label class="duty-person">
+                            <input type="checkbox" name="weekdays[]" value="<?= $i ?>"
+                                <?= ($mask & (1 << $i)) ? 'checked' : '' ?>>
+                            <?= e(DUTY_WEEKDAY_NAMES[$i]) ?>
+                        </label>
+                    <?php endfor; ?>
+                    <p class="muted small">Leave all ticked for every day. Un-tick days it should skip.</p>
+                </fieldset>
                 <fieldset class="duty-audience">
                     <legend>Assign to</legend>
                     <?php foreach (DUTY_AUDIENCES as $a): ?>
@@ -205,6 +241,26 @@ require __DIR__ . '/../includes/header.php';
         (function () {
             var form = document.querySelector('.duty-form');
             if (!form) return;
+            var freq = document.getElementById('duty-freq');
+            var start = document.getElementById('duty-start');
+            var hint = document.getElementById('duty-date-hint');
+            var repeatWrap = document.getElementById('duty-repeat-wrap');
+            var daysWrap = document.getElementById('duty-days-wrap');
+            function syncFreq() {
+                var v = freq ? freq.value : 'daily';
+                var adhoc = v === 'adhoc';
+                if (repeatWrap) repeatWrap.style.display = adhoc ? '' : 'none';
+                if (daysWrap) daysWrap.style.display = (v === 'daily' || v === 'adhoc') ? '' : 'none';
+                if (start) start.required = adhoc;
+                if (hint) {
+                    hint.textContent = adhoc
+                        ? 'Adhoc needs a start date. End date defaults to the start if you leave it blank.'
+                        : 'Optional window. Leave blank for an ongoing daily/weekly/monthly list.';
+                }
+            }
+            if (freq) freq.addEventListener('change', syncFreq);
+            syncFreq();
+
             var boxes = form.querySelectorAll('#duty-people input[type=checkbox]');
             var radios = form.querySelectorAll('input[name=audience]');
             var countEl = document.getElementById('duty-who-count');
