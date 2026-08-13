@@ -13,13 +13,30 @@ require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/staff.php';
 require_once __DIR__ . '/notify.php';
 
-const DUTY_FREQUENCIES = ['daily', 'weekly', 'monthly'];
+const DUTY_FREQUENCIES = ['daily', 'weekly', 'monthly', 'adhoc'];
+const DUTY_REPEAT_AS   = ['once', 'daily', 'weekly', 'monthly'];
 const DUTY_AUDIENCES   = ['all_teachers', 'all_non_teaching', 'all_staff', 'users'];
 const DUTY_STATUSES    = ['pending', 'done', 'not_done'];
+const DUTY_WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function duty_freq_label(string $freq): string
 {
-    return ['daily' => 'Daily', 'weekly' => 'Weekly', 'monthly' => 'Monthly'][$freq] ?? $freq;
+    return [
+        'daily'   => 'Daily',
+        'weekly'  => 'Weekly',
+        'monthly' => 'Monthly',
+        'adhoc'   => 'Adhoc',
+    ][$freq] ?? $freq;
+}
+
+function duty_repeat_label(string $repeat): string
+{
+    return [
+        'once'    => 'Once in this window',
+        'daily'   => 'Each selected day',
+        'weekly'  => 'Each week',
+        'monthly' => 'Each month',
+    ][$repeat] ?? $repeat;
 }
 
 function duty_audience_label(string $audience): string
@@ -44,6 +61,98 @@ function duty_period_key(string $freq, ?DateTimeInterface $when = null): string
     if ($freq === 'weekly')  return $d->format('o-\WW');
     if ($freq === 'monthly') return $d->format('Y-m');
     return $d->format('Y-m-d');
+}
+
+function duty_ymd(?string $s): ?string
+{
+    $s = trim((string)$s);
+    if ($s === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) return null;
+    return $s;
+}
+
+function duty_days_mask_from($in): int
+{
+    if (is_int($in) || (is_string($in) && ctype_digit($in))) {
+        return max(0, min(127, (int)$in));
+    }
+    if (!is_array($in)) return DAYS_ALL;
+    $mask = 0;
+    foreach ($in as $v) {
+        if (is_numeric($v)) {
+            $i = (int)$v;
+            if ($i >= 0 && $i <= 6) $mask |= (1 << $i);
+            continue;
+        }
+        $name = strtolower(substr((string)$v, 0, 3));
+        $map = ['sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6];
+        if (isset($map[$name])) $mask |= (1 << $map[$name]);
+    }
+    return $mask === 0 ? DAYS_ALL : $mask;
+}
+
+/** Which teacher tab an item for this template belongs on. */
+function duty_item_slot(array $tpl): string
+{
+    $freq = (string)($tpl['frequency'] ?? 'daily');
+    if ($freq !== 'adhoc') return $freq;
+    $repeat = (string)($tpl['repeat_as'] ?? 'once');
+    if ($repeat === 'once' || !in_array($repeat, DUTY_REPEAT_AS, true)) return 'adhoc';
+    return $repeat;
+}
+
+function duty_schedule_label(array $tpl): string
+{
+    $freq = (string)($tpl['frequency'] ?? 'daily');
+    $bits = [duty_freq_label($freq)];
+    if ($freq === 'adhoc') {
+        $bits[] = duty_repeat_label((string)($tpl['repeat_as'] ?? 'once'));
+    }
+    $start = duty_ymd($tpl['starts_on'] ?? null);
+    $end   = duty_ymd($tpl['ends_on'] ?? null);
+    if ($start && $end && $start === $end) $bits[] = $start;
+    elseif ($start && $end) $bits[] = $start . ' → ' . $end;
+    elseif ($start) $bits[] = 'from ' . $start;
+    elseif ($end) $bits[] = 'until ' . $end;
+    $mask = (int)($tpl['days_mask'] ?? DAYS_ALL);
+    $slot = duty_item_slot($tpl);
+    if ($slot === 'daily' || $slot === 'adhoc') {
+        if ($mask !== DAYS_ALL) $bits[] = days_mask_label($mask);
+    }
+    return implode(' · ', $bits);
+}
+
+/** True if this template should appear for the given moment. */
+function duty_applies_on(array $tpl, ?DateTimeInterface $when = null): bool
+{
+    $d = $when ? DateTimeImmutable::createFromInterface($when) : new DateTimeImmutable('today');
+    $day = $d->format('Y-m-d');
+    $start = duty_ymd($tpl['starts_on'] ?? null);
+    $end   = duty_ymd($tpl['ends_on'] ?? null);
+    $slot  = duty_item_slot($tpl);
+
+    if ($slot === 'weekly') {
+        $weekStart = $d->setISODate((int)$d->format('o'), (int)$d->format('W'))->format('Y-m-d');
+        $weekEnd = (new DateTimeImmutable($weekStart))->modify('+6 days')->format('Y-m-d');
+        if ($start && $start > $weekEnd) return false;
+        if ($end && $end < $weekStart) return false;
+        return true;
+    }
+    if ($slot === 'monthly') {
+        $monthStart = $d->format('Y-m-01');
+        $monthEnd = $d->format('Y-m-t');
+        if ($start && $start > $monthEnd) return false;
+        if ($end && $end < $monthStart) return false;
+        return true;
+    }
+
+    if ($start && $day < $start) return false;
+    if ($end && $day > $end) return false;
+    $mask = (int)($tpl['days_mask'] ?? DAYS_ALL);
+    if ($mask !== DAYS_ALL && $mask > 0) {
+        $dow = (int)$d->format('w');
+        if (($mask & (1 << $dow)) === 0) return false;
+    }
+    return true;
 }
 
 function duty_period_label(string $freq, string $key): string
@@ -158,7 +267,7 @@ function duty_template_upsert(array $in, ?int $byUserId): array
     $notes = $notes === '' ? null : mb_substr($notes, 0, 500);
     $freq = (string)($in['frequency'] ?? 'daily');
     if (!in_array($freq, DUTY_FREQUENCIES, true)) {
-        throw new InvalidArgumentException('frequency must be daily, weekly or monthly.');
+        throw new InvalidArgumentException('frequency must be daily, weekly, monthly or adhoc.');
     }
     $audience = (string)($in['audience'] ?? 'all_teachers');
     if (!in_array($audience, DUTY_AUDIENCES, true)) {
@@ -170,6 +279,19 @@ function duty_template_upsert(array $in, ?int $byUserId): array
     }
     $active = array_key_exists('is_active', $in) ? (!empty($in['is_active']) ? 1 : 0) : 1;
     $sort = (int)($in['sort_order'] ?? 0);
+    $start = duty_ymd($in['starts_on'] ?? null);
+    $end   = duty_ymd($in['ends_on'] ?? null);
+    if ($start && $end && $end < $start) {
+        throw new InvalidArgumentException('End date cannot be before the start date.');
+    }
+    $repeat = (string)($in['repeat_as'] ?? 'once');
+    if (!in_array($repeat, DUTY_REPEAT_AS, true)) $repeat = 'once';
+    if ($freq !== 'adhoc') $repeat = 'once';
+    if ($freq === 'adhoc' && !$start) {
+        throw new InvalidArgumentException('Adhoc tasks need a start date.');
+    }
+    if ($freq === 'adhoc' && !$end) $end = $start;
+    $mask = duty_days_mask_from($in['days_mask'] ?? ($in['weekdays'] ?? DAYS_ALL));
 
     if ($id > 0) {
         $exist = duty_template($id);
@@ -177,19 +299,23 @@ function duty_template_upsert(array $in, ?int $byUserId): array
         db()->prepare("
             UPDATE staff_duty_templates
                SET title = :t, notes = :n, frequency = :f, audience = :a,
+                   starts_on = :start, ends_on = :end, days_mask = :m, repeat_as = :r,
                    is_active = :on, sort_order = :s
              WHERE id = :id
         ")->execute([
             ':t' => $title, ':n' => $notes, ':f' => $freq, ':a' => $audience,
+            ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
             ':on' => $active, ':s' => $sort, ':id' => $id,
         ]);
     } else {
         db()->prepare("
             INSERT INTO staff_duty_templates
-                (title, notes, frequency, audience, is_active, sort_order, created_by)
-            VALUES (:t, :n, :f, :a, :on, :s, :u)
+                (title, notes, frequency, audience, starts_on, ends_on, days_mask, repeat_as,
+                 is_active, sort_order, created_by)
+            VALUES (:t, :n, :f, :a, :start, :end, :m, :r, :on, :s, :u)
         ")->execute([
             ':t' => $title, ':n' => $notes, ':f' => $freq, ':a' => $audience,
+            ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
             ':on' => $active, ':s' => $sort, ':u' => $byUserId,
         ]);
         $id = (int)db()->lastInsertId();
@@ -218,9 +344,15 @@ function duty_template_delete(int $id): void
 
 function duty_materialize_template(array $tpl, ?DateTimeInterface $when = null, ?string $periodKey = null): int
 {
+    $when = $when ?: new DateTimeImmutable('today');
+    if (!duty_applies_on($tpl, $when)) return 0;
     $ids = duty_assignee_ids($tpl);
-    $freq = (string)$tpl['frequency'];
-    $key = $periodKey ?: duty_period_key($freq, $when);
+    $slot = duty_item_slot($tpl);
+    if ($slot === 'adhoc') {
+        $key = duty_ymd($tpl['starts_on'] ?? null) ?: duty_period_key('daily', $when);
+    } else {
+        $key = $periodKey ?: duty_period_key($slot, $when);
+    }
     $n = 0;
     $sql = "INSERT IGNORE INTO staff_duty_items
                 (template_id, user_id, frequency, period_key, title, notes, source, status)
@@ -230,14 +362,13 @@ function duty_materialize_template(array $tpl, ?DateTimeInterface $when = null, 
         $st->execute([
             ':tpl' => (int)$tpl['id'],
             ':u'   => $uid,
-            ':f'   => $freq,
+            ':f'   => $slot,
             ':k'   => $key,
             ':t'   => (string)$tpl['title'],
             ':n'   => $tpl['notes'] !== null && $tpl['notes'] !== '' ? (string)$tpl['notes'] : null,
         ]);
         $n += $st->rowCount();
     }
-    // Refresh title/notes on still-pending copies so an edit shows up today.
     db()->prepare("
         UPDATE staff_duty_items
            SET title = :t, notes = :n
@@ -254,10 +385,14 @@ function duty_materialize_template(array $tpl, ?DateTimeInterface $when = null, 
 function duty_materialize_for_user(int $userId, ?DateTimeInterface $when = null): void
 {
     if (!duty_tables_ready()) return;
+    $when = $when ?: new DateTimeImmutable('today');
     foreach (duty_templates(true) as $tpl) {
         if (!in_array($userId, duty_assignee_ids($tpl), true)) continue;
-        $freq = (string)$tpl['frequency'];
-        $key = duty_period_key($freq, $when);
+        if (!duty_applies_on($tpl, $when)) continue;
+        $slot = duty_item_slot($tpl);
+        $key = $slot === 'adhoc'
+            ? (duty_ymd($tpl['starts_on'] ?? null) ?: duty_period_key('daily', $when))
+            : duty_period_key($slot, $when);
         db()->prepare("
             INSERT IGNORE INTO staff_duty_items
                 (template_id, user_id, frequency, period_key, title, notes, source, status)
@@ -265,7 +400,7 @@ function duty_materialize_for_user(int $userId, ?DateTimeInterface $when = null)
         ")->execute([
             ':tpl' => (int)$tpl['id'],
             ':u'   => $userId,
-            ':f'   => $freq,
+            ':f'   => $slot,
             ':k'   => $key,
             ':t'   => (string)$tpl['title'],
             ':n'   => $tpl['notes'] !== null && $tpl['notes'] !== '' ? (string)$tpl['notes'] : null,
@@ -275,6 +410,26 @@ function duty_materialize_for_user(int $userId, ?DateTimeInterface $when = null)
 
 function duty_items_for_user(int $userId, string $freq, string $periodKey): array
 {
+    if ($freq === 'adhoc') {
+        $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+        $st = db()->prepare("
+            SELECT i.*, t.starts_on AS window_start, t.ends_on AS window_end
+              FROM staff_duty_items i
+            LEFT JOIN staff_duty_templates t ON t.id = i.template_id
+             WHERE i.user_id = :u AND i.frequency = 'adhoc'
+               AND (
+                    (i.source = 'self' AND i.period_key = :today)
+                 OR (
+                        i.source = 'template'
+                    AND (t.starts_on IS NULL OR t.starts_on <= :d1)
+                    AND (t.ends_on IS NULL OR t.ends_on >= :d2)
+                    )
+               )
+             ORDER BY i.source ASC, i.id ASC
+        ");
+        $st->execute([':u' => $userId, ':today' => $today, ':d1' => $today, ':d2' => $today]);
+        return $st->fetchAll();
+    }
     $st = db()->prepare("
         SELECT * FROM staff_duty_items
          WHERE user_id = :u AND frequency = :f AND period_key = :k
@@ -370,7 +525,7 @@ function duty_save_period_note(int $userId, string $freq, string $periodKey, str
 function duty_add_self(int $userId, string $freq, string $title, ?string $periodKey = null, string $whoName = ''): int
 {
     if (!in_array($freq, DUTY_FREQUENCIES, true)) {
-        throw new InvalidArgumentException('frequency must be daily, weekly or monthly.');
+        throw new InvalidArgumentException('frequency must be daily, weekly, monthly or adhoc.');
     }
     $title = trim($title);
     if ($title === '') throw new InvalidArgumentException('Give the extra task a name.');
@@ -418,9 +573,33 @@ function duty_pending_count(int $userId, ?DateTimeInterface $when = null): int
 function duty_review(string $freq, string $periodKey): array
 {
     if (!in_array($freq, DUTY_FREQUENCIES, true)) return [];
+    $when = null;
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $periodKey)) {
+        $when = DateTimeImmutable::createFromFormat('Y-m-d', $periodKey) ?: null;
+    }
     foreach (duty_templates(true) as $tpl) {
-        if ((string)$tpl['frequency'] !== $freq) continue;
-        duty_materialize_template($tpl, null, $periodKey);
+        if (duty_item_slot($tpl) !== $freq) continue;
+        duty_materialize_template($tpl, $when, $periodKey);
+    }
+    if ($freq === 'adhoc') {
+        $day = $when ? $when->format('Y-m-d') : (new DateTimeImmutable('today'))->format('Y-m-d');
+        $st = db()->prepare("
+            SELECT i.*, u.name AS user_name, u.role AS user_role
+              FROM staff_duty_items i
+              JOIN users u ON u.id = i.user_id
+              LEFT JOIN staff_duty_templates t ON t.id = i.template_id
+             WHERE i.frequency = 'adhoc'
+               AND (
+                    i.source = 'self'
+                 OR (
+                        (t.starts_on IS NULL OR t.starts_on <= :d1)
+                    AND (t.ends_on IS NULL OR t.ends_on >= :d2)
+                    )
+               )
+             ORDER BY u.name, i.source, i.id
+        ");
+        $st->execute([':d1' => $day, ':d2' => $day]);
+        return $st->fetchAll();
     }
     $st = db()->prepare("
         SELECT i.*, u.name AS user_name, u.role AS user_role

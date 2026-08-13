@@ -25,4 +25,9 @@
 .duty-audience { border: 0; padding: 0; margin: .8rem 0; }
 .duty-filter { display: flex; gap: .7rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
 .duty-filter label { font-weight: 600; }
-.duty-filter input, .duty-filter select { display: block; margin-top: .25rem; padding: .45rem .6rem; font: inherit; border-radius: 8px; border: 1px solid #dfd3da; }
+.duty-dates { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+@media (max-width: 640px) { .duty-dates { grid-template-columns: 1fr; } }
+.duty-form input[type=date] {
+    width: 100%; padding: .55rem .7rem; border: 1px solid #dfd3da; border-radius: 8px;
+    font: inherit; margin-top: .25rem;
+}

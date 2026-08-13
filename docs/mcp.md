@@ -143,8 +143,23 @@ Example:
 ```
 
 `audience` is `all_teachers`, `all_non_teaching`, `all_staff`, or `users`
-(then pass `user_ids`). Teachers mark Done / Not done (reason required).
-They can add their own task; admins get a notification.
+(then pass `user_ids`). Frequency may be `daily`, `weekly`, `monthly`, or
+`adhoc`. Adhoc needs `starts_on` (and optional `ends_on`, `weekdays`,
+`repeat_as`: once / daily / weekly / monthly).
+
+Adhoc example:
+
+```json
+{
+  "title": "Sports day setup",
+  "frequency": "adhoc",
+  "audience": "all_staff",
+  "starts_on": "2026-08-20",
+  "ends_on": "2026-08-22",
+  "repeat_as": "once",
+  "weekdays": ["Thu", "Fri", "Sat"]
+}
+```
 
 ### Creating a survey from JSON
 
