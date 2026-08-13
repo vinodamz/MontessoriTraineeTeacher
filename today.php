@@ -195,6 +195,33 @@ $out = $todayAttendance['check_out'] ?? null;
 </div>
 <?php endif; ?>
 
+<?php
+$dutyPending = 0;
+try {
+    require_once __DIR__ . '/includes/duties.php';
+    $dutyPending = duty_pending_count((int)$user['id']);
+} catch (Throwable $e) {
+    $dutyPending = 0;
+}
+?>
+<div class="card">
+    <div class="checkin-body">
+        <div>
+            <div class="checkin-label">My duties</div>
+            <div class="checkin-status">
+                <?php if ($dutyPending > 0): ?>
+                    <span class="pill pill-warn"><?= (int)$dutyPending ?> still to tick</span>
+                <?php else: ?>
+                    <span class="pill pill-ok">Caught up</span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="checkin-action">
+            <a class="btn btn-primary" href="/duties/index.php">Open list</a>
+        </div>
+    </div>
+</div>
+
 <?php /* ---- Shortcuts: assessments + quick logbook ---- */ ?>
 <?php if ($pendingAssess > 0 || $hasLogbook): ?>
 <div class="actionbar" style="margin: 0 0 1rem; flex-wrap: wrap;">

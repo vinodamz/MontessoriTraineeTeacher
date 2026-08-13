@@ -1081,6 +1081,8 @@ a.admin-tile:hover {
 .app-icon-admissions   { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
 .app-icon-recruitment  { background: linear-gradient(135deg, #14b8a6 0%, #059669 100%); }
 .app-icon-staff        { background: linear-gradient(135deg, #f5b342 0%, #ea580c 100%); }
+.app-icon-duties       { background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); }
+.app-icon-duties_admin { background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); }
 .app-icon-expenses     { background: linear-gradient(135deg, #5ba547 0%, #16a34a 100%); }
 .app-icon-fees         { background: linear-gradient(135deg, #a855f7 0%, #7c3aed 50%, #4338ca 100%); }
 
@@ -1635,6 +1637,8 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .app-icon-fees        { color: #00695c; background: #e0f2f1; }
 .app-icon-expenses    { color: #6a1b9a; background: #f3e5f5; }
 .app-icon-staff       { color: #e65100; background: #fff3e0; }
+.app-icon-duties      { color: #0277bd; background: #e1f5fe; }
+.app-icon-duties_admin{ color: #0277bd; background: #e1f5fe; }
 .app-icon-money       { color: #2e7d32; background: #e8f5e9; }
 .app-icon-recruitment { color: #283593; background: #e8eaf6; }
 .app-icon-inventory   { color: #4e342e; background: #efebe9; }

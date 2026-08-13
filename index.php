@@ -355,6 +355,20 @@ if ($hasStaff) {
                'stats' => $myPendingLeave > 0
                    ? [['label' => $myPendingLeave . ' awaiting approval', 'tone' => 'warn']] : []];
 }
+
+$dutyPendingHome = 0;
+try {
+    require_once __DIR__ . '/includes/duties.php';
+    $dutyPendingHome = duty_pending_count((int)$user['id']);
+} catch (Throwable $e) { $dutyPendingHome = 0; }
+$apps[] = ['key' => 'duties', 'name' => 'My duties', 'subtitle' => 'Daily · Weekly · Monthly ticks',
+           'href' => '/duties/index.php',
+           'stats' => $dutyPendingHome > 0
+               ? [['label' => $dutyPendingHome . ' to tick', 'tone' => 'warn']] : []];
+if ($user['role'] === 'admin') {
+    $apps[] = ['key' => 'duties_admin', 'name' => 'Duty lists', 'subtitle' => 'Assign · Review ticks',
+               'href' => '/duties/admin.php', 'stats' => []];
+}
 if ($hasFees || $hasExpenses) {
     $apps[] = ['key' => 'money', 'name' => 'Money overview', 'subtitle' => 'Collections · Dues · Spend', 'href' => '/money.php', 'stats' => []];
 }
@@ -421,6 +435,8 @@ $icons = [
     'admissions'  => '<path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z"/>',
     'recruitment' => '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M15 20a4 4 0 0 1 6 0"/>',
     'staff'       => '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><rect x="6" y="14" width="12" height="7" rx="2"/><path d="M10 17h4"/>',
+    'duties'      => '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 10l2 2 4-4M8 16h8"/>',
+    'duties_admin'=> '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 10l2 2 4-4M8 16h8"/>',
     'expenses'    => '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5M8 17h4"/><path d="M16 17l2 2 3-3"/>',
     'fees'        => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h4"/><circle cx="16" cy="16" r="2"/>',
     'money'       => '<circle cx="12" cy="12" r="9"/><path d="M9 8h6M9 12h6M10 8c3 0 4 1.5 4 3s-1 3-4 3l4 4"/>',
@@ -438,7 +454,7 @@ $GROUPS = [
     'children'   => ['label' => 'Children',   'keys' => ['students', 'assessment', 'logbook']],
     'admissions' => ['label' => 'Admissions', 'keys' => ['admissions']],
     'money'      => ['label' => 'Money',      'keys' => ['money', 'fees', 'expenses']],
-    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'tasks', 'inventory', 'materials', 'recruitment', 'wacrm', 'n8n']],
+    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'duties', 'duties_admin', 'tasks', 'inventory', 'materials', 'recruitment', 'wacrm', 'n8n']],
 ];
 $grouped = array_fill_keys(array_keys($GROUPS), []);
 foreach ($apps as $app) {

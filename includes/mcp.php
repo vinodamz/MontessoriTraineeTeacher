@@ -45,6 +45,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';        // db() — functions.php does not pull this in
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/surveys.php';
+require_once __DIR__ . '/duties.php';
 
 /**
  * MCP spec revision this server implements.
@@ -76,6 +77,8 @@ const MCP_WRITE_DENY_TABLES = [
     'mcp_audit'  => 'the audit log is append-only — a log the audited party can erase is not a log',
     'mcp_tokens' => 'API credentials are managed at /mcp_admin.php, not through the API itself',
     'survey_definitions' => 'do not use insert/update/delete here — call survey_spec_upsert (then survey_publish). If those tools are missing from tools/list, reconnect the MCP server so it refreshes after deploy',
+    'staff_duty_templates' => 'do not insert/update/delete here — call staff_duty_template_upsert / staff_duty_template_delete',
+    'staff_duty_template_users' => 'assignees are set via staff_duty_template_upsert (audience + user_ids)',
 ];
 
 /**
@@ -795,6 +798,73 @@ function mcp_tools(): array
                 ],
             ],
         ],
+        [
+            'name'        => 'staff_duty_people',
+            'description' => 'List active staff who can be assigned a duty (id, name, role). Use this '
+                           . 'before staff_duty_template_upsert with audience=users.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'properties' => (object)[],
+            ],
+        ],
+        [
+            'name'        => 'staff_duty_template_list',
+            'description' => 'List daily/weekly/monthly duty templates (the configured tasks, not ticks).',
+            'inputSchema' => [
+                'type'       => 'object',
+                'properties' => [
+                    'active_only' => ['type' => 'boolean',
+                                      'description' => 'If true, skip inactive templates.'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'staff_duty_template_upsert',
+            'description' => 'Create or update one duty task. Assign with audience all_teachers, all_staff, '
+                           . 'or users (then pass user_ids from staff_duty_people). Frequency: daily, weekly, '
+                           . 'monthly. Do not insert into staff_duty_templates by hand.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['title', 'frequency', 'audience'],
+                'properties' => [
+                    'id'         => ['type' => 'integer', 'description' => 'Set to update an existing template.'],
+                    'title'      => ['type' => 'string'],
+                    'notes'      => ['type' => 'string', 'description' => 'Short help shown under the task.'],
+                    'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly']],
+                    'audience'   => ['type' => 'string', 'enum' => ['all_teachers', 'all_staff', 'users']],
+                    'user_ids'   => ['type' => 'array', 'items' => ['type' => 'integer'],
+                                     'description' => 'Required when audience is users.'],
+                    'is_active'  => ['type' => 'boolean'],
+                    'sort_order' => ['type' => 'integer'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'staff_duty_template_delete',
+            'description' => 'Delete a duty template. Past ticks remain; the task drops off future lists.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'required'   => ['id'],
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                ],
+            ],
+        ],
+        [
+            'name'        => 'staff_duty_status',
+            'description' => 'Who ticked what for a period. Default is today / this week / this month. '
+                           . 'Returns each person\'s items (done, not_done + reason, pending) plus comments.',
+            'inputSchema' => [
+                'type'       => 'object',
+                'properties' => [
+                    'frequency' => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly'],
+                                    'description' => 'Omit to return all three current periods.'],
+                    'period'    => ['type' => 'string',
+                                    'description' => 'daily YYYY-MM-DD, weekly YYYY-Www, monthly YYYY-MM.'],
+                    'user_id'   => ['type' => 'integer'],
+                ],
+            ],
+        ],
     ];
 }
 
@@ -1168,6 +1238,131 @@ function mcp_tool_survey_prefill_links(array $a): array
     ];
 }
 
+// --------------------------------------------------------- staff duty tools
+
+function mcp_tool_staff_duty_people(array $a): array
+{
+    if (!duty_tables_ready()) {
+        throw new McpError('Duty tables are missing — apply migrate_064_staff_duties.sql.');
+    }
+    $people = [];
+    foreach (duty_people() as $p) {
+        $people[] = [
+            'id'   => (int)$p['id'],
+            'name' => (string)$p['name'],
+            'role' => (string)$p['role'],
+        ];
+    }
+    return ['count' => count($people), 'people' => $people];
+}
+
+function mcp_tool_staff_duty_template_list(array $a): array
+{
+    if (!duty_tables_ready()) {
+        throw new McpError('Duty tables are missing — apply migrate_064_staff_duties.sql.');
+    }
+    $rows = duty_templates(!empty($a['active_only']));
+    $out = [];
+    foreach ($rows as $t) {
+        $out[] = [
+            'id'             => (int)$t['id'],
+            'title'          => (string)$t['title'],
+            'notes'          => $t['notes'],
+            'frequency'      => (string)$t['frequency'],
+            'audience'       => (string)$t['audience'],
+            'user_ids'       => $t['user_ids'],
+            'assignee_count' => (int)$t['assignee_count'],
+            'is_active'      => (int)$t['is_active'] === 1,
+            'sort_order'     => (int)$t['sort_order'],
+        ];
+    }
+    return ['count' => count($out), 'templates' => $out];
+}
+
+function mcp_tool_staff_duty_template_upsert(array $a, ?int $userId): array
+{
+    if (!duty_tables_ready()) {
+        throw new McpError('Duty tables are missing — apply migrate_064_staff_duties.sql.');
+    }
+    try {
+        $tpl = duty_template_upsert($a, $userId);
+    } catch (InvalidArgumentException $e) {
+        throw new McpError($e->getMessage());
+    }
+    return [
+        'id'             => (int)$tpl['id'],
+        'title'          => (string)$tpl['title'],
+        'frequency'      => (string)$tpl['frequency'],
+        'audience'       => (string)$tpl['audience'],
+        'user_ids'       => $tpl['user_ids'] ?? [],
+        'assignee_count' => count(duty_assignee_ids($tpl)),
+        'is_active'      => (int)$tpl['is_active'] === 1,
+        'rows_affected'  => 1,
+    ];
+}
+
+function mcp_tool_staff_duty_template_delete(array $a): array
+{
+    $id = (int)($a['id'] ?? 0);
+    if ($id <= 0) throw new McpError('id is required.');
+    if (!duty_template($id)) throw new McpError("No template #$id.");
+    duty_template_delete($id);
+    return ['id' => $id, 'deleted' => true, 'rows_affected' => 1];
+}
+
+function mcp_tool_staff_duty_status(array $a): array
+{
+    if (!duty_tables_ready()) {
+        throw new McpError('Duty tables are missing — apply migrate_064_staff_duties.sql.');
+    }
+    $freqs = DUTY_FREQUENCIES;
+    if (!empty($a['frequency'])) {
+        $f = (string)$a['frequency'];
+        if (!in_array($f, DUTY_FREQUENCIES, true)) {
+            throw new McpError('frequency must be daily, weekly or monthly.');
+        }
+        $freqs = [$f];
+    }
+    $filterUser = isset($a['user_id']) ? (int)$a['user_id'] : 0;
+    $periods = [];
+    foreach ($freqs as $freq) {
+        $key = isset($a['period']) && $a['period'] !== '' && count($freqs) === 1
+            ? (string)$a['period']
+            : duty_period_key($freq);
+        $rows = duty_review($freq, $key);
+        $items = [];
+        foreach ($rows as $r) {
+            if ($filterUser > 0 && (int)$r['user_id'] !== $filterUser) continue;
+            $items[] = [
+                'id'         => (int)$r['id'],
+                'user_id'    => (int)$r['user_id'],
+                'user_name'  => (string)$r['user_name'],
+                'role'       => (string)$r['user_role'],
+                'title'      => (string)$r['title'],
+                'source'     => (string)$r['source'],
+                'status'     => (string)$r['status'],
+                'reason'     => $r['reason'],
+                'comment'    => $r['comment'],
+                'extra_work' => $r['extra_work'],
+            ];
+        }
+        $pending = 0; $done = 0; $not = 0;
+        foreach ($items as $it) {
+            if ($it['status'] === 'done') $done++;
+            elseif ($it['status'] === 'not_done') $not++;
+            else $pending++;
+        }
+        $periods[] = [
+            'frequency' => $freq,
+            'period'    => $key,
+            'label'     => duty_period_label($freq, $key),
+            'counts'    => ['pending' => $pending, 'done' => $done, 'not_done' => $not],
+            'items'     => $items,
+        ];
+    }
+    return ['periods' => $periods];
+}
+
 // --------------------------------------------------------- write-side helpers
 
 function mcp_assert_writable(string $table): void
@@ -1252,7 +1447,8 @@ function mcp_rows_matching(string $table, string $where, array $params, int $cap
 function mcp_call_tool(string $name, array $args, ?int $tokenId,
                        ?int $userId = null, ?int $oauthTokenId = null): array
 {
-    $writes  = ['insert', 'update', 'delete', 'survey_spec_upsert', 'survey_publish'];
+    $writes  = ['insert', 'update', 'delete', 'survey_spec_upsert', 'survey_publish',
+                'staff_duty_template_upsert', 'staff_duty_template_delete'];
     $isWrite = in_array($name, $writes, true);
     $pdo     = db();
     $began   = false;
@@ -1272,6 +1468,11 @@ function mcp_call_tool(string $name, array $args, ?int $tokenId,
             case 'survey_spec_list':     $result = mcp_tool_survey_spec_list($args); break;
             case 'survey_publish':       $result = mcp_tool_survey_publish($args, $userId); break;
             case 'survey_prefill_links': $result = mcp_tool_survey_prefill_links($args); break;
+            case 'staff_duty_people':            $result = mcp_tool_staff_duty_people($args); break;
+            case 'staff_duty_template_list':     $result = mcp_tool_staff_duty_template_list($args); break;
+            case 'staff_duty_template_upsert':   $result = mcp_tool_staff_duty_template_upsert($args, $userId); break;
+            case 'staff_duty_template_delete':   $result = mcp_tool_staff_duty_template_delete($args); break;
+            case 'staff_duty_status':            $result = mcp_tool_staff_duty_status($args); break;
             default:
                 throw new McpError("No such tool: '$name'.", -32601);
         }
