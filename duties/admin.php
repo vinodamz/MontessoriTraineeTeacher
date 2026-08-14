@@ -71,18 +71,18 @@ $pageTitle = 'Duty lists';
 $wideLayout = true;
 require __DIR__ . '/../includes/header.php';
 ?>
-<link rel="stylesheet" href="/assets/css/duties.css?v=<?= e(asset_version()) ?>">
+<link rel="stylesheet" href="/assets/css/duties.css?v=<?= e((string)@filemtime(__DIR__ . '/../assets/css/duties.css')) ?>">
 
 <div class="page-head">
     <div>
         <h1>Duty lists</h1>
-        <p class="muted">Daily, weekly, monthly and adhoc ticks. Adhoc tasks have a start and end date.</p>
+        <p class="muted">Who should tick what. Staff see one checklist — today, this week, this month, and dated tasks.</p>
     </div>
     <div class="actionbar">
-        <a class="btn" href="/duties/index.php">My ticks</a>
-        <a class="btn<?= $view === 'list' ? ' btn-primary' : '' ?>" href="/duties/admin.php">Templates</a>
-        <a class="btn<?= $view === 'review' ? ' btn-primary' : '' ?>" href="/duties/admin.php?view=review">Review</a>
-        <a class="btn" href="/duties/admin.php?view=edit">New task</a>
+        <a class="btn" href="/duties/index.php">My list</a>
+        <a class="btn<?= $view === 'list' ? ' btn-primary' : '' ?>" href="/duties/admin.php">Tasks</a>
+        <a class="btn<?= $view === 'review' ? ' btn-primary' : '' ?>" href="/duties/admin.php?view=review">Who’s done</a>
+        <a class="btn" href="/duties/admin.php?view=edit">Add task</a>
     </div>
 </div>
 
@@ -92,52 +92,53 @@ require __DIR__ . '/../includes/header.php';
     foreach ($people as $p) $nameById[(int)$p['id']] = (string)$p['name'];
     ?>
     <?php if (!$tpls): ?>
-        <div class="card"><p>No tasks yet. <a href="/duties/admin.php?view=edit">Add one</a>, or use MCP <code>staff_duty_template_upsert</code>.</p></div>
-    <?php else: ?>
-        <div class="card">
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Task</th>
-                        <th>When</th>
-                        <th>Who</th>
-                        <th>Goes to</th>
-                        <th>On</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($tpls as $t): ?>
-                    <tr>
-                        <td>
-                            <a href="/duties/admin.php?view=edit&amp;id=<?= (int)$t['id'] ?>"><?= e((string)$t['title']) ?></a>
-                            <?php if (!empty($t['notes'])): ?><div class="muted small"><?= e((string)$t['notes']) ?></div><?php endif; ?>
-                        </td>
-                        <td><?= e(duty_schedule_label($t)) ?></td>
-                        <td><?= e(duty_audience_label((string)$t['audience'])) ?></td>
-                        <td>
-                            <?php
-                            $who = [];
-                            foreach (duty_assignee_ids($t) as $uid) {
-                                if (isset($nameById[$uid])) $who[] = $nameById[$uid];
-                            }
-                            echo $who ? e(implode(', ', $who)) : '—';
-                            ?>
-                        </td>
-                        <td><?= (int)$t['is_active'] ? 'Yes' : 'No' ?></td>
-                        <td>
-                            <form method="post" onsubmit="return confirm('Remove this task from future lists? Past ticks stay.');">
-                                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="op" value="delete">
-                                <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
-                                <button class="btn btn-ghost" type="submit">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
+        <div class="card"><p>No tasks yet. <a href="/duties/admin.php?view=edit">Add one</a>.</p></div>
+    <?php else:
+        $byFreq = [];
+        foreach ($tpls as $t) $byFreq[(string)$t['frequency']][] = $t;
+        foreach (DUTY_FREQUENCIES as $f):
+            if (empty($byFreq[$f])) continue;
+            ?>
+            <h2 class="duty-group"><?= e(duty_now_label($f)) ?> <span class="muted small"><?= e(duty_freq_label($f)) ?></span></h2>
+            <div class="card">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th>When</th>
+                            <th>Who</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($byFreq[$f] as $t):
+                        $who = [];
+                        foreach (duty_assignee_ids($t) as $uid) {
+                            if (isset($nameById[$uid])) $who[] = $nameById[$uid];
+                        }
+                        ?>
+                        <tr class="<?= (int)$t['is_active'] ? '' : 'duty-off' ?>">
+                            <td>
+                                <a href="/duties/admin.php?view=edit&amp;id=<?= (int)$t['id'] ?>"><?= e((string)$t['title']) ?></a>
+                                <?php if (!empty($t['notes'])): ?><div class="muted small"><?= e((string)$t['notes']) ?></div><?php endif; ?>
+                                <?php if (!(int)$t['is_active']): ?><div class="muted small">Off</div><?php endif; ?>
+                            </td>
+                            <td class="small"><?= e(duty_schedule_label($t)) ?></td>
+                            <td class="small"><?= $who ? e(implode(', ', $who)) : e(duty_audience_label((string)$t['audience'])) ?></td>
+                            <td>
+                                <form method="post" onsubmit="return confirm('Remove this task from future lists? Past ticks stay.');">
+                                    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                                    <input type="hidden" name="op" value="delete">
+                                    <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+                                    <button class="btn btn-ghost" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endforeach; ?>
     <?php endif; ?>
 
 <?php elseif ($view === 'edit'):
@@ -167,10 +168,10 @@ require __DIR__ . '/../includes/header.php';
                 <label>Help text (optional)
                     <input type="text" name="notes" maxlength="500" value="<?= e((string)($t['notes'] ?? '')) ?>">
                 </label>
-                <label>Frequency
+                <label>How often
                     <select name="frequency" id="duty-freq">
                         <?php foreach (DUTY_FREQUENCIES as $f): ?>
-                            <option value="<?= e($f) ?>" <?= $t['frequency'] === $f ? 'selected' : '' ?>><?= e(duty_freq_label($f)) ?></option>
+                            <option value="<?= e($f) ?>" <?= $t['frequency'] === $f ? 'selected' : '' ?>><?= e(duty_now_label($f)) ?> (<?= e(strtolower(duty_freq_label($f))) ?>)</option>
                         <?php endforeach; ?>
                     </select>
                 </label>
@@ -254,8 +255,8 @@ require __DIR__ . '/../includes/header.php';
                 if (start) start.required = adhoc;
                 if (hint) {
                     hint.textContent = adhoc
-                        ? 'Adhoc needs a start date. End date defaults to the start if you leave it blank.'
-                        : 'Optional window. Leave blank for an ongoing daily/weekly/monthly list.';
+                        ? 'Dated tasks need a start. End date defaults to the start if you leave it blank.'
+                        : 'Optional window. Leave blank to keep showing on the ongoing list.';
                 }
             }
             if (freq) freq.addEventListener('change', syncFreq);
@@ -308,80 +309,108 @@ require __DIR__ . '/../includes/header.php';
     <?php } ?>
 
 <?php else:
-    $rows = duty_review($freq, $period);
-    $notes = [];
-    try {
-        $nst = db()->prepare("
-            SELECT n.*, u.name FROM staff_duty_period_notes n
-            JOIN users u ON u.id = n.user_id
-            WHERE n.frequency = :f AND n.period_key = :k
-        ");
-        $nst->execute([':f' => $freq, ':k' => $period]);
-        $notes = $nst->fetchAll();
-    } catch (Throwable $e) {}
+    $customPeriod = isset($_GET['freq']) || isset($_GET['period']);
+    $reviewBlocks = [];
+    if ($customPeriod) {
+        $reviewBlocks[] = ['freq' => $freq, 'period' => $period];
+    } else {
+        foreach (DUTY_FREQUENCIES as $f) {
+            $reviewBlocks[] = ['freq' => $f, 'period' => duty_period_key($f)];
+        }
+    }
+    $shown = 0;
     ?>
-    <form class="duty-filter" method="get">
-        <input type="hidden" name="view" value="review">
-        <label>List
-            <select name="freq" onchange="this.form.submit()">
-                <?php foreach (DUTY_FREQUENCIES as $f): ?>
-                    <option value="<?= e($f) ?>" <?= $freq === $f ? 'selected' : '' ?>><?= e(duty_freq_label($f)) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label>Period
-            <input type="text" name="period" value="<?= e($period) ?>" placeholder="2026-08-13 or 2026-W33 or 2026-08">
-        </label>
-        <button class="btn" type="submit">Show</button>
-    </form>
-    <p class="muted"><?= e(duty_period_label($freq, $period)) ?> · <?= count($rows) ?> ticks</p>
-
-    <div class="card">
-        <?php if (!$rows): ?>
-            <p>No ticks for this period yet.</p>
-        <?php else: ?>
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Person</th>
-                        <th>Task</th>
-                        <th>Status</th>
-                        <th>Reason / notes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($rows as $r): ?>
-                    <tr>
-                        <td><?= e((string)$r['user_name']) ?><div class="muted small"><?= e(role_label((string)$r['user_role'])) ?></div></td>
-                        <td>
-                            <?= e((string)$r['title']) ?>
-                            <?php if ($r['source'] === 'self'): ?><span class="pill">Self-added</span><?php endif; ?>
-                        </td>
-                        <td><?= e(duty_status_label((string)$r['status'])) ?></td>
-                        <td class="small">
-                            <?php if (!empty($r['reason'])): ?><div><strong>Why not:</strong> <?= e((string)$r['reason']) ?></div><?php endif; ?>
-                            <?php if (!empty($r['comment'])): ?><div><?= e((string)$r['comment']) ?></div><?php endif; ?>
-                            <?php if (!empty($r['extra_work'])): ?><div><strong>Extra:</strong> <?= e((string)$r['extra_work']) ?></div><?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php endif; ?>
-    </div>
-
-    <?php if ($notes): ?>
+    <?php foreach ($reviewBlocks as $block):
+        $bf = $block['freq'];
+        $bp = $block['period'];
+        $rows = duty_review($bf, $bp);
+        $notes = [];
+        try {
+            $nst = db()->prepare("
+                SELECT n.*, u.name FROM staff_duty_period_notes n
+                JOIN users u ON u.id = n.user_id
+                WHERE n.frequency = :f AND n.period_key = :k
+            ");
+            $nst->execute([':f' => $bf, ':k' => $bp]);
+            $notes = $nst->fetchAll();
+        } catch (Throwable $e) {}
+        $pendingN = 0;
+        foreach ($rows as $r) {
+            if (($r['status'] ?? '') === 'pending') $pendingN++;
+        }
+        if (!$rows && !$notes && !$customPeriod) continue;
+        $shown++;
+        ?>
+        <h2 class="duty-group">
+            <?= e(duty_now_label($bf)) ?>
+            <span class="muted small"><?= e(duty_period_label($bf, $bp)) ?></span>
+            <?php if ($pendingN > 0): ?><span class="pill pill-warn"><?= (int)$pendingN ?> open</span><?php endif; ?>
+        </h2>
         <div class="card">
-            <h2>Period comments</h2>
-            <?php foreach ($notes as $n): ?>
-                <p>
-                    <strong><?= e((string)$n['name']) ?></strong>
-                    <?php if (!empty($n['comment'])): ?><br><?= nl2br(e((string)$n['comment'])) ?><?php endif; ?>
-                    <?php if (!empty($n['extra_work'])): ?><br><em>Extra work:</em> <?= nl2br(e((string)$n['extra_work'])) ?><?php endif; ?>
-                </p>
-            <?php endforeach; ?>
+            <?php if (!$rows): ?>
+                <p>No ticks here yet.</p>
+            <?php else: ?>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Person</th>
+                            <th>Task</th>
+                            <th>Status</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($rows as $r): ?>
+                        <tr>
+                            <td><?= e((string)$r['user_name']) ?><div class="muted small"><?= e(role_label((string)$r['user_role'])) ?></div></td>
+                            <td>
+                                <?= e((string)$r['title']) ?>
+                                <?php if ($r['source'] === 'self'): ?><span class="pill">Mine</span><?php endif; ?>
+                            </td>
+                            <td><?= e(duty_status_label((string)$r['status'])) ?></td>
+                            <td class="small">
+                                <?php if (!empty($r['reason'])): ?><?= e((string)$r['reason']) ?><?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
         </div>
+        <?php if ($notes): ?>
+            <div class="card">
+                <h3>Comments</h3>
+                <?php foreach ($notes as $n): ?>
+                    <p>
+                        <strong><?= e((string)$n['name']) ?></strong>
+                        <?php if (!empty($n['comment'])): ?><br><?= nl2br(e((string)$n['comment'])) ?><?php endif; ?>
+                        <?php if (!empty($n['extra_work'])): ?><br><em>Extra work:</em> <?= nl2br(e((string)$n['extra_work'])) ?><?php endif; ?>
+                    </p>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    <?php endforeach; ?>
+    <?php if ($shown === 0): ?>
+        <div class="card"><p>No ticks yet this period.</p></div>
     <?php endif; ?>
+
+    <details class="card">
+        <summary>Look up another date</summary>
+        <form class="duty-filter" method="get">
+            <input type="hidden" name="view" value="review">
+            <label>List
+                <select name="freq">
+                    <?php foreach (DUTY_FREQUENCIES as $f): ?>
+                        <option value="<?= e($f) ?>" <?= $freq === $f ? 'selected' : '' ?>><?= e(duty_now_label($f)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>Period
+                <input type="text" name="period" value="<?= e($period) ?>" placeholder="2026-08-13 or 2026-W33 or 2026-08">
+            </label>
+            <button class="btn" type="submit">Show</button>
+        </form>
+    </details>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

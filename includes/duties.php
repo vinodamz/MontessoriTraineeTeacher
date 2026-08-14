@@ -25,7 +25,18 @@ function duty_freq_label(string $freq): string
         'daily'   => 'Daily',
         'weekly'  => 'Weekly',
         'monthly' => 'Monthly',
-        'adhoc'   => 'Adhoc',
+        'adhoc'   => 'Dated',
+    ][$freq] ?? $freq;
+}
+
+/** Teacher-facing group name — when to do it, not how it was configured. */
+function duty_now_label(string $freq): string
+{
+    return [
+        'daily'   => 'Today',
+        'weekly'  => 'This week',
+        'monthly' => 'This month',
+        'adhoc'   => 'Dated',
     ][$freq] ?? $freq;
 }
 

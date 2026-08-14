@@ -848,7 +848,7 @@ function mcp_tools(): array
         ],
         [
             'name'        => 'staff_duty_template_list',
-            'description' => 'List daily/weekly/monthly duty templates (the configured tasks, not ticks).',
+            'description' => 'List duty templates (the configured tasks, not ticks).',
             'inputSchema' => [
                 'type'       => 'object',
                 'properties' => [

@@ -361,12 +361,12 @@ try {
     require_once __DIR__ . '/includes/duties.php';
     $dutyPendingHome = duty_pending_count((int)$user['id']);
 } catch (Throwable $e) { $dutyPendingHome = 0; }
-$apps[] = ['key' => 'duties', 'name' => 'My duties', 'subtitle' => 'Daily · Weekly · Monthly ticks',
+$apps[] = ['key' => 'duties', 'name' => 'My duties', 'subtitle' => 'Today’s checklist',
            'href' => '/duties/index.php',
            'stats' => $dutyPendingHome > 0
                ? [['label' => $dutyPendingHome . ' to tick', 'tone' => 'warn']] : []];
 if ($user['role'] === 'admin') {
-    $apps[] = ['key' => 'duties_admin', 'name' => 'Duty lists', 'subtitle' => 'Assign · Review ticks',
+    $apps[] = ['key' => 'duties_admin', 'name' => 'Duty lists', 'subtitle' => 'Set up · Who’s done',
                'href' => '/duties/admin.php', 'stats' => []];
 }
 if ($hasFees || $hasExpenses) {
