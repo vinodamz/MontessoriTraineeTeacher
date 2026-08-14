@@ -217,7 +217,7 @@ try {
             </div>
         </div>
         <div class="checkin-action">
-            <a class="btn btn-primary" href="/duties/index.php">Open list</a>
+            <a class="btn btn-primary" href="/duties/index.php"><?= $dutyPending > 0 ? 'Tick them' : 'Open list' ?></a>
         </div>
     </div>
 </div>

@@ -54,7 +54,6 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                 }
             ?>
                 <a href="/today.php">My Day</a>
-                <a href="/duties/index.php">My duties</a>
                 <a href="<?= user_has_module($user, 'students') ? '/students/index.php' : '/assessment/index.php' ?>">My Class</a>
                 <details class="more-menu">
                     <summary>More ▾</summary>
@@ -66,6 +65,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                         <?php if (!user_has_module($user, 'staff')): ?>
                             <a href="/staff/leave.php">My leave</a>
                         <?php endif; ?>
+                        <a href="/duties/index.php">My duties</a>
                         <?php foreach ($teacherExtras as [$mLabel, $mHref]): ?>
                             <a href="<?= e($mHref) ?>"><?= e($mLabel) ?></a>
                         <?php endforeach; ?>
@@ -123,7 +123,6 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                 <a href="/n8n/index.php">n8n</a>
             <?php endif; ?>
             <?php if ($user['role'] === 'admin'): ?>
-                <a href="/duties/admin.php">Duty lists</a>
                 <a href="/feedback/index.php">Feedback</a>
                 <a href="/surveys/index.php">Surveys</a>
                 <a href="/grades.php">Grades</a>

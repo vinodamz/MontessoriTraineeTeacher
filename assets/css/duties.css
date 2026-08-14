@@ -1,31 +1,33 @@
 /* Duty checklists — compact, phone-first ticks. */
-.duty-tabs { display: flex; gap: .5rem; flex-wrap: wrap; margin: 0 0 1rem; }
-.duty-tab {
-    display: inline-flex; align-items: center; gap: .4rem;
-    padding: .45rem .8rem; border-radius: 999px; border: 1px solid #eadfe5;
-    background: #fff; color: inherit; text-decoration: none; font-weight: 600;
+.duty-group {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .7rem;
+    margin: 1.2rem 0 .5rem; font-size: 1.05rem;
 }
-.duty-tab.on { background: #fff5fa; border-color: #f8bbd0; }
+.duty-group:first-of-type { margin-top: .3rem; }
 .duty-when { margin: 0 0 .8rem; }
 .duty-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; margin-bottom: .4rem; }
 .duty-item-head strong { flex: 1 1 auto; }
-.duty-item.duty-done { border-left: 4px solid #22603c; }
+.duty-item.duty-done { border-left: 4px solid #22603c; opacity: .88; }
 .duty-item.duty-not_done { border-left: 4px solid #b45309; }
-.duty-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin: .6rem 0; }
+.duty-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin: .6rem 0; }
+.duty-couldnt { margin: .3rem 0 0; }
+.duty-couldnt summary { cursor: pointer; font-weight: 600; color: #7a4a22; }
+.duty-extras summary { cursor: pointer; font-weight: 700; }
 .duty-notdone textarea, .duty-form textarea, .duty-form input[type=text],
 .duty-form input[type=number], .duty-form select, .duty-add input[type=text] {
     width: 100%; padding: .55rem .7rem; border: 1px solid #dfd3da; border-radius: 8px;
     font: inherit; margin-top: .25rem;
 }
 .duty-notdone label, .duty-form label { display: block; margin: .7rem 0; font-weight: 600; }
-.duty-add { display: flex; gap: .5rem; }
+.duty-add { display: flex; gap: .5rem; margin-top: .6rem; }
 .duty-add input { flex: 1 1 auto; }
 .duty-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .35rem; margin: .8rem 0; }
 .duty-person { display: flex; gap: .45rem; align-items: baseline; font-weight: 500; }
 .duty-audience { border: 0; padding: 0; margin: .8rem 0; }
-.duty-filter { display: flex; gap: .7rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
+.duty-filter { display: flex; gap: .7rem; flex-wrap: wrap; align-items: end; margin: .6rem 0 0; }
 .duty-filter label { font-weight: 600; }
 .duty-dates { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.duty-off { opacity: .55; }
 @media (max-width: 640px) { .duty-dates { grid-template-columns: 1fr; } }
 .duty-form input[type=date] {
     width: 100%; padding: .55rem .7rem; border: 1px solid #dfd3da; border-radius: 8px;
