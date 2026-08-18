@@ -510,3 +510,225 @@ function mm_save_check(int $materialId, string $period, string $condition, bool 
     $st->execute([':m' => $materialId, ':p' => $period]);
     return (int)$st->fetchColumn();
 }
+
+// ============================================================================
+// Daily condition audit — a SEPARATE workflow from the monthly Kreedo
+// replacement board above. Schema in sql/migrate_067_materials_daily.sql
+// (mm_daily_checks). Reuses mm_materials + mm_conditions(); no replacement
+// flag, no media — just "what did this material look like today".
+//
+// The "fresh every day, history never deleted" requirement falls out of the
+// UNIQUE KEY (material_id, check_date) upsert design, exactly like the
+// monthly board's UNIQUE KEY (material_id, period): a new date has zero
+// rows until someone marks it, and every past date's rows stay forever.
+// There is no explicit reset/clear action — the date changing IS the reset.
+// ============================================================================
+
+/** The audit date for a request: ?date=YYYY-MM-DD if a real calendar date, else today. */
+function mm_daily_date(): string
+{
+    $d = (string)($_GET['date'] ?? $_POST['date'] ?? '');
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && DateTime::createFromFormat('!Y-m-d', $d) !== false) {
+        return $d;
+    }
+    return date('Y-m-d');
+}
+
+/** Human label for a date, e.g. "Tuesday, 18 August 2026". */
+function mm_daily_date_label(string $date): string
+{
+    $d = DateTime::createFromFormat('!Y-m-d', $date);
+    return $d ? $d->format('l, j F Y') : $date;
+}
+
+/**
+ * Insert or update today's (or any date's) condition check for one material.
+ * The date is the unit of record — re-marking the same material on the same
+ * date edits that same row and re-stamps who/when; it never touches any
+ * other date's row. Returns the check id.
+ */
+function mm_daily_save_check(int $materialId, string $date, string $condition, ?string $notes, int $userId): int
+{
+    if (!isset(mm_conditions()[$condition])) {
+        throw new RuntimeException('Unknown condition code.');
+    }
+    $notes = $notes !== null ? trim($notes) : '';
+    db()->prepare("
+        INSERT INTO mm_daily_checks
+            (material_id, check_date, condition_code, notes, checked_by_user_id, checked_at)
+        VALUES (:m, :d, :c, :n, :u, NOW())
+        ON DUPLICATE KEY UPDATE
+            condition_code = VALUES(condition_code),
+            notes = VALUES(notes),
+            checked_by_user_id = VALUES(checked_by_user_id),
+            checked_at = NOW()
+    ")->execute([
+        ':m' => $materialId, ':d' => $date, ':c' => $condition,
+        ':n' => $notes !== '' ? $notes : null, ':u' => $userId,
+    ]);
+    $st = db()->prepare("SELECT id FROM mm_daily_checks WHERE material_id = :m AND check_date = :d");
+    $st->execute([':m' => $materialId, ':d' => $date]);
+    return (int)$st->fetchColumn();
+}
+
+/** Existing daily marks for a date, keyed by material_id — for change detection on bulk save. */
+function mm_daily_existing(string $date): array
+{
+    $st = db()->prepare("SELECT * FROM mm_daily_checks WHERE check_date = :d");
+    $st->execute([':d' => $date]);
+    $out = [];
+    foreach ($st as $r) $out[(int)$r['material_id']] = $r;
+    return $out;
+}
+
+/**
+ * Auto-computed summary for one date: total checked, a count per condition
+ * category (using the existing mm_conditions() vocabulary — good / needing
+ * attention / damaged / missing / anything else already in the system),
+ * how many carried a note, and which staff completed the audit.
+ */
+function mm_daily_summary(string $date): array
+{
+    $totalActive = (int)db()->query("SELECT COUNT(*) FROM mm_materials WHERE is_active = 1")->fetchColumn();
+
+    $st = db()->prepare("SELECT condition_code, COUNT(*) AS n FROM mm_daily_checks WHERE check_date = :d GROUP BY condition_code");
+    $st->execute([':d' => $date]);
+    $byCondition = [];
+    foreach ($st as $r) $byCondition[$r['condition_code']] = (int)$r['n'];
+    $checked = array_sum($byCondition);
+
+    $byTone = ['ok' => 0, 'warn' => 0, 'bad' => 0];
+    foreach ($byCondition as $code => $n) $byTone[mm_condition_tone($code)] = ($byTone[mm_condition_tone($code)] ?? 0) + $n;
+
+    $ncSt = db()->prepare("SELECT COUNT(*) FROM mm_daily_checks WHERE check_date = :d AND notes IS NOT NULL AND notes <> ''");
+    $ncSt->execute([':d' => $date]);
+    $notesCount = (int)$ncSt->fetchColumn();
+
+    $staffSt = db()->prepare("
+        SELECT u.id, u.name, COUNT(*) AS n
+        FROM mm_daily_checks c
+        LEFT JOIN users u ON u.id = c.checked_by_user_id
+        WHERE c.check_date = :d
+        GROUP BY u.id, u.name
+        ORDER BY n DESC
+    ");
+    $staffSt->execute([':d' => $date]);
+    $staff = $staffSt->fetchAll();
+
+    return [
+        'date' => $date,
+        'total_active' => $totalActive,
+        'checked' => $checked,
+        'pending' => max(0, $totalActive - $checked),
+        'by_condition' => $byCondition,
+        'by_tone' => $byTone,
+        'notes_count' => $notesCount,
+        'staff' => $staff,
+    ];
+}
+
+/** Distinct dates that have at least one daily check, newest first. */
+function mm_daily_dates_with_checks(int $limit = 365): array
+{
+    $st = db()->prepare("SELECT DISTINCT check_date FROM mm_daily_checks ORDER BY check_date DESC LIMIT :lim");
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Filtered history rows across all dates — used by the history/report view.
+ * $f may contain: date (YYYY-MM-DD), material (name search), condition,
+ * category (location), staff (user id). All optional.
+ */
+function mm_daily_history(array $f): array
+{
+    $where  = ['1=1'];
+    $params = [];
+    if (!empty($f['date']))      { $where[] = 'c.check_date = :date';      $params[':date']  = $f['date']; }
+    if (!empty($f['material']))  { $where[] = 'm.name LIKE :material';     $params[':material'] = '%' . $f['material'] . '%'; }
+    if (!empty($f['condition'])) { $where[] = 'c.condition_code = :cond';  $params[':cond']  = $f['condition']; }
+    if (!empty($f['category']))  { $where[] = 'm.location = :cat';         $params[':cat']   = $f['category']; }
+    if (!empty($f['staff']))     { $where[] = 'c.checked_by_user_id = :staff'; $params[':staff'] = (int)$f['staff']; }
+    $whereSql = implode(' AND ', $where);
+
+    $st = db()->prepare("
+        SELECT c.id, c.material_id, c.check_date, c.condition_code, c.notes, c.checked_at,
+               m.name AS material, m.location AS category,
+               u.id AS staff_id, u.name AS staff_name
+        FROM mm_daily_checks c
+        JOIN mm_materials m ON m.id = c.material_id
+        LEFT JOIN users u ON u.id = c.checked_by_user_id
+        WHERE $whereSql
+        ORDER BY c.check_date DESC, m.location, m.sort_order, m.name
+        LIMIT 2000
+    ");
+    $st->execute($params);
+    return $st->fetchAll();
+}
+
+/**
+ * Recurring-problem view: for each material, how many times in the last
+ * $days days it was marked with a "warn" or "bad" tone condition — the
+ * trend a staff member walking the floor can't see from one day alone.
+ * Ordered worst first. Only materials with at least one such mark appear.
+ */
+function mm_daily_trend_materials(int $days = 90): array
+{
+    $badCodes  = array_keys(array_filter(mm_conditions(), fn($c) => $c['tone'] !== 'ok'));
+    $worstOnly = array_keys(array_filter(mm_conditions(), fn($c) => $c['tone'] === 'bad'));
+    if (!$badCodes) return [];
+    $place      = implode(',', array_fill(0, count($badCodes), '?'));
+    $worstPlace = implode(',', array_fill(0, count($worstOnly), '?'));
+    $st = db()->prepare("
+        SELECT m.id, m.name, m.location,
+               COUNT(*) AS issue_count,
+               MAX(c.check_date) AS last_seen,
+               SUM(c.condition_code IN ($worstPlace)) AS bad_count
+        FROM mm_daily_checks c
+        JOIN mm_materials m ON m.id = c.material_id
+        WHERE c.condition_code IN ($place)
+          AND c.check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        GROUP BY m.id, m.name, m.location
+        ORDER BY issue_count DESC, last_seen DESC
+    ");
+    $st->execute(array_merge($worstOnly, $badCodes, [$days]));
+    return $st->fetchAll();
+}
+
+/** Condition-issue counts by shelf/category over the last $days days. */
+function mm_daily_trend_categories(int $days = 90): array
+{
+    $badCodes = array_keys(array_filter(mm_conditions(), fn($c) => $c['tone'] !== 'ok'));
+    if (!$badCodes) return [];
+    $place = implode(',', array_fill(0, count($badCodes), '?'));
+    $st = db()->prepare("
+        SELECT m.location AS category, COUNT(*) AS issue_count
+        FROM mm_daily_checks c
+        JOIN mm_materials m ON m.id = c.material_id
+        WHERE c.condition_code IN ($place)
+          AND c.check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        GROUP BY m.location
+        ORDER BY issue_count DESC
+    ");
+    $st->execute(array_merge($badCodes, [$days]));
+    return $st->fetchAll();
+}
+
+/** Weekly issue counts over the last $weeks weeks — a simple "over time" trend. */
+function mm_daily_trend_weekly(int $weeks = 8): array
+{
+    $badCodes = array_keys(array_filter(mm_conditions(), fn($c) => $c['tone'] !== 'ok'));
+    if (!$badCodes) return [];
+    $place = implode(',', array_fill(0, count($badCodes), '?'));
+    $st = db()->prepare("
+        SELECT YEARWEEK(c.check_date, 3) AS yw, MIN(c.check_date) AS week_start, COUNT(*) AS issue_count
+        FROM mm_daily_checks c
+        WHERE c.condition_code IN ($place)
+          AND c.check_date >= DATE_SUB(CURDATE(), INTERVAL ? WEEK)
+        GROUP BY yw
+        ORDER BY yw ASC
+    ");
+    $st->execute(array_merge($badCodes, [$weeks]));
+    return $st->fetchAll();
+}
