@@ -295,6 +295,7 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="head-actions">
+        <a class="btn btn-ghost" href="daily.php">Daily check</a>
         <a class="btn btn-ghost" href="dashboard.php?period=<?= e($period) ?>">Dashboard</a>
         <a class="btn btn-ghost" href="manage.php">Manage materials</a>
         <a class="btn btn-primary" href="replacement.php?period=<?= e($period) ?>">Replacement list →</a>
