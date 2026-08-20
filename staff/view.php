@@ -128,8 +128,8 @@ require __DIR__ . '/../includes/header.php';
             <a class="btn" href="/staff/messages.php#new">Message management</a>
         <?php endif; ?>
         <a class="btn" href="/staff/payslip.php?id=<?= $id ?>">Payslips</a>
+        <a class="btn" href="/staff/attendance.php">Attendance</a>
         <?php if ($isAdmin): ?>
-            <a class="btn" href="/staff/attendance.php?user_id=<?= $id ?>">Attendance</a>
             <a class="btn" href="/staff/leave.php?user_id=<?= $id ?>">Leave</a>
             <a class="btn" href="/staff/pay.php?id=<?= $id ?>">Pay structure</a>
             <a class="btn" href="/staff/issues.php?user_id=<?= $id ?>">Log issue</a>

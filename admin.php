@@ -394,10 +394,10 @@ require __DIR__ . '/includes/header.php';
                 <label>Modules</label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="montessori" checked><span>Assessment</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="tasks"><span>Tasks</span></label>
-                <label class="checkbox"><input type="checkbox" name="modules[]" value="students"><span>Students</span></label>
+                <label class="checkbox" title="Child roster and daily class attendance"><input type="checkbox" name="modules[]" value="students"><span>Students</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="crm"><span>Admissions</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="recruitment"><span>Recruitment</span></label>
-                <label class="checkbox"><input type="checkbox" name="modules[]" value="staff"><span>Staff</span></label>
+                <label class="checkbox" title="Staff roster, daily attendance, leave, payroll"><input type="checkbox" name="modules[]" value="staff"><span>Staff</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="expenses"><span>Expenses</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="fees"><span>Fees</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="logbook"><span>Logbook</span></label>
@@ -479,7 +479,7 @@ require __DIR__ . '/includes/header.php';
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="tasks" <?= $hasT ? 'checked' : '' ?>>
                     <span>Tasks</span>
                 </label>
-                <label class="checkbox" title="Students module">
+                <label class="checkbox" title="Child roster and daily class attendance">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="students" <?= $hasS ? 'checked' : '' ?>>
                     <span>Students</span>
                 </label>

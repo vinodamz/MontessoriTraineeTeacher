@@ -973,6 +973,19 @@ function staff_is_admin(array $user): bool
     return ($user['role'] ?? '') === 'admin';
 }
 
+/**
+ * Anyone who belongs on the staff attendance sheet: admin / teacher /
+ * non-teaching roles, or a user who was given the Staff module in Admin.
+ */
+function staff_is_on_roster(array $user): bool
+{
+    $role = (string)($user['role'] ?? '');
+    if (in_array($role, ['admin', 'teacher', 'non_teaching'], true)) return true;
+    $mods = $user['modules'] ?? [];
+    if (is_string($mods)) $mods = array_filter(explode(',', $mods));
+    return in_array('staff', $mods, true);
+}
+
 // ---- Payroll ------------------------------------------------------------
 
 /** Earnings component keys → labels (order = payslip display order). */
