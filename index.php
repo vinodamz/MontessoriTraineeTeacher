@@ -70,9 +70,8 @@ $hasWacrm     = user_has_module($user, 'wacrm');
 $hasN8n       = user_has_module($user, 'n8n');
 $hasDaycare   = user_has_module($user, 'daycare');
 
-// Quick-checkin: show for anyone in the staff roster (teachers, admins,
-// or anyone with the staff module). Pulls today's attendance row so the
-// card knows whether they've checked in / out.
+// Quick-checkin: anyone on the staff roster (Admin → role teacher /
+// non-teaching / admin, or the Staff module).
 $inStaffRoster = staff_is_on_roster($user);
 $todayAttendance = null;
 if ($inStaffRoster) {
