@@ -8,6 +8,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/notify.php';
+require_once __DIR__ . '/includes/staff.php';
 
 $user = require_login();
 
@@ -72,7 +73,7 @@ $hasDaycare   = user_has_module($user, 'daycare');
 // Quick-checkin: show for anyone in the staff roster (teachers, admins,
 // or anyone with the staff module). Pulls today's attendance row so the
 // card knows whether they've checked in / out.
-$inStaffRoster = in_array($user['role'], ['admin', 'teacher', 'non_teaching'], true) || user_has_module($user, 'staff');
+$inStaffRoster = staff_is_on_roster($user);
 $todayAttendance = null;
 if ($inStaffRoster) {
     try {

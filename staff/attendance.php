@@ -18,13 +18,11 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/staff.php';
 
 $user    = require_login();
-// Self check-in/out is open to everyone in the staff roster (admins,
-// teachers, and anyone with the staff module). Other ops (the admin grid
-// view, op=mark) still need the staff module — checked below.
-$inStaffRoster = ($user['role'] === 'admin')
-    || ($user['role'] === 'teacher')
-    || user_has_module($user, 'staff');
-$isAdmin = staff_is_admin($user);
+// Self check-in is for everyone on the staff roster (role on Admin, or the
+// Staff module). Marking other people's rows follows the Staff module
+// checkbox — not a separate "must be role=admin" rule.
+$inStaffRoster = staff_is_on_roster($user);
+$canMarkRoster = staff_is_admin($user) || user_has_module($user, 'staff');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -85,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($back);
     }
 
-    if ($op === 'mark' && $isAdmin) {
+    if ($op === 'mark' && $canMarkRoster) {
         $uid    = (int)($_POST['user_id'] ?? 0);
         $date   = $_POST['att_date'] ?? date('Y-m-d');
         $status = $_POST['status'] ?? 'present';
@@ -119,13 +117,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // roster grid + op=mark still need the staff module.
 if (!$inStaffRoster) {
     http_response_code(403);
-    echo 'Forbidden — you do not have access to the staff module.';
+    echo 'Forbidden — only staff can check in.';
     exit;
 }
 $date = $_GET['date'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
 
-if ($isAdmin) {
+if ($canMarkRoster) {
     $roster = staff_roster(true);
     $stmt = db()->prepare("SELECT * FROM staff_attendance WHERE att_date = :d");
     $stmt->execute([':d' => $date]);
@@ -148,7 +146,7 @@ if ($date === $today) {
 }
 
 $pageTitle  = 'Staff attendance';
-$wideLayout = $isAdmin;
+$wideLayout = $canMarkRoster;
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -199,7 +197,7 @@ require __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if ($isAdmin): ?>
+<?php if ($canMarkRoster): ?>
 <div class="card">
     <h3><?= e(date('l, j M Y', strtotime($date))) ?></h3>
 
