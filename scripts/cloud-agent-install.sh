@@ -12,6 +12,29 @@ ADMIN_PIN="1234"
 
 "$ROOT/scripts/cloud-agent-start.sh"
 
+if [[ ! -f "$ROOT/includes/config.php" ]]; then
+    cat >"$ROOT/includes/config.php" <<'PHP'
+<?php
+return [
+    'db' => [
+        'host'     => 'localhost',
+        'name'     => 'lg_dev',
+        'user'     => 'lg_dev',
+        'password' => 'lg_dev',
+        'charset'  => 'utf8mb4',
+    ],
+    'app' => [
+        'name'           => 'Little Graduates',
+        'short_name'     => 'LG',
+        'session_name'   => 'LG_SESSION',
+        'max_pin_tries'  => 5,
+        'lock_seconds'   => 30,
+        'timezone'       => 'Asia/Kolkata',
+    ],
+];
+PHP
+fi
+
 sudo mysql <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
@@ -35,29 +58,6 @@ seed_count="$(mysql -u "$DB_USER" -p"$DB_PASS" -N -e \
     "SELECT COUNT(*) FROM \`${DB_NAME}\`.rating_config" 2>/dev/null || echo 0)"
 if [[ "${seed_count}" == "0" ]]; then
     mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$ROOT/sql/seeds.sql"
-fi
-
-if [[ ! -f "$ROOT/includes/config.php" ]]; then
-    cat >"$ROOT/includes/config.php" <<'PHP'
-<?php
-return [
-    'db' => [
-        'host'     => 'localhost',
-        'name'     => 'lg_dev',
-        'user'     => 'lg_dev',
-        'password' => 'lg_dev',
-        'charset'  => 'utf8mb4',
-    ],
-    'app' => [
-        'name'           => 'Little Graduates',
-        'short_name'     => 'LG',
-        'session_name'   => 'LG_SESSION',
-        'max_pin_tries'  => 5,
-        'lock_seconds'   => 30,
-        'timezone'       => 'Asia/Kolkata',
-    ],
-];
-PHP
 fi
 
 php -r "
