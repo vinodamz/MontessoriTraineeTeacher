@@ -17,7 +17,7 @@ if [[ ! -f "$ROOT/includes/config.php" ]]; then
 <?php
 return [
     'db' => [
-        'host'     => 'localhost',
+        'host'     => '127.0.0.1',
         'name'     => 'lg_dev',
         'user'     => 'lg_dev',
         'password' => 'lg_dev',
@@ -42,22 +42,34 @@ GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 
+for _ in $(seq 1 60); do
+    if mysql -h 127.0.0.1 -u "$DB_USER" -p"$DB_PASS" -e "SELECT 1" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+if ! mysql -h 127.0.0.1 -u "$DB_USER" -p"$DB_PASS" -e "SELECT 1" >/dev/null 2>&1; then
+    echo "MariaDB user ${DB_USER} is not reachable over TCP." >&2
+    exit 1
+fi
+
 has_users_table() {
-    mysql -u "$DB_USER" -p"$DB_PASS" -N -e \
+    mysql -h 127.0.0.1 -u "$DB_USER" -p"$DB_PASS" -N -e \
         "SELECT COUNT(*) FROM information_schema.tables
          WHERE table_schema='${DB_NAME}' AND table_name='users'" 2>/dev/null | grep -q '^1$'
 }
 
 if ! has_users_table; then
-    mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$ROOT/sql/schema.sql"
+    mysql -h 127.0.0.1 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$ROOT/sql/schema.sql"
 fi
 
 php "$ROOT/migrate.php" >/dev/null
 
-seed_count="$(mysql -u "$DB_USER" -p"$DB_PASS" -N -e \
+seed_count="$(mysql -h 127.0.0.1 -u "$DB_USER" -p"$DB_PASS" -N -e \
     "SELECT COUNT(*) FROM \`${DB_NAME}\`.rating_config" 2>/dev/null || echo 0)"
 if [[ "${seed_count}" == "0" ]]; then
-    mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$ROOT/sql/seeds.sql"
+    mysql -h 127.0.0.1 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$ROOT/sql/seeds.sql"
 fi
 
 php -r "
