@@ -79,7 +79,8 @@ if ($op === 'add') {
     }
     // Month must be a real 'M-y' key, otherwise the note would never surface
     // (the report groups strictly by month_year).
-    if (!DateTime::createFromFormat('M-y', $month)) {
+    $month = normalize_month_year($month) ?? '';
+    if ($month === '') {
         flash_set('error', 'That month looks wrong — pick one from the list.');
         redirect($back);
     }
