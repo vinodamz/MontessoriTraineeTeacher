@@ -862,7 +862,8 @@ function mcp_tools(): array
             'description' => 'Create or update one duty task. Assign with audience all_teachers, '
                            . 'all_non_teaching, all_staff, or users. Frequency: daily, weekly, monthly, '
                            . 'or adhoc (needs starts_on). Optional ends_on, weekdays, and for adhoc '
-                           . 'repeat_as once|daily|weekly|monthly. Do not insert into '
+                           . 'repeat_as once|daily|weekly|monthly. action_key materials_check opens '
+                           . 'today\'s blank materials sheet. Do not insert into '
                            . 'staff_duty_templates by hand.',
             'inputSchema' => [
                 'type'       => 'object',
@@ -871,6 +872,8 @@ function mcp_tools(): array
                     'id'         => ['type' => 'integer', 'description' => 'Set to update an existing template.'],
                     'title'      => ['type' => 'string'],
                     'notes'      => ['type' => 'string', 'description' => 'Short help shown under the task.'],
+                    'action_key' => ['type' => 'string', 'enum' => ['', 'materials_check'],
+                                     'description' => 'materials_check opens today\'s materials sheet from My duties.'],
                     'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly', 'adhoc']],
                     'audience'   => ['type' => 'string',
                                      'enum' => ['all_teachers', 'all_non_teaching', 'all_staff', 'users']],
@@ -1536,6 +1539,7 @@ function mcp_tool_staff_duty_template_list(array $a): array
             'id'             => (int)$t['id'],
             'title'          => (string)$t['title'],
             'notes'          => $t['notes'],
+            'action_key'     => (string)($t['action_key'] ?? ''),
             'frequency'      => (string)$t['frequency'],
             'repeat_as'      => (string)($t['repeat_as'] ?? 'once'),
             'starts_on'      => $t['starts_on'] ?? null,
@@ -1565,6 +1569,7 @@ function mcp_tool_staff_duty_template_upsert(array $a, ?int $userId): array
     return [
         'id'             => (int)$tpl['id'],
         'title'          => (string)$tpl['title'],
+        'action_key'     => (string)($tpl['action_key'] ?? ''),
         'frequency'      => (string)$tpl['frequency'],
         'repeat_as'      => (string)($tpl['repeat_as'] ?? 'once'),
         'starts_on'      => $tpl['starts_on'] ?? null,
