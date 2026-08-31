@@ -260,7 +260,15 @@ try {
                 $stranger = ['id' => 0, 'role' => 'teacher', 'modules' => []];
                 if (mm_can_daily_check($stranger)) $failures[] = 'unassigned teacher without materials module could open the sheet';
                 duty_template_delete($tplId);
-                if (duty_user_has_action($uid, 'materials_check')) $failures[] = 'materials_check access lingered after the duty was deleted';
+                $stillAssigned = false;
+                foreach (duty_templates(true) as $t) {
+                    if ((string)($t['action_key'] ?? '') !== 'materials_check') continue;
+                    if (in_array($uid, duty_assignee_ids($t), true)) $stillAssigned = true;
+                }
+                if (duty_template($tplId) !== null) $failures[] = 'duty_template_delete did not remove the smoke template';
+                if (!$stillAssigned && duty_user_has_action($uid, 'materials_check')) {
+                    $failures[] = 'materials_check access lingered after the duty was deleted';
+                }
             }
         }
     }
