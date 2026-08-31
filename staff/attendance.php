@@ -155,6 +155,7 @@ require __DIR__ . '/../includes/header.php';
         <h1>Attendance</h1>
         <p class="muted">
             <a href="/staff/index.php">← Staff</a> ·
+            <a href="/staff/timesheet.php">Monthly in / out</a> ·
             <form method="get" style="display:inline;">
                 <input type="date" name="date" value="<?= e($date) ?>" onchange="this.form.submit()">
             </form>

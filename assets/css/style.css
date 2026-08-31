@@ -1771,4 +1771,26 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .dc-bad { color: #b3402c; font-weight: 700; }
 .dc-sum tr.dc-total td { background: #faf4ea; border-top: 2px solid #e8dcc8; }
 
+/* Staff monthly check-in / check-out register */
+.timesheet-filters {
+    display: flex; flex-wrap: wrap; gap: .7rem 1rem; align-items: flex-end;
+}
+.timesheet-filters .field { flex: 0 1 12rem; min-width: 9rem; }
+.timesheet-filters__go { flex: 0 0 auto; min-width: auto; }
+.timesheet-presets { margin: .7rem 0 0; }
+.timesheet-scroll { overflow-x: auto; }
+.timesheet-table td.timesheet-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.timesheet-leave { background: #fff4e1; }
+tr.timesheet-leave:hover { background: #fcebc6; }
+tr.timesheet-leave-pending { background: #f7f5f2; }
+.pill-leave-callout { background: #fcebc6; color: #6c4612; text-transform: none; letter-spacing: 0; }
+.pill-status-present, .pill-status-wfh { background: #d8f3c8; color: #14532d; }
+.pill-status-late { background: #fcebc6; color: #6c4612; }
+.pill-status-absent { background: #fbdcd8; color: #8b1c14; }
+.pill-status-leave { background: #fff4e1; color: #92400e; }
+.pill-status-holiday { background: #eef1f4; color: #495057; }
+@media print {
+    .timesheet-filter-card, .page-head .actionbar, .topbar { display: none; }
+}
+
 /* ==================================================
