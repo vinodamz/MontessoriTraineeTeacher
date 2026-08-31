@@ -133,11 +133,10 @@ const MM_MEDIA_MIME_ALLOW = [
 ];
 
 /**
- * Store an uploaded photo/video against a condition check. Returns the new
- * mm_condition_media id, or null if no file was uploaded. Throws on bad type
- * or oversize.
+ * Validate + move an uploaded photo/video/audio into mm_media_dir().
+ * Returns [kind, orig, stored, mime, size] or null if no file. Throws on bad type/size.
  */
-function mm_media_store(array $file, int $checkId, int $userId): ?int
+function mm_media_accept(array $file, string $prefix, int $idHint): ?array
 {
     if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) return null;
     if ($file['error'] !== UPLOAD_ERR_OK) {
@@ -152,21 +151,56 @@ function mm_media_store(array $file, int $checkId, int $userId): ?int
         throw new RuntimeException('Only photos (JPG/PNG/WebP/HEIC), videos (MP4/MOV/WebM/3GP) or voice memos (WebM/M4A/MP3/WAV) are allowed.');
     }
     [$kind, $ext] = MM_MEDIA_MIME_ALLOW[$mime];
-    $stored = 'mm_' . $checkId . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $stored = $prefix . $idHint . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
     $dest   = mm_media_dir() . '/' . $stored;
     if (!move_uploaded_file($file['tmp_name'], $dest)) {
         throw new RuntimeException('Could not move the uploaded file.');
     }
     @chmod($dest, 0644);
+    return [
+        'kind'   => $kind,
+        'orig'   => mb_substr((string)$file['name'], 0, 255),
+        'stored' => $stored,
+        'mime'   => $mime,
+        'size'   => (int)$file['size'],
+    ];
+}
 
+/**
+ * Store an uploaded photo/video against a monthly condition check. Returns the
+ * new mm_condition_media id, or null if no file was uploaded.
+ */
+function mm_media_store(array $file, int $checkId, int $userId): ?int
+{
+    $acc = mm_media_accept($file, 'mm_', $checkId);
+    if ($acc === null) return null;
     db()->prepare("
         INSERT INTO mm_condition_media
             (check_id, kind, original_filename, stored_filename, mime_type, size_bytes, uploaded_by_user_id)
         VALUES (:c, :k, :o, :s, :m, :sz, :u)
     ")->execute([
-        ':c' => $checkId, ':k' => $kind,
-        ':o' => mb_substr((string)$file['name'], 0, 255),
-        ':s' => $stored, ':m' => $mime, ':sz' => (int)$file['size'], ':u' => $userId,
+        ':c' => $checkId, ':k' => $acc['kind'],
+        ':o' => $acc['orig'], ':s' => $acc['stored'], ':m' => $acc['mime'],
+        ':sz' => $acc['size'], ':u' => $userId,
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+/**
+ * Store photo/video/audio against a daily check row (mm_daily_media).
+ */
+function mm_daily_media_store(array $file, int $checkId, int $userId): ?int
+{
+    $acc = mm_media_accept($file, 'mmd_', $checkId);
+    if ($acc === null) return null;
+    db()->prepare("
+        INSERT INTO mm_daily_media
+            (check_id, kind, original_filename, stored_filename, mime_type, size_bytes, uploaded_by_user_id)
+        VALUES (:c, :k, :o, :s, :m, :sz, :u)
+    ")->execute([
+        ':c' => $checkId, ':k' => $acc['kind'],
+        ':o' => $acc['orig'], ':s' => $acc['stored'], ':m' => $acc['mime'],
+        ':sz' => $acc['size'], ':u' => $userId,
     ]);
     return (int)db()->lastInsertId();
 }
@@ -514,15 +548,32 @@ function mm_save_check(int $materialId, string $period, string $condition, bool 
 // ============================================================================
 // Daily condition audit — a SEPARATE workflow from the monthly Kreedo
 // replacement board above. Schema in sql/migrate_067_materials_daily.sql
-// (mm_daily_checks). Reuses mm_materials + mm_conditions(); no replacement
-// flag, no media — just "what did this material look like today".
+// (mm_daily_checks) + migrate_068 (mm_daily_media, duty action_key).
 //
 // The "fresh every day, history never deleted" requirement falls out of the
-// UNIQUE KEY (material_id, check_date) upsert design, exactly like the
-// monthly board's UNIQUE KEY (material_id, period): a new date has zero
+// UNIQUE KEY (material_id, check_date) upsert design: a new date has zero
 // rows until someone marks it, and every past date's rows stay forever.
-// There is no explicit reset/clear action — the date changing IS the reset.
+// Photos attach to that day's row only — they do not carry into tomorrow.
 // ============================================================================
+
+const MM_DAILY_DUTY_ACTION = 'materials_check';
+
+/** True if this login may walk today's materials sheet. */
+function mm_can_daily_check(array $user): bool
+{
+    if (user_has_module($user, 'materials')) return true;
+    require_once __DIR__ . '/duties.php';
+    return duty_user_has_action((int)($user['id'] ?? 0), MM_DAILY_DUTY_ACTION);
+}
+
+function mm_require_daily_check(): array
+{
+    $u = require_login();
+    if (mm_can_daily_check($u)) return $u;
+    http_response_code(403);
+    echo 'Forbidden — this materials check is not assigned to you.';
+    exit;
+}
 
 /** The audit date for a request: ?date=YYYY-MM-DD if a real calendar date, else today. */
 function mm_daily_date(): string
@@ -569,6 +620,91 @@ function mm_daily_save_check(int $materialId, string $date, string $condition, ?
     $st = db()->prepare("SELECT id FROM mm_daily_checks WHERE material_id = :m AND check_date = :d");
     $st->execute([':m' => $materialId, ':d' => $date]);
     return (int)$st->fetchColumn();
+}
+
+/** Media counts for a date, keyed by material_id. */
+function mm_daily_media_counts(string $date): array
+{
+    try {
+        $st = db()->prepare("
+            SELECT c.material_id, COUNT(*) AS n
+            FROM mm_daily_media md
+            JOIN mm_daily_checks c ON c.id = md.check_id
+            WHERE c.check_date = :d
+            GROUP BY c.material_id
+        ");
+        $st->execute([':d' => $date]);
+        $out = [];
+        foreach ($st as $r) $out[(int)$r['material_id']] = (int)$r['n'];
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Latest media per kind for today's (or any date's) daily checks.
+ * Returns [material_id => [kind => ['id' => …]]].
+ */
+function mm_daily_latest_media(string $date): array
+{
+    try {
+        $st = db()->prepare("
+            SELECT c.material_id, md.id, md.kind
+            FROM mm_daily_media md
+            JOIN mm_daily_checks c ON c.id = md.check_id
+            JOIN (
+                SELECT c2.material_id, md2.kind, MAX(md2.id) AS max_id
+                FROM mm_daily_media md2
+                JOIN mm_daily_checks c2 ON c2.id = md2.check_id
+                WHERE c2.check_date = :d
+                GROUP BY c2.material_id, md2.kind
+            ) latest ON latest.max_id = md.id
+        ");
+        $st->execute([':d' => $date]);
+        $out = [];
+        foreach ($st as $r) {
+            $out[(int)$r['material_id']][$r['kind']] = ['id' => (int)$r['id']];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * When every active material has a mark for $date, tick this person's
+ * pending "materials check" duties for the matching period.
+ */
+function mm_daily_sync_duties(int $userId, string $date): void
+{
+    require_once __DIR__ . '/duties.php';
+    if (!duty_tables_ready()) return;
+    $sum = mm_daily_summary($date);
+    if ($sum['pending'] > 0 || $sum['total_active'] === 0) return;
+    try {
+        $st = db()->prepare("
+            UPDATE staff_duty_items i
+            JOIN staff_duty_templates t ON t.id = i.template_id
+               SET i.status = 'done', i.completed_at = COALESCE(i.completed_at, NOW())
+             WHERE i.user_id = :u
+               AND i.status = 'pending'
+               AND t.action_key = :a
+               AND (
+                    (i.frequency = 'daily' AND i.period_key = :d)
+                 OR (i.frequency = 'weekly' AND i.period_key = :w)
+                 OR (i.frequency = 'monthly' AND i.period_key = :m)
+               )
+        ");
+        $when = DateTimeImmutable::createFromFormat('!Y-m-d', $date) ?: new DateTimeImmutable('today');
+        $st->execute([
+            ':u' => $userId,
+            ':a' => MM_DAILY_DUTY_ACTION,
+            ':d' => $date,
+            ':w' => duty_period_key('weekly', $when),
+            ':m' => duty_period_key('monthly', $when),
+        ]);
+    } catch (Throwable $e) { /* action_key column may not exist yet */ }
 }
 
 /** Existing daily marks for a date, keyed by material_id — for change detection on bulk save. */

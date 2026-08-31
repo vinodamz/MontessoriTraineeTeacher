@@ -45,7 +45,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                     'fees'        => ['Fees',        '/fees/index.php'],
                     'logbook'     => ['Logbook',     '/logbook/index.php'],
                     'inventory'   => ['Inventory',   '/inventory/index.php'],
-                    'materials'   => ['Materials',   '/materials/index.php'],
+                    'materials'   => ['Materials',   '/materials/daily.php'],
                     'daycare'     => ['Daycare',     '/daycare/index.php'],
                     'wacrm'       => ['WACRM',       '/wacrm/index.php'],
                     'n8n'         => ['n8n',         '/n8n/index.php'],
@@ -111,7 +111,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                 <a href="/inventory/index.php">Inventory</a>
             <?php endif; ?>
             <?php if (user_has_module($user, 'materials')): ?>
-                <a href="/materials/index.php">Materials</a>
+                <a href="/materials/daily.php">Materials</a>
             <?php endif; ?>
             <?php if (user_has_module($user, 'daycare')): ?>
                 <a href="/daycare/index.php">Daycare</a>

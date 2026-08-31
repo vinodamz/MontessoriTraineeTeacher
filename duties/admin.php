@@ -34,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'id'         => (int)($_POST['id'] ?? 0),
                 'title'      => (string)($_POST['title'] ?? ''),
                 'notes'      => (string)($_POST['notes'] ?? ''),
+                'action_key' => (string)($_POST['action_key'] ?? ''),
                 'frequency'  => (string)($_POST['frequency'] ?? 'daily'),
                 'audience'   => (string)($_POST['audience'] ?? 'all_teachers'),
                 'user_ids'   => $ids,
@@ -83,6 +84,7 @@ require __DIR__ . '/../includes/header.php';
         <a class="btn<?= $view === 'list' ? ' btn-primary' : '' ?>" href="/duties/admin.php">Tasks</a>
         <a class="btn<?= $view === 'review' ? ' btn-primary' : '' ?>" href="/duties/admin.php?view=review">Who’s done</a>
         <a class="btn" href="/duties/admin.php?view=edit">Add task</a>
+        <a class="btn" href="/duties/admin.php?view=edit&amp;preset=materials_check">Assign materials check</a>
     </div>
 </div>
 
@@ -120,6 +122,9 @@ require __DIR__ . '/../includes/header.php';
                         <tr class="<?= (int)$t['is_active'] ? '' : 'duty-off' ?>">
                             <td>
                                 <a href="/duties/admin.php?view=edit&amp;id=<?= (int)$t['id'] ?>"><?= e((string)$t['title']) ?></a>
+                                <?php if (!empty($t['action_key'])): ?>
+                                    <div class="muted small"><?= e(duty_action_label((string)$t['action_key'])) ?></div>
+                                <?php endif; ?>
                                 <?php if (!empty($t['notes'])): ?><div class="muted small"><?= e((string)$t['notes']) ?></div><?php endif; ?>
                                 <?php if (!(int)$t['is_active']): ?><div class="muted small">Off</div><?php endif; ?>
                             </td>
@@ -150,7 +155,15 @@ require __DIR__ . '/../includes/header.php';
             'id' => 0, 'title' => '', 'notes' => '', 'frequency' => 'daily',
             'audience' => 'all_teachers', 'is_active' => 1, 'sort_order' => 0, 'user_ids' => [],
             'starts_on' => '', 'ends_on' => '', 'days_mask' => DAYS_ALL, 'repeat_as' => 'once',
+            'action_key' => '',
         ];
+        if (!$editId && (string)($_GET['preset'] ?? '') === 'materials_check') {
+            $t['title'] = $t['title'] !== '' ? $t['title'] : 'Check all materials';
+            $t['action_key'] = 'materials_check';
+            $t['audience'] = 'users';
+            $t['frequency'] = 'daily';
+            $t['notes'] = 'Walk every shelf. Mark each material. Add a photo, video or note when something is wrong. The sheet is blank again tomorrow.';
+        }
         $mask = (int)($t['days_mask'] ?? DAYS_ALL);
         $picked = (string)$t['audience'] === 'users'
             ? array_map('intval', (array)$t['user_ids'])
@@ -168,6 +181,16 @@ require __DIR__ . '/../includes/header.php';
                 <label>Help text (optional)
                     <input type="text" name="notes" maxlength="500" value="<?= e((string)($t['notes'] ?? '')) ?>">
                 </label>
+                <label>Opens
+                    <select name="action_key">
+                        <?php foreach (DUTY_ACTIONS as $ak => $ameta): ?>
+                            <option value="<?= e($ak) ?>" <?= (string)($t['action_key'] ?? '') === $ak ? 'selected' : '' ?>>
+                                <?= e($ameta['label']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <p class="muted small">Materials check sheet: assignee opens a blank list of every material each calendar day, marks condition, and can attach a photo, video or comment.</p>
                 <label>How often
                     <select name="frequency" id="duty-freq">
                         <?php foreach (DUTY_FREQUENCIES as $f): ?>

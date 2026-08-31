@@ -190,6 +190,81 @@ try {
     $mediaAfter = (int)db()->query("SELECT COUNT(*) FROM mm_condition_media WHERE check_id = $c1")->fetchColumn();
     if ($mediaAfter !== 0) $failures[] = "media rows did not cascade-delete with the material";
 
+    // ---- 7. Daily walk: clean sheet per calendar day + media + duty action ----
+    $haveDaily = (int)db()->query("
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mm_daily_checks'
+    ")->fetchColumn();
+    if ($haveDaily < 1) {
+        $failures[] = 'mm_daily_checks missing (migrate_067)';
+    } else {
+        db()->prepare("INSERT INTO mm_materials (name, location, sort_order) VALUES (:n, 'SMOKE-shelf', 9998)")
+            ->execute([':n' => 'SMOKE-daily-' . bin2hex(random_bytes(4))]);
+        $dailyMat = (int)db()->lastInsertId();
+        $d1 = '2099-06-01';
+        $d2 = '2099-06-02';
+        $idA = mm_daily_save_check($dailyMat, $d1, 'good', 'day one', $adminId);
+        $idB = mm_daily_save_check($dailyMat, $d1, 'minor', 'edited', $adminId);
+        if ($idA !== $idB) $failures[] = 'daily second mark created a duplicate instead of editing in place';
+        $idC = mm_daily_save_check($dailyMat, $d2, 'broken', 'day two', $adminId);
+        if ($idC === $idB) $failures[] = 'day two reused day one row — sheet is not clean per day';
+        $nDays = (int)db()->query("SELECT COUNT(*) FROM mm_daily_checks WHERE material_id = $dailyMat")->fetchColumn();
+        if ($nDays !== 2) $failures[] = "expected 2 daily rows (one per date), found $nDays";
+        $day2blank = (int)db()->query("SELECT COUNT(*) FROM mm_daily_checks WHERE material_id = $dailyMat AND check_date = '$d2' AND condition_code = 'broken'")->fetchColumn();
+        if ($day2blank !== 1) $failures[] = 'day two condition not independent of day one';
+
+        $haveDailyMedia = (int)db()->query("
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mm_daily_media'
+        ")->fetchColumn();
+        if ($haveDailyMedia < 1) {
+            $failures[] = 'mm_daily_media missing (migrate_068)';
+        } else {
+            db()->prepare("INSERT INTO mm_daily_media (check_id, kind, original_filename, stored_filename, mime_type, size_bytes)
+                           VALUES (:c, 'photo', 'd.jpg', :s, 'image/jpeg', 8)")
+                ->execute([':c' => $idC, ':s' => 'SMOKE-d-' . bin2hex(random_bytes(6)) . '.jpg']);
+            $counts = mm_daily_media_counts($d2);
+            if (($counts[$dailyMat] ?? 0) !== 1) $failures[] = 'mm_daily_media_counts missed the daily photo';
+            $lm = mm_daily_latest_media($d2);
+            if (!isset($lm[$dailyMat]['photo'])) $failures[] = 'mm_daily_latest_media missed the daily photo';
+            $lm1 = mm_daily_latest_media($d1);
+            if (isset($lm1[$dailyMat])) $failures[] = 'day-one latest media saw day-two photo — sheets are not isolated';
+        }
+
+        db()->prepare("DELETE FROM mm_materials WHERE id = :id")->execute([':id' => $dailyMat]);
+    }
+
+    require_once __DIR__ . '/../includes/duties.php';
+    if (duty_tables_ready()) {
+        if (!duty_has_action_key()) {
+            $failures[] = 'staff_duty_templates.action_key missing (migrate_068)';
+        } else {
+            $uid = 0;
+            foreach (duty_people() as $p) {
+                if (($p['role'] ?? '') !== 'admin') { $uid = (int)$p['id']; break; }
+            }
+            if ($uid > 0) {
+                $tpl = duty_template_upsert([
+                    'title'      => 'SMOKE-mm-duty-' . bin2hex(random_bytes(3)),
+                    'frequency'  => 'daily',
+                    'audience'   => 'users',
+                    'user_ids'   => [$uid],
+                    'action_key' => 'materials_check',
+                    'is_active'  => 1,
+                ], $adminId);
+                $tplId = (int)$tpl['id'];
+                if (($tpl['action_key'] ?? '') !== 'materials_check') $failures[] = 'duty action_key not saved';
+                if (!duty_user_has_action($uid, 'materials_check')) $failures[] = 'assignee did not get materials_check access';
+                $assignee = ['id' => $uid, 'role' => 'teacher', 'modules' => []];
+                if (!mm_can_daily_check($assignee)) $failures[] = 'assigned teacher could not open the daily sheet without the materials module';
+                $stranger = ['id' => 0, 'role' => 'teacher', 'modules' => []];
+                if (mm_can_daily_check($stranger)) $failures[] = 'unassigned teacher without materials module could open the sheet';
+                duty_template_delete($tplId);
+                if (duty_user_has_action($uid, 'materials_check')) $failures[] = 'materials_check access lingered after the duty was deleted';
+            }
+        }
+    }
+
 } catch (Throwable $e) {
     $failures[] = "exception: " . $e->getMessage() . " @ " . $e->getFile() . ':' . $e->getLine();
 } finally {
@@ -214,4 +289,7 @@ echo "  - latest-media, evidence-gap and shelf-priority helpers behave\n";
 echo "  - notes: null keeps existing, posted value overwrites\n";
 echo "  - voice memos: audio kind + mimes accepted\n";
 echo "  - inconsistent-flag detector: catches damage-condition-without-replace\n";
+echo "  - daily walk: one row per (material, date); next day is a clean sheet\n";
+echo "  - daily media attaches to that day's row only\n";
+echo "  - duty action_key materials_check grants the assignee the sheet\n";
 echo "  - condition codes + labels stable; media cascades with its material\n";
