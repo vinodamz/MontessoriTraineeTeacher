@@ -21,12 +21,20 @@ sudo apt-get install -y --no-install-recommends \
   mysql-server mysql-client
 
 echo "==> Ensuring MySQL server is running…"
+# /run is a fresh tmpfs on every boot; make sure MySQL's runtime dir exists.
+sudo install -d -o mysql -g mysql -m 755 /var/run/mysqld
 sudo service mysql start || true
-# Wait for the server to accept connections.
-for i in $(seq 1 30); do
+# Wait for the server to accept connections (poll rather than trust the init
+# script's exit code, which times out at ~30s on slower disks).
+for i in $(seq 1 60); do
   if sudo mysqladmin ping >/dev/null 2>&1; then break; fi
   sleep 1
 done
+if ! sudo mysqladmin ping >/dev/null 2>&1; then
+  echo "MySQL failed to start; recent error log:" >&2
+  sudo tail -30 /var/log/mysql/error.log >&2 || true
+  exit 1
+fi
 
 echo "==> Creating database and application user (idempotent)…"
 sudo mysql <<SQL
