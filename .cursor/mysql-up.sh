@@ -9,11 +9,15 @@
 #     daemon is running: Invalid argument") inside containers.
 # So we launch mysqld in the foreground and background it with setsid+nohup.
 #
-# innodb_use_native_aio=OFF: some Cloud Agent build containers block Linux
-# native AIO / io_uring syscalls via seccomp, which makes InnoDB abort during
-# startup (mysqld dies before it can even write to its error log). Falling
-# back to synchronous I/O keeps MySQL portable across those sandboxes.
+# InnoDB portability flags for sandboxed Cloud Agent build containers:
+#   innodb_use_native_aio=OFF — some sandboxes block Linux native AIO syscalls
+#     via seccomp, which makes InnoDB abort before it can even write its log.
+#   innodb_flush_method=fsync — the container's overlay/sandbox filesystem
+#     rejects O_DIRECT (InnoDB aborts with "OS error 22 / Invalid argument");
+#     fsync avoids O_DIRECT and keeps MySQL portable.
 set -uo pipefail
+
+MYSQLD_COMPAT_FLAGS=(--innodb-use-native-aio=OFF --innodb-flush-method=fsync)
 
 BOOT_LOG=/tmp/mysqld-boot.log
 CONSOLE_LOG=/tmp/mysqld-console.log
@@ -26,9 +30,9 @@ fi
 # /run is a fresh tmpfs on every boot, so the runtime dir may be absent.
 sudo install -d -o mysql -g mysql -m 755 /var/run/mysqld
 
-echo "==> Starting MySQL (foreground mysqld, native AIO off)…"
+echo "==> Starting MySQL (foreground mysqld; native AIO off, fsync flush)…"
 sudo -u mysql bash -c "setsid nohup /usr/sbin/mysqld --user=mysql \
-  --innodb-use-native-aio=OFF \
+  ${MYSQLD_COMPAT_FLAGS[*]} \
   --log-error='$BOOT_LOG' \
   --pid-file=/var/run/mysqld/mysqld.pid >'$CONSOLE_LOG' 2>&1 < /dev/null &"
 
