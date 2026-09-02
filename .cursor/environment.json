@@ -1,0 +1,13 @@
+{
+  "name": "Little Graduates (PHP + MySQL)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "php-dev-server",
+      "command": "php -S 0.0.0.0:8000 -t ."
+    }
+  ],
+  "ports": [8000]
+}
