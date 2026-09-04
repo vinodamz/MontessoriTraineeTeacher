@@ -118,6 +118,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILES)
         $sets[] = 'dob = :dob';
         $params[':dob'] = parent_form_parse_date($dobRaw);
 
+        // Consent checkboxes — ticked → 1 (granted), absent → 0 (declined).
+        // The form always submits every section, so an unticked box is a
+        // deliberate "no", not "unknown".
+        foreach (['photo_consent', 'field_trip_consent'] as $c) {
+            $sets[] = "$c = :$c";
+            $params[":$c"] = isset($_POST[$c]) ? 1 : 0;
+        }
+
         // Build the UPDATE.
         $sql = "UPDATE students SET " . implode(', ', $sets) . " WHERE id = :id";
         $pdo->prepare($sql)->execute($params);
@@ -413,6 +421,12 @@ function parent_form_render_shell(string $title, callable $body): void
   .photo-thumb { display: inline-block; width: 56px; height: 56px; border-radius: 6px;
                  background: #f4ece0 center/cover no-repeat; vertical-align: middle; margin-right: .6rem; }
   .small { font-size: .82rem; color: #7a6a55; }
+  label.consent { display: grid; grid-template-columns: 22px 1fr; gap: .6rem; align-items: start;
+                  margin-top: .8rem; padding: .7rem .8rem; border: 1px solid #f3c1d5;
+                  border-radius: 8px; background: #fff8fb; cursor: pointer; }
+  label.consent input[type="checkbox"] { width: 20px; height: 20px; margin-top: .1rem; accent-color: #e91e63; }
+  label.consent strong { display: block; color: #ad1457; font-size: .92rem; margin-bottom: .15rem; }
+  label.consent .small { display: block; }
 </style>
 </head>
 <body>
@@ -597,6 +611,25 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
                 <label>Address</label>
                 <textarea name="emergency_contact_address"><?= e((string)($s['emergency_contact_address'] ?? '')) ?></textarea>
             </div>
+        </div>
+
+        <div class="card">
+            <h2>Consent</h2>
+            <span class="small">Please tick to give your permission. You can leave a box unticked if you do not consent.</span>
+            <label class="consent">
+                <input type="checkbox" name="photo_consent" value="1" <?= !empty($s['photo_consent']) ? 'checked' : '' ?>>
+                <span>
+                    <strong>Photography consent</strong>
+                    <span class="small">I give consent for the school to photograph my child and to use those pictures in the school brochure and on social media.</span>
+                </span>
+            </label>
+            <label class="consent">
+                <input type="checkbox" name="field_trip_consent" value="1" <?= !empty($s['field_trip_consent']) ? 'checked' : '' ?>>
+                <span>
+                    <strong>Field trip consent</strong>
+                    <span class="small">I give consent for my child to be taken on supervised field trips and to extended learning environments outside the school.</span>
+                </span>
+            </label>
         </div>
 
         <div class="card">
