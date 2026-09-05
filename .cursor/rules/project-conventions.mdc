@@ -1,0 +1,36 @@
+---
+description: Project working notes and conventions (shared source of truth with CLAUDE.md)
+alwaysApply: true
+---
+
+# Project conventions (Cursor)
+
+Cursor agents in this repo follow the same working notes as Claude. Read and follow
+@CLAUDE.md — it is the single source of truth for project conventions; keep the two
+in sync rather than duplicating content here.
+
+Key points (see `CLAUDE.md` for full detail):
+
+- **App**: one server-rendered PHP 8.1+/MySQL app — six modules under a single PIN
+  login, no build step. Migrations are idempotent (`php migrate.php`);
+  `includes/config.php` is gitignored (never commit DB credentials). Deploy is a
+  cPanel git-pull driven by `.cpanel.yml`.
+- **Cloud Agent dev environment**: two interchangeable setups live in `.cursor/`
+  (`mysql` = committed default, `mariadb`). Cursor reads the single active
+  `.cursor/environment.json`; switch with `bash .cursor/use-env.sh <mysql|mariadb>`
+  and commit. Each agent is isolated (own VM/DB/config/port), so multiple people can
+  run agents without collisions — but do NOT flip the committed env on shared
+  branches (it changes it for everyone and causes merge conflicts). Details in
+  `.cursor/README.md`.
+- **MySQL in the Cursor sandbox** (encoded in `.cursor/mysql-up.sh`): start `mysqld`
+  in the foreground under `nohup` (the SysV `su - mysql` path and `mysqld --daemonize`
+  are unreliable in containers), and set `innodb_use_native_aio=OFF` +
+  `innodb_flush_method=fsync`. Prebuilt environment builds can't validate MySQL (the
+  prebuild FUSE store rejects InnoDB `close()`), so rely on just-in-time `install.sh`.
+
+## Claude-only items that do NOT apply in Cursor
+
+`CLAUDE.md` documents the **gstack** skill system (slash-commands like `/browse`,
+`/review`, `/ship`, `/learn`). Those are Claude Code commands installed under
+`~/.claude` and are NOT available in Cursor. Do not try to invoke gstack skills or
+the `mcp__claude-in-chrome__*` tools here — use Cursor-native tooling instead.
