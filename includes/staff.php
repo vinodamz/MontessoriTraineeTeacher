@@ -80,6 +80,208 @@ function staff_attendance_summary(int $userId, int $year, int $month): array
     return $out;
 }
 
+/** Accept YYYY-MM-DD or fall back. */
+function staff_ymd(?string $s, string $fallback): string
+{
+    $s = (string)$s;
+    return preg_match('/^\d{4}-\d{2}-\d{2}$/', $s) ? $s : $fallback;
+}
+
+/**
+ * Clamp a custom from/to range. Swaps inverted dates. Caps at 366 days so a
+ * mistyped year cannot dump every historic row onto one page.
+ */
+function staff_timesheet_range(?string $from, ?string $to): array
+{
+    $monthStart = date('Y-m-01');
+    $monthEnd   = date('Y-m-t');
+    $from = staff_ymd($from, $monthStart);
+    $to   = staff_ymd($to, $monthEnd);
+    if ($to < $from) {
+        $tmp = $from; $from = $to; $to = $tmp;
+    }
+    $start = new DateTimeImmutable($from);
+    $end   = new DateTimeImmutable($to);
+    if ($start->diff($end)->days > 366) {
+        $to = $start->modify('+366 days')->format('Y-m-d');
+    }
+    return [$from, $to];
+}
+
+/**
+ * Hours between two clock times on the same day. Null if either is missing
+ * or check-out is before check-in (overnight shifts are not modelled).
+ */
+function staff_day_hours(?string $checkIn, ?string $checkOut): ?float
+{
+    $in  = staff_time_norm($checkIn);
+    $out = staff_time_norm($checkOut);
+    if ($in === null || $out === null) return null;
+    $a = strtotime('2000-01-01 ' . $in);
+    $b = strtotime('2000-01-01 ' . $out);
+    if ($a === false || $b === false || $b < $a) return null;
+    return round(($b - $a) / 3600, 2);
+}
+
+/**
+ * Check-in / check-out register for a date range, grouped by staff.
+ *
+ * Each person has a `days` list (attendance rows plus approved-leave days
+ * that have no attendance row) and `totals`. Leave is overlaid from
+ * staff_leave_requests so a day is called out even when attendance was never
+ * stamped. Pending leave is noted but does not count as on leave.
+ *
+ * @return list<array{user_id:int,name:string,role:string,days:list<array>,totals:array}>
+ */
+function staff_timesheet(string $from, string $to, ?int $userId = null): array
+{
+    [$from, $to] = staff_timesheet_range($from, $to);
+
+    $params = [':s' => $from, ':e' => $to];
+    $userSql = '';
+    if ($userId !== null && $userId > 0) {
+        $userSql = ' AND a.user_id = :u';
+        $params[':u'] = $userId;
+    }
+
+    $attStmt = db()->prepare("
+        SELECT a.user_id, a.att_date, a.status, a.check_in, a.check_out, a.notes,
+               u.name, u.role
+          FROM staff_attendance a
+          JOIN users u ON u.id = a.user_id
+         WHERE a.att_date BETWEEN :s AND :e
+               $userSql
+         ORDER BY u.name, a.att_date
+    ");
+    $attStmt->execute($params);
+
+    $groups = [];
+    foreach ($attStmt->fetchAll() as $r) {
+        $uid = (int)$r['user_id'];
+        if (!isset($groups[$uid])) {
+            $groups[$uid] = [
+                'user_id' => $uid,
+                'name'    => (string)$r['name'],
+                'role'    => (string)$r['role'],
+                'days'    => [],
+            ];
+        }
+        $date = (string)$r['att_date'];
+        $hours = staff_day_hours($r['check_in'] ?? null, $r['check_out'] ?? null);
+        $groups[$uid]['days'][$date] = [
+            'date'           => $date,
+            'status'         => (string)($r['status'] ?? ''),
+            'check_in'       => $r['check_in'] ?? null,
+            'check_out'      => $r['check_out'] ?? null,
+            'hours'          => $hours,
+            'notes'          => $r['notes'] ?? null,
+            'on_leave'       => ($r['status'] ?? '') === 'leave',
+            'leave_type'     => null,
+            'leave_half'     => '',
+            'leave_pending'  => false,
+        ];
+    }
+
+    $leaveParams = [':s' => $from, ':e' => $to];
+    $leaveUserSql = '';
+    if ($userId !== null && $userId > 0) {
+        $leaveUserSql = ' AND l.user_id = :u';
+        $leaveParams[':u'] = $userId;
+    }
+    $leaveStmt = db()->prepare("
+        SELECT l.user_id, l.leave_type, l.start_date, l.end_date, l.half_day, l.status,
+               u.name, u.role
+          FROM staff_leave_requests l
+          JOIN users u ON u.id = l.user_id
+         WHERE l.status IN ('approved','pending')
+           AND l.start_date <= :e AND l.end_date >= :s
+               $leaveUserSql
+         ORDER BY u.name, l.start_date
+    ");
+    $leaveStmt->execute($leaveParams);
+
+    $rangeStart = new DateTimeImmutable($from);
+    $rangeEnd   = new DateTimeImmutable($to);
+    foreach ($leaveStmt->fetchAll() as $lr) {
+        $uid = (int)$lr['user_id'];
+        if (!isset($groups[$uid])) {
+            $groups[$uid] = [
+                'user_id' => $uid,
+                'name'    => (string)$lr['name'],
+                'role'    => (string)$lr['role'],
+                'days'    => [],
+            ];
+        }
+        $cur = new DateTimeImmutable((string)$lr['start_date']);
+        $end = new DateTimeImmutable((string)$lr['end_date']);
+        if ($cur < $rangeStart) $cur = $rangeStart;
+        if ($end > $rangeEnd) $end = $rangeEnd;
+        $approved = ($lr['status'] ?? '') === 'approved';
+        $type     = (string)($lr['leave_type'] ?? '');
+        $half     = (string)($lr['half_day'] ?? '');
+        while ($cur <= $end) {
+            $date = $cur->format('Y-m-d');
+            if (!isset($groups[$uid]['days'][$date])) {
+                $groups[$uid]['days'][$date] = [
+                    'date'          => $date,
+                    'status'        => $approved ? 'leave' : '',
+                    'check_in'      => null,
+                    'check_out'     => null,
+                    'hours'         => null,
+                    'notes'         => null,
+                    'on_leave'      => $approved,
+                    'leave_type'    => $approved ? $type : null,
+                    'leave_half'    => $approved ? $half : '',
+                    'leave_pending' => !$approved,
+                ];
+            } else {
+                $day = &$groups[$uid]['days'][$date];
+                if ($approved) {
+                    $day['on_leave'] = true;
+                    if ($day['status'] === '' || $day['status'] === 'absent') {
+                        $day['status'] = 'leave';
+                    }
+                    $day['leave_type'] = $type;
+                    $day['leave_half'] = $half;
+                    $day['leave_pending'] = false;
+                } elseif (empty($day['on_leave'])) {
+                    $day['leave_pending'] = true;
+                    if ($day['leave_type'] === null) $day['leave_type'] = $type;
+                }
+                unset($day);
+            }
+            $cur = $cur->modify('+1 day');
+        }
+    }
+
+    $statusKeys = array_keys(staff_attendance_statuses());
+    $out = [];
+    foreach ($groups as $g) {
+        ksort($g['days']);
+        $days = array_values($g['days']);
+        $totals = array_fill_keys($statusKeys, 0);
+        $totals['hours'] = 0.0;
+        $totals['clocked_days'] = 0;
+        $totals['leave_days'] = 0;
+        $totals['rows'] = count($days);
+        foreach ($days as $d) {
+            $st = (string)($d['status'] ?? '');
+            if ($st !== '' && isset($totals[$st])) $totals[$st]++;
+            if (!empty($d['on_leave'])) $totals['leave_days']++;
+            if ($d['hours'] !== null) {
+                $totals['hours'] += (float)$d['hours'];
+                $totals['clocked_days']++;
+            }
+        }
+        $totals['hours'] = round($totals['hours'], 2);
+        $g['days'] = $days;
+        $g['totals'] = $totals;
+        $out[] = $g;
+    }
+    usort($out, static fn($a, $b) => strcasecmp($a['name'], $b['name']));
+    return $out;
+}
+
 // ---- Leave --------------------------------------------------------------
 
 function staff_leave_types(): array

@@ -146,6 +146,10 @@ CREATE TABLE students (
     -- Three-state media/data consent: 1=yes, 0=no, NULL=unknown.
     consent_given            TINYINT(1)   NULL,
     consent_date             DATE         NULL,
+    -- Explicit admission-form consents (checkboxes on the parent form).
+    -- Three-state: 1=granted, 0=declined, NULL=not yet answered.
+    photo_consent            TINYINT(1)   NULL,
+    field_trip_consent       TINYINT(1)   NULL,
     transport                ENUM('own','cab','bus','walk') NULL,
     is_active                TINYINT(1)   NOT NULL DEFAULT 1,
     grade                    VARCHAR(40)  NOT NULL,  -- see grade_levels (migrate_050)

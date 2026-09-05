@@ -129,6 +129,7 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
         <a class="btn" href="/staff/payslip.php?id=<?= $id ?>">Payslips</a>
         <a class="btn" href="/staff/attendance.php">Attendance</a>
+        <a class="btn" href="/staff/timesheet.php?user_id=<?= $id ?>">Monthly in / out</a>
         <?php if ($isAdmin): ?>
             <a class="btn" href="/staff/leave.php?user_id=<?= $id ?>">Leave</a>
             <a class="btn" href="/staff/pay.php?id=<?= $id ?>">Pay structure</a>
@@ -264,6 +265,9 @@ $relRelation = $profile['relative_relation'] !== '' ? (staff_relations()[$profil
 <div class="row" style="align-items: stretch;">
     <div class="card" style="flex: 1 1 280px;">
         <h3>Attendance — <?= e(date('F Y')) ?></h3>
+        <p class="muted small" style="margin-top:0;">
+            <a href="/staff/timesheet.php?user_id=<?= $id ?>">Day-by-day check-in / out</a>
+        </p>
         <dl class="dl-grid">
             <?php foreach (staff_attendance_statuses() as $code => $label): ?>
                 <dt><?= e($label) ?></dt>

@@ -95,7 +95,7 @@ if ($moduleCount === 1) {
     if ($hasFees)      redirect('/fees/index.php');
     if ($hasLogbook)   redirect('/logbook/index.php');
     if ($hasInventory) redirect('/inventory/index.php');
-    if ($hasMaterials) redirect('/materials/index.php');
+    if ($hasMaterials) redirect('/materials/daily.php');
     if ($hasWacrm)     redirect('/wacrm/index.php');
     if ($hasN8n)       redirect('/n8n/index.php');
     if ($hasDaycare)   redirect('/daycare/index.php');
@@ -406,7 +406,7 @@ if ($hasMaterials) {
     $mmReplace = (int)$mmStmt->fetchColumn();
     $stats = [['label' => $mmTotal . ' materials', 'tone' => '']];
     if ($mmReplace > 0) $stats[] = ['label' => $mmReplace . ' to replace', 'tone' => 'warn'];
-    $apps[] = ['key' => 'materials', 'name' => 'Materials', 'subtitle' => 'Condition · Kreedo replacement', 'href' => '/materials/index.php', 'stats' => $stats];
+    $apps[] = ['key' => 'materials', 'name' => 'Materials', 'subtitle' => 'Daily check · photos · Kreedo', 'href' => '/materials/daily.php', 'stats' => $stats];
 }
 // External apps (wacrm, n8n) — driven by external_apps_registry() in
 // includes/functions.php. Each tile shows the configured host as a hint,

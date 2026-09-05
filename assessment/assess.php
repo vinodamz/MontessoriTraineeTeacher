@@ -17,12 +17,8 @@ $user = require_module('montessori');
 
 // ---------- Resolve student + month ----------------------------------------
 $studentId    = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
-$monthParam   = trim($_REQUEST['month'] ?? '');
-$monthDt      = $monthParam !== '' ? DateTime::createFromFormat('M-y', $monthParam) : false;
-$monthChosen  = $monthDt !== false;
-// Normalise case ("jun-25" → "Jun-25") so one calendar month can't exist
-// under two different string keys.
-if ($monthChosen) $monthParam = $monthDt->format('M-y');
+$monthParam   = normalize_month_year(trim((string)($_REQUEST['month'] ?? ''))) ?? '';
+$monthChosen  = $monthParam !== '';
 
 $stmt = db()->prepare("SELECT id, first_name, last_name, grade, teacher_id FROM students WHERE id = :id");
 $stmt->execute([':id' => $studentId]);

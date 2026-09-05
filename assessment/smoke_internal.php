@@ -18,8 +18,10 @@
  *     row, and the POST-side lookup (grade-scoped, no is_active filter)
  *     still resolves it so a re-save can't silently drop the rating.
  *   - Rating clamp: every rating_config.numeric_value sits inside 1..5.
- *   - Month normalization: 'jun-25' parses and re-formats to 'Jun-25', so
- *     one calendar month can't exist under two different string keys.
+ *   - Month normalization: 'jun-25' / 'JUN-25' canonicalise to 'Jun-25'
+ *     (first letter of the abbreviation capitalised) via normalize_month_year,
+ *     so one calendar month can't exist under two string keys and a 31st
+ *     cannot overflow June into July.
  *   - Active-list filter: the dashboard WHERE from assessment/index.php
  *     excludes withdrawn/inactive students and keeps enrolled ones.
  *
@@ -304,9 +306,25 @@ try {
     }
 
     // ---- 7. Month normalization ---------------------------------------------
-    $dt = DateTime::createFromFormat('M-y', 'jun-25');
-    if ($dt === false || $dt->format('M-y') !== 'Jun-25') {
+    if (normalize_month_year('jun-25') !== 'Jun-25') {
         $failures[] = "month normalization: 'jun-25' did not normalise to 'Jun-25'";
+    }
+    if (normalize_month_year('JUN-25') !== 'Jun-25') {
+        $failures[] = "month normalization: 'JUN-25' did not normalise to 'Jun-25'";
+    }
+    if (normalize_month_year('Jun-25') !== 'Jun-25') {
+        $failures[] = "month normalization: 'Jun-25' did not stay 'Jun-25'";
+    }
+    // On the 31st, M-y without "!" overflows June → July. Canonical form
+    // must still be June, and the label must say June (not July).
+    if (month_year_label('Jun-25') !== 'Jun 2025') {
+        $failures[] = "month_year_label('Jun-25') was '" . month_year_label('Jun-25') . "', expected 'Jun 2025'";
+    }
+    if (compare_month_year('jun-25', 'Jun-25') !== 0) {
+        $failures[] = "compare_month_year must treat 'jun-25' and 'Jun-25' as the same month";
+    }
+    if (compare_month_year('Jun-25', 'Jul-25') >= 0) {
+        $failures[] = "compare_month_year: Jun-25 should sort before Jul-25";
     }
     if (!in_array('Jun-25', academic_months(2025), true)) {
         $failures[] = "month normalization: 'Jun-25' missing from academic_months(2025)";

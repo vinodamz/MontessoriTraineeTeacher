@@ -150,6 +150,17 @@ require __DIR__ . '/../includes/header.php';
                 <p class="muted small"><?= e((string)$it['notes']) ?></p>
             <?php endif; ?>
             <?php
+                $action = (string)($it['action_key'] ?? '');
+                $actionHref = duty_action_href($action);
+            ?>
+            <?php if ($actionHref !== ''): ?>
+                <p>
+                    <a class="btn btn-primary" href="<?= e($actionHref) ?>">
+                        <?= $action === 'materials_check' ? "Open today's sheet" : 'Open' ?>
+                    </a>
+                </p>
+            <?php endif; ?>
+            <?php
                 $ws = (string)($it['window_start'] ?? '');
                 $we = (string)($it['window_end'] ?? '');
                 if ($ws !== '' || $we !== ''):

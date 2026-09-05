@@ -18,6 +18,42 @@ const DUTY_REPEAT_AS   = ['once', 'daily', 'weekly', 'monthly'];
 const DUTY_AUDIENCES   = ['all_teachers', 'all_non_teaching', 'all_staff', 'users'];
 const DUTY_STATUSES    = ['pending', 'done', 'not_done'];
 const DUTY_WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DUTY_ACTIONS = [
+    ''                 => ['label' => 'Plain tick',            'href' => ''],
+    'materials_check'  => ['label' => 'Materials check sheet', 'href' => '/materials/daily.php'],
+];
+
+function duty_action_label(string $key): string
+{
+    return DUTY_ACTIONS[$key]['label'] ?? $key;
+}
+
+function duty_action_href(string $key): string
+{
+    return DUTY_ACTIONS[$key]['href'] ?? '';
+}
+
+function duty_normalize_action(string $key): string
+{
+    $key = trim($key);
+    if ($key === '' || isset(DUTY_ACTIONS[$key])) return $key;
+    throw new InvalidArgumentException('Unknown duty action.');
+}
+
+/** True if this person is on an active duty template with this action_key. */
+function duty_user_has_action(int $userId, string $action): bool
+{
+    if ($userId <= 0 || $action === '' || !duty_tables_ready()) return false;
+    try {
+        foreach (duty_templates(true) as $tpl) {
+            if ((string)($tpl['action_key'] ?? '') !== $action) continue;
+            if (in_array($userId, duty_assignee_ids($tpl), true)) return true;
+        }
+    } catch (Throwable $e) {
+        return false;
+    }
+    return false;
+}
 
 function duty_freq_label(string $freq): string
 {
@@ -198,6 +234,20 @@ function duty_tables_ready(): bool
     return $ok;
 }
 
+function duty_has_action_key(): bool
+{
+    static $ok = null;
+    if ($ok !== null) return $ok;
+    if (!duty_tables_ready()) { $ok = false; return $ok; }
+    try {
+        db()->query("SELECT action_key FROM staff_duty_templates LIMIT 1");
+        $ok = true;
+    } catch (Throwable $e) {
+        $ok = false;
+    }
+    return $ok;
+}
+
 /** Active staff who can be assigned a duty. */
 function duty_people(): array
 {
@@ -303,32 +353,63 @@ function duty_template_upsert(array $in, ?int $byUserId): array
     }
     if ($freq === 'adhoc' && !$end) $end = $start;
     $mask = duty_days_mask_from($in['days_mask'] ?? ($in['weekdays'] ?? DAYS_ALL));
+    $action = duty_normalize_action((string)($in['action_key'] ?? ''));
+    if ($action === 'materials_check' && $notes === null) {
+        $notes = 'Walk every shelf. Mark each material. Add a photo, video or note when something is wrong. The sheet is blank again tomorrow.';
+    }
 
     if ($id > 0) {
         $exist = duty_template($id);
         if (!$exist) throw new InvalidArgumentException("No template #$id.");
-        db()->prepare("
-            UPDATE staff_duty_templates
-               SET title = :t, notes = :n, frequency = :f, audience = :a,
-                   starts_on = :start, ends_on = :end, days_mask = :m, repeat_as = :r,
-                   is_active = :on, sort_order = :s
-             WHERE id = :id
-        ")->execute([
-            ':t' => $title, ':n' => $notes, ':f' => $freq, ':a' => $audience,
-            ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
-            ':on' => $active, ':s' => $sort, ':id' => $id,
-        ]);
+        if (duty_has_action_key()) {
+            db()->prepare("
+                UPDATE staff_duty_templates
+                   SET title = :t, notes = :n, action_key = :ak, frequency = :f, audience = :a,
+                       starts_on = :start, ends_on = :end, days_mask = :m, repeat_as = :r,
+                       is_active = :on, sort_order = :s
+                 WHERE id = :id
+            ")->execute([
+                ':t' => $title, ':n' => $notes, ':ak' => $action, ':f' => $freq, ':a' => $audience,
+                ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
+                ':on' => $active, ':s' => $sort, ':id' => $id,
+            ]);
+        } else {
+            db()->prepare("
+                UPDATE staff_duty_templates
+                   SET title = :t, notes = :n, frequency = :f, audience = :a,
+                       starts_on = :start, ends_on = :end, days_mask = :m, repeat_as = :r,
+                       is_active = :on, sort_order = :s
+                 WHERE id = :id
+            ")->execute([
+                ':t' => $title, ':n' => $notes, ':f' => $freq, ':a' => $audience,
+                ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
+                ':on' => $active, ':s' => $sort, ':id' => $id,
+            ]);
+        }
     } else {
-        db()->prepare("
-            INSERT INTO staff_duty_templates
-                (title, notes, frequency, audience, starts_on, ends_on, days_mask, repeat_as,
-                 is_active, sort_order, created_by)
-            VALUES (:t, :n, :f, :a, :start, :end, :m, :r, :on, :s, :u)
-        ")->execute([
-            ':t' => $title, ':n' => $notes, ':f' => $freq, ':a' => $audience,
-            ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
-            ':on' => $active, ':s' => $sort, ':u' => $byUserId,
-        ]);
+        if (duty_has_action_key()) {
+            db()->prepare("
+                INSERT INTO staff_duty_templates
+                    (title, notes, action_key, frequency, audience, starts_on, ends_on, days_mask, repeat_as,
+                     is_active, sort_order, created_by)
+                VALUES (:t, :n, :ak, :f, :a, :start, :end, :m, :r, :on, :s, :u)
+            ")->execute([
+                ':t' => $title, ':n' => $notes, ':ak' => $action, ':f' => $freq, ':a' => $audience,
+                ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
+                ':on' => $active, ':s' => $sort, ':u' => $byUserId,
+            ]);
+        } else {
+            db()->prepare("
+                INSERT INTO staff_duty_templates
+                    (title, notes, frequency, audience, starts_on, ends_on, days_mask, repeat_as,
+                     is_active, sort_order, created_by)
+                VALUES (:t, :n, :f, :a, :start, :end, :m, :r, :on, :s, :u)
+            ")->execute([
+                ':t' => $title, ':n' => $notes, ':f' => $freq, ':a' => $audience,
+                ':start' => $start, ':end' => $end, ':m' => $mask, ':r' => $repeat,
+                ':on' => $active, ':s' => $sort, ':u' => $byUserId,
+            ]);
+        }
         $id = (int)db()->lastInsertId();
     }
 
@@ -421,10 +502,11 @@ function duty_materialize_for_user(int $userId, ?DateTimeInterface $when = null)
 
 function duty_items_for_user(int $userId, string $freq, string $periodKey): array
 {
+    $akSel = duty_has_action_key() ? ', t.action_key' : '';
     if ($freq === 'adhoc') {
         $today = (new DateTimeImmutable('today'))->format('Y-m-d');
         $st = db()->prepare("
-            SELECT i.*, t.starts_on AS window_start, t.ends_on AS window_end
+            SELECT i.*, t.starts_on AS window_start, t.ends_on AS window_end $akSel
               FROM staff_duty_items i
             LEFT JOIN staff_duty_templates t ON t.id = i.template_id
              WHERE i.user_id = :u AND i.frequency = 'adhoc'
@@ -441,10 +523,13 @@ function duty_items_for_user(int $userId, string $freq, string $periodKey): arra
         $st->execute([':u' => $userId, ':today' => $today, ':d1' => $today, ':d2' => $today]);
         return $st->fetchAll();
     }
+    $akSel = duty_has_action_key() ? ', t.action_key' : '';
     $st = db()->prepare("
-        SELECT * FROM staff_duty_items
-         WHERE user_id = :u AND frequency = :f AND period_key = :k
-         ORDER BY source ASC, id ASC
+        SELECT i.* $akSel
+          FROM staff_duty_items i
+          LEFT JOIN staff_duty_templates t ON t.id = i.template_id
+         WHERE i.user_id = :u AND i.frequency = :f AND i.period_key = :k
+         ORDER BY i.source ASC, i.id ASC
     ");
     $st->execute([':u' => $userId, ':f' => $freq, ':k' => $periodKey]);
     return $st->fetchAll();

@@ -610,6 +610,36 @@ function current_month_year(): string
 }
 
 /**
+ * Canonical assessment month key, e.g. "Jun-25".
+ *
+ * Capitalizes the three-letter abbreviation (jun-25 / JUN-25 → Jun-25) so
+ * one calendar month cannot exist under two string keys. Parses with !M-y
+ * (day = 1): without that, createFromFormat('M-y') keeps today's day-of-
+ * month, and the 31st overflows June/April/September/November into the
+ * next month — so "Jun-25" would save and display as "Jul-25".
+ *
+ * Returns null when the value is not a real M-y month.
+ */
+function normalize_month_year(string $my): ?string
+{
+    $my = trim($my);
+    if (!preg_match('/^([A-Za-z]{3})-(\d{2})$/', $my, $m)) return null;
+    $canon = ucfirst(strtolower($m[1])) . '-' . $m[2];
+    $dt = DateTime::createFromFormat('!M-y', $canon);
+    if ($dt === false || $dt->format('M-y') !== $canon) return null;
+    return $canon;
+}
+
+/** Parsed assessment month (first of that month), or null. */
+function parse_month_year(string $my): ?DateTimeImmutable
+{
+    $canon = normalize_month_year($my);
+    if ($canon === null) return null;
+    $d = DateTimeImmutable::createFromFormat('!M-y', $canon);
+    return $d ?: null;
+}
+
+/**
  * Current academic year as "YYYY-YY".
  * The Indian academic year runs Jun → Mar; June onwards starts a new year.
  *   e.g. anytime in 2026-06 → 2027-05 returns "2026-27".
@@ -762,14 +792,14 @@ function grade_badge_class(string $grade): string
 
 function month_year_label(string $my): string
 {
-    $d = DateTime::createFromFormat('M-y', $my);
+    $d = parse_month_year($my);
     return $d ? $d->format('M Y') : $my;
 }
 
 function compare_month_year(string $a, string $b): int
 {
-    $da = DateTime::createFromFormat('M-y', $a);
-    $db = DateTime::createFromFormat('M-y', $b);
+    $da = parse_month_year($a);
+    $db = parse_month_year($b);
     if (!$da || !$db) return strcmp($a, $b);
     return $da <=> $db;
 }
