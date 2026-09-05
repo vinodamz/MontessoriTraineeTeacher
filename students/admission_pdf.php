@@ -395,6 +395,16 @@ if ($logoPath && is_file($logoPath)) {
     </div>
 
     <div class="section">
+        <p class="section-title"><span class="num">14.</span> Parental Consent</p>
+        <p style="margin:.2rem 0 .1rem;"><?= pdf_check(!empty($s['photo_consent'])) ?>
+            <strong>Photography consent</strong> — permission to photograph the child and use the
+            pictures in the school brochure and on social media.</p>
+        <p style="margin:.2rem 0 .1rem;"><?= pdf_check(!empty($s['field_trip_consent'])) ?>
+            <strong>Field trip consent</strong> — permission to take the child on supervised field
+            trips and to extended learning environments outside the school.</p>
+    </div>
+
+    <div class="section">
         <p class="section-title">Checklist</p>
         <div class="checklist">
             <label>☐ (a) Birth Certificate *</label>
