@@ -2,13 +2,16 @@
 /**
  * staff/payslip.php — generate, issue, view and print payslips.
  *
- *   GET  ?id=&year=&month=     Draft view: computes from pay structure +
- *                              attendance. Admin can adjust working/LOP days
- *                              then issue. If already issued, shows the saved
- *                              snapshot (immutable).
- *   POST op=issue              Admin: snapshot the payslip into staff_payslips.
+ *   GET  ?id=&year=&month=     Draft or issued view. Admin may pass
+ *                              working_days / lop_days to preview net without
+ *                              saving.
+ *   POST op=issue              Admin: save (or update) the snapshot, including
+ *                              an edited LOP. Already-issued slips keep their
+ *                              earnings snapshot; only days / LOP / net change.
+ *   POST op=recall             Admin: delete the issued snapshot so the month
+ *                              is a draft again (live from pay + attendance).
  *
- * Staff can view their own issued payslips; only admins can issue them.
+ * Staff can view their own issued payslips; only admins can edit LOP / issue.
  */
 declare(strict_types=1);
 
@@ -28,24 +31,46 @@ $year  = (int)($_GET['year']  ?? $_POST['year']  ?? date('Y'));
 $month = (int)($_GET['month'] ?? $_POST['month'] ?? date('n'));
 if ($month < 1 || $month > 12) $month = (int)date('n');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'issue') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     if (!$isAdmin) { http_response_code(403); echo 'Admins only.'; exit; }
+    $op = (string)($_POST['op'] ?? '');
+    $back = '/staff/payslip.php?id=' . $id . '&year=' . $year . '&month=' . $month;
+    $when = date('F Y', strtotime(sprintf('%04d-%02d-01', $year, $month)));
 
-    $draft = staff_payslip_draft($id, $year, $month);
-    if (!$draft['has_pay']) {
-        flash_set('error', 'Set a pay structure first.');
-        redirect('/staff/pay.php?id=' . $id);
+    if ($op === 'recall') {
+        if (staff_payslip_recall($id, $year, $month)) {
+            flash_set('ok', 'Payslip for ' . $when . ' called back to draft.');
+        } else {
+            flash_set('error', 'That payslip was not issued.');
+        }
+        redirect($back);
     }
 
-    // Admin overrides for working / LOP days.
-    $workingDays = max(1, (float)($_POST['working_days'] ?? $draft['working_days']));
-    $lopDays     = max(0, (float)($_POST['lop_days'] ?? $draft['lop_days']));
-    $gross       = $draft['gross_earnings'];
-    $perDay      = $workingDays > 0 ? $gross / $workingDays : 0.0;
-    $lopAmt      = round($perDay * $lopDays, 2);
-    $totDed      = $draft['total_deductions'];
-    $net         = round($gross - $lopAmt - $totDed, 2);
+    if ($op !== 'issue') {
+        flash_set('error', 'Unknown action.');
+        redirect($back);
+    }
+
+    $existing = staff_payslip($id, $year, $month);
+    if ($existing) {
+        // Keep the issued earnings snapshot. Only working days / LOP / net
+        // change — a later pay-structure edit must not rewrite this slip.
+        $base = staff_payslip_view_from_issued($existing);
+    } else {
+        $base = staff_payslip_draft($id, $year, $month);
+        if (!$base['has_pay']) {
+            flash_set('error', 'Set a pay structure first.');
+            redirect('/staff/pay.php?id=' . $id);
+        }
+    }
+
+    $workingDays = staff_payslip_day_input($_POST['working_days'] ?? null, (float)$base['working_days'], 1.0, 31.0);
+    $lopDays     = staff_payslip_day_input($_POST['lop_days'] ?? null, (float)$base['lop_days'], 0.0, 31.0);
+    $view        = staff_payslip_apply_days($base, $workingDays, $lopDays);
+    $notes       = array_key_exists('notes', $_POST)
+        ? (trim((string)$_POST['notes']) ?: null)
+        : ($existing['notes'] ?? null);
 
     db()->prepare("
         INSERT INTO staff_payslips
@@ -67,46 +92,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'issue') {
             generated_by = VALUES(generated_by), generated_at = CURRENT_TIMESTAMP
     ")->execute([
         ':u' => $id, ':y' => $year, ':m' => $month,
-        ':wd' => $workingDays, ':pd' => $draft['present_days'], ':pl' => $draft['paid_leave_days'],
-        ':lop' => $lopDays,
-        // The split is stored, not recomputed later: leave can be edited after
-        // a slip is issued, and an issued payslip must keep explaining itself.
-        ':lopl' => min($lopDays, (float)($draft['lop_leave_days'] ?? 0)),
-        ':lopa' => max(0.0, $lopDays - (float)($draft['lop_leave_days'] ?? 0)),
-        ':hrs' => $draft['hours_worked'],
-        ':ej' => json_encode($draft['earnings'], JSON_UNESCAPED_UNICODE),
-        ':dj' => json_encode($draft['deductions'], JSON_UNESCAPED_UNICODE),
-        ':gross' => $gross, ':lopamt' => $lopAmt, ':totded' => $totDed, ':net' => $net,
-        ':notes' => trim($_POST['notes'] ?? '') ?: null, ':by' => (int)$user['id'],
+        ':wd' => $view['working_days'], ':pd' => $view['present_days'], ':pl' => $view['paid_leave_days'],
+        ':lop' => $view['lop_days'],
+        ':lopl' => $view['lop_leave_days'],
+        ':lopa' => $view['lop_absent_days'],
+        ':hrs' => $view['hours_worked'],
+        ':ej' => json_encode($view['earnings'], JSON_UNESCAPED_UNICODE),
+        ':dj' => json_encode($view['deductions'], JSON_UNESCAPED_UNICODE),
+        ':gross' => $view['gross_earnings'], ':lopamt' => $view['lop_amount'],
+        ':totded' => $view['total_deductions'], ':net' => $view['net_pay'],
+        ':notes' => $notes,
+        ':by' => (int)$user['id'],
     ]);
-    flash_set('ok', 'Payslip issued for ' . date('F Y', strtotime("$year-$month-01")) . '.');
-    redirect('/staff/payslip.php?id=' . $id . '&year=' . $year . '&month=' . $month);
+    flash_set('ok', $existing
+        ? 'Payslip updated for ' . $when . '.'
+        : 'Payslip issued for ' . $when . '.');
+    redirect($back);
 }
 
 $issued = staff_payslip($id, $year, $month);
+$auto   = staff_payslip_draft($id, $year, $month);
 
-// If issued, render from the snapshot; otherwise compute a live draft.
 if ($issued) {
-    $earnings   = json_decode((string)$issued['earnings_json'], true) ?: [];
-    $deductions = json_decode((string)$issued['deductions_json'], true) ?: [];
-    $view = [
-        'working_days'     => (float)$issued['working_days'],
-        'present_days'     => (float)$issued['present_days'],
-        'paid_leave_days'  => (float)$issued['paid_leave_days'],
-        'lop_days'         => (float)$issued['lop_days'],
-        'lop_leave_days'   => (float)($issued['lop_leave_days'] ?? 0),
-        'lop_absent_days'  => (float)($issued['lop_absent_days'] ?? 0),
-        'hours_worked'     => (float)$issued['hours_worked'],
-        'earnings'         => $earnings,
-        'deductions'       => $deductions,
-        'gross_earnings'   => (float)$issued['gross_earnings'],
-        'lop_amount'       => (float)$issued['lop_amount'],
-        'total_deductions' => (float)$issued['total_deductions'],
-        'net_pay'          => (float)$issued['net_pay'],
-        'has_pay'          => true,
-    ];
+    $view = staff_payslip_view_from_issued($issued);
 } else {
-    $view = staff_payslip_draft($id, $year, $month);
+    $view = $auto;
+}
+
+// Admin preview: apply From/To-style day overrides from the query string
+// so they can see net change before saving.
+if ($isAdmin && $view['has_pay'] && (isset($_GET['working_days']) || isset($_GET['lop_days']))) {
+    $wd  = staff_payslip_day_input($_GET['working_days'] ?? null, (float)$view['working_days'], 1.0, 31.0);
+    $lop = staff_payslip_day_input($_GET['lop_days'] ?? null, (float)$view['lop_days'], 0.0, 31.0);
+    $view = staff_payslip_apply_days($view, $wd, $lop);
 }
 
 // Recent issued payslips for this staff member.
@@ -244,42 +262,59 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<?php if ($isAdmin && !$issued): ?>
-<form method="post" class="card no-print">
-    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-    <input type="hidden" name="op" value="issue">
-    <input type="hidden" name="id" value="<?= $id ?>">
-    <input type="hidden" name="year" value="<?= $year ?>">
-    <input type="hidden" name="month" value="<?= $month ?>">
-    <h3>Issue this payslip</h3>
-    <p class="muted small">Adjust days if needed, then issue. Issuing snapshots the figures so later pay changes don't alter this slip.</p>
-    <div class="row">
-        <div class="field" style="max-width:160px;">
-            <label for="working_days">Working days</label>
-            <input id="working_days" name="working_days" type="number" min="1" max="31" step="0.5" value="<?= e((string)$view['working_days']) ?>">
+<?php if ($isAdmin && !empty($view['has_pay'])):
+    $autoLop = (float)($auto['lop_days'] ?? 0);
+    $autoWd  = (float)($auto['working_days'] ?? 0);
+    $noteVal = $issued ? (string)($issued['notes'] ?? '') : '';
+?>
+<div class="card no-print">
+    <h3><?= $issued ? 'Edit issued payslip' : 'Issue this payslip' ?></h3>
+    <p class="muted small">
+        Set loss-of-pay days, then <?= $issued ? 'save' : 'issue' ?>.
+        Attendance currently suggests
+        <strong><?= e(rtrim(rtrim(number_format($autoLop, 1), '0'), '.')) ?></strong> LOP day<?= abs($autoLop - 1.0) < 0.001 ? '' : 's' ?>
+        on a <?= e(rtrim(rtrim(number_format($autoWd, 1), '0'), '.')) ?>-day basis.
+        <?php if ($issued): ?>
+            Calling back to draft drops the issued snapshot; figures follow live attendance until you issue again.
+        <?php else: ?>
+            Issuing snapshots the figures so later pay changes don't alter this slip.
+        <?php endif; ?>
+    </p>
+    <form method="post">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="issue">
+        <input type="hidden" name="id" value="<?= $id ?>">
+        <input type="hidden" name="year" value="<?= $year ?>">
+        <input type="hidden" name="month" value="<?= $month ?>">
+        <div class="row">
+            <div class="field" style="max-width:160px;">
+                <label for="working_days">Working days</label>
+                <input id="working_days" name="working_days" type="number" min="1" max="31" step="0.5" value="<?= e((string)$view['working_days']) ?>">
+            </div>
+            <div class="field" style="max-width:160px;">
+                <label for="lop_days">Loss-of-pay days</label>
+                <input id="lop_days" name="lop_days" type="number" min="0" max="31" step="0.5" value="<?= e((string)$view['lop_days']) ?>">
+            </div>
+            <div class="field" style="flex:1 1 240px;">
+                <label for="notes">Note (optional)</label>
+                <input id="notes" name="notes" maxlength="255" value="<?= e($noteVal) ?>">
+            </div>
         </div>
-        <div class="field" style="max-width:160px;">
-            <label for="lop_days">Loss-of-pay days</label>
-            <input id="lop_days" name="lop_days" type="number" min="0" max="31" step="0.5" value="<?= e((string)$view['lop_days']) ?>">
+        <div class="actions">
+            <button class="btn btn-primary" type="submit"><?= $issued ? 'Save LOP' : 'Issue payslip' ?></button>
         </div>
-        <div class="field" style="flex:1 1 240px;">
-            <label for="notes">Note (optional)</label>
-            <input id="notes" name="notes" maxlength="255">
-        </div>
-    </div>
-    <div class="actions"><button class="btn btn-primary" type="submit">Issue payslip</button></div>
-</form>
-<?php elseif ($isAdmin && $issued): ?>
-<form method="post" class="card no-print" onsubmit="return confirm('Re-issue overwrites the saved figures with a fresh computation. Continue?')">
-    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-    <input type="hidden" name="op" value="issue">
-    <input type="hidden" name="id" value="<?= $id ?>">
-    <input type="hidden" name="year" value="<?= $year ?>">
-    <input type="hidden" name="month" value="<?= $month ?>">
-    <input type="hidden" name="working_days" value="<?= e((string)$view['working_days']) ?>">
-    <input type="hidden" name="lop_days" value="<?= e((string)$view['lop_days']) ?>">
-    <button class="btn btn-ghost" type="submit">Re-issue (recompute)</button>
-</form>
+    </form>
+    <?php if ($issued): ?>
+    <form method="post" style="margin-top:.8rem;" onsubmit="return confirm('Call this payslip back to draft? The issued snapshot is removed and figures will follow attendance until you issue again.');">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="op" value="recall">
+        <input type="hidden" name="id" value="<?= $id ?>">
+        <input type="hidden" name="year" value="<?= $year ?>">
+        <input type="hidden" name="month" value="<?= $month ?>">
+        <button class="btn btn-ghost" type="submit">Call back to draft</button>
+    </form>
+    <?php endif; ?>
+</div>
 <?php endif; ?>
 
 <?php endif; ?>
