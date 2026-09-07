@@ -863,7 +863,8 @@ function mcp_tools(): array
                            . 'all_non_teaching, all_staff, or users. Frequency: daily, weekly, monthly, '
                            . 'or adhoc (needs starts_on). Optional ends_on, weekdays, and for adhoc '
                            . 'repeat_as once|daily|weekly|monthly. action_key materials_check opens '
-                           . 'today\'s blank materials sheet. Do not insert into '
+                           . 'today\'s blank materials sheet; weekly_plan opens this week\'s plan editor. '
+                           . 'Do not insert into '
                            . 'staff_duty_templates by hand.',
             'inputSchema' => [
                 'type'       => 'object',
@@ -872,8 +873,8 @@ function mcp_tools(): array
                     'id'         => ['type' => 'integer', 'description' => 'Set to update an existing template.'],
                     'title'      => ['type' => 'string'],
                     'notes'      => ['type' => 'string', 'description' => 'Short help shown under the task.'],
-                    'action_key' => ['type' => 'string', 'enum' => ['', 'materials_check'],
-                                     'description' => 'materials_check opens today\'s materials sheet from My duties.'],
+                    'action_key' => ['type' => 'string', 'enum' => ['', 'materials_check', 'weekly_plan'],
+                                     'description' => 'materials_check opens today\'s materials sheet; weekly_plan opens this week\'s plan editor.'],
                     'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly', 'adhoc']],
                     'audience'   => ['type' => 'string',
                                      'enum' => ['all_teachers', 'all_non_teaching', 'all_staff', 'users']],

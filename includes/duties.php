@@ -21,6 +21,7 @@ const DUTY_WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DUTY_ACTIONS = [
     ''                 => ['label' => 'Plain tick',            'href' => ''],
     'materials_check'  => ['label' => 'Materials check sheet', 'href' => '/materials/daily.php'],
+    'weekly_plan'      => ['label' => 'Submit weekly plan',    'href' => '/plans/edit.php'],
 ];
 
 function duty_action_label(string $key): string
@@ -30,6 +31,9 @@ function duty_action_label(string $key): string
 
 function duty_action_href(string $key): string
 {
+    if ($key === 'weekly_plan') {
+        return '/plans/edit.php?week=' . rawurlencode((new DateTimeImmutable('now'))->format('o-\WW'));
+    }
     return DUTY_ACTIONS[$key]['href'] ?? '';
 }
 

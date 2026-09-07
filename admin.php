@@ -27,7 +27,7 @@ function modules_from_post(array $post): string
 {
     $picked = $post['modules'] ?? [];
     if (!is_array($picked)) $picked = [];
-    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook', 'inventory', 'materials', 'wacrm', 'n8n', 'daycare']);
+    $valid = array_intersect($picked, ['tasks', 'montessori', 'students', 'crm', 'recruitment', 'staff', 'expenses', 'fees', 'logbook', 'inventory', 'materials', 'wacrm', 'n8n', 'daycare', 'plans']);
     return implode(',', $valid);
 }
 
@@ -404,6 +404,7 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="inventory"><span>Inventory</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="materials"><span>Materials</span></label>
                 <label class="checkbox" title="Daycare attendance — standalone check-in/out sheet for daycare children and staff"><input type="checkbox" name="modules[]" value="daycare"><span>Daycare</span></label>
+                <label class="checkbox" title="Weekly Plans — Mon–Sat lesson plans, materials, note to Principal"><input type="checkbox" name="modules[]" value="plans"><span>Weekly Plans</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="wacrm"><span>WACRM</span></label>
                 <label class="checkbox"><input type="checkbox" name="modules[]" value="n8n"><span>n8n</span></label>
             </div>
@@ -446,6 +447,7 @@ require __DIR__ . '/includes/header.php';
         $hasInv  = in_array('inventory', $mods, true);
         $hasMat  = in_array('materials', $mods, true);
         $hasDay  = in_array('daycare',   $mods, true);
+        $hasPlans= in_array('plans',     $mods, true);
         $hasWa   = in_array('wacrm',     $mods, true);
         $hasN8n  = in_array('n8n',       $mods, true);
     ?>
@@ -518,6 +520,10 @@ require __DIR__ . '/includes/header.php';
                 <label class="checkbox" title="Daycare attendance — standalone check-in/out sheet for daycare children and staff">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="daycare" <?= $hasDay ? 'checked' : '' ?>>
                     <span>Daycare</span>
+                </label>
+                <label class="checkbox" title="Weekly Plans — Mon–Sat lesson plans, materials, note to Principal">
+                    <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="plans" <?= $hasPlans ? 'checked' : '' ?>>
+                    <span>Plans</span>
                 </label>
                 <label class="checkbox" title="WACRM — WhatsApp CRM workspace (external app)">
                     <input form="<?= $fid ?>" type="checkbox" name="modules[]" value="wacrm" <?= $hasWa ? 'checked' : '' ?>>

@@ -69,6 +69,11 @@ $hasMaterials = user_has_module($user, 'materials');
 $hasWacrm     = user_has_module($user, 'wacrm');
 $hasN8n       = user_has_module($user, 'n8n');
 $hasDaycare   = user_has_module($user, 'daycare');
+$hasPlans     = user_has_module($user, 'plans');
+try {
+    require_once __DIR__ . '/includes/plans.php';
+    if (plan_tables_ready() && plan_can_access($user)) $hasPlans = true;
+} catch (Throwable $e) { /* plans helpers may lag migration */ }
 
 // Quick-checkin: anyone on the staff roster (Admin → role teacher /
 // non-teaching / admin, or the Staff module).
@@ -83,7 +88,7 @@ if ($inStaffRoster) {
 }
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n + (int)$hasDaycare;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n + (int)$hasDaycare + (int)$hasPlans;
 if ($moduleCount === 1) {
     if ($hasTasks)     redirect('/tasks/index.php');
     if ($hasMontess)   redirect('/assessment/index.php');
@@ -96,6 +101,7 @@ if ($moduleCount === 1) {
     if ($hasLogbook)   redirect('/logbook/index.php');
     if ($hasInventory) redirect('/inventory/index.php');
     if ($hasMaterials) redirect('/materials/daily.php');
+    if ($hasPlans)     redirect('/plans/index.php');
     if ($hasWacrm)     redirect('/wacrm/index.php');
     if ($hasN8n)       redirect('/n8n/index.php');
     if ($hasDaycare)   redirect('/daycare/index.php');
@@ -408,6 +414,26 @@ if ($hasMaterials) {
     if ($mmReplace > 0) $stats[] = ['label' => $mmReplace . ' to replace', 'tone' => 'warn'];
     $apps[] = ['key' => 'materials', 'name' => 'Materials', 'subtitle' => 'Daily check · photos · Kreedo', 'href' => '/materials/daily.php', 'stats' => $stats];
 }
+if ($hasPlans) {
+    $planPending = 0;
+    try {
+        require_once __DIR__ . '/includes/plans.php';
+        if (($user['role'] ?? '') === 'admin') {
+            $st = db()->prepare("SELECT COUNT(*) FROM weekly_plans WHERE week_key = :w AND status = 'submitted'");
+            $st->execute([':w' => plan_current_week_key()]);
+            $planPending = (int)$st->fetchColumn();
+        } else {
+            $mine = plan_get_by_teacher_week((int)$user['id'], plan_current_week_key());
+            if ($mine === null || in_array((string)$mine['status'], ['draft', 'changes_requested'], true)) {
+                $planPending = 1;
+            }
+        }
+    } catch (Throwable $e) { $planPending = 0; }
+    $stats = $planPending > 0
+        ? [['label' => ($user['role'] ?? '') === 'admin' ? ($planPending . ' to review') : 'Needs submit', 'tone' => 'warn']]
+        : [];
+    $apps[] = ['key' => 'plans', 'name' => 'Weekly Plans', 'subtitle' => 'Mon–Sat · Materials · Principal note', 'href' => '/plans/index.php', 'stats' => $stats];
+}
 // External apps (wacrm, n8n) — driven by external_apps_registry() in
 // includes/functions.php. Each tile shows the configured host as a hint,
 // or "Not configured" prompting admin to set the URL.
@@ -443,6 +469,7 @@ $icons = [
     'logbook'     => '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z"/><path d="M9 3v18M13 8h4M13 12h4"/>',
     'inventory'   => '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
     'materials'   => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/><path d="M15 13l2 2 3-3"/>',
+    'plans'       => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
 ];
 // External-app SVGs are owned by the registry so they ship in one place.
 foreach (external_apps_registry() as $extKey => $extMeta) {
@@ -454,7 +481,7 @@ $GROUPS = [
     'children'   => ['label' => 'Children',   'keys' => ['students', 'assessment', 'logbook']],
     'admissions' => ['label' => 'Admissions', 'keys' => ['admissions']],
     'money'      => ['label' => 'Money',      'keys' => ['money', 'fees', 'expenses']],
-    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'duties', 'duties_admin', 'tasks', 'inventory', 'materials', 'recruitment', 'wacrm', 'n8n']],
+    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'duties', 'duties_admin', 'tasks', 'inventory', 'materials', 'plans', 'recruitment', 'wacrm', 'n8n']],
 ];
 $grouped = array_fill_keys(array_keys($GROUPS), []);
 foreach ($apps as $app) {
