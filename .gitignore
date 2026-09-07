@@ -31,6 +31,8 @@ uploads/student_photos/*
 !uploads/student_photos/.gitkeep
 uploads/material_media/*
 !uploads/material_media/.gitkeep
+uploads/plan_media/*
+!uploads/plan_media/.gitkeep
 uploads/task_attachments/*
 !uploads/task_attachments/.gitkeep
 uploads/staff_docs/*

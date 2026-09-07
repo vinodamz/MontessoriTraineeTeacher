@@ -1643,6 +1643,7 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .app-icon-recruitment { color: #283593; background: #e8eaf6; }
 .app-icon-inventory   { color: #4e342e; background: #efebe9; }
 .app-icon-logbook     { color: #5d4037; background: #efebe9; }
+.app-icon-plans       { color: #1565c0; background: #e3f2fd; }
 
 /* ----- Check-in card (home + My Day) ----- */
 .checkin-card {

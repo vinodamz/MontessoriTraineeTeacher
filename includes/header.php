@@ -46,11 +46,19 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                     'logbook'     => ['Logbook',     '/logbook/index.php'],
                     'inventory'   => ['Inventory',   '/inventory/index.php'],
                     'materials'   => ['Materials',   '/materials/daily.php'],
+                    'plans'       => ['Weekly Plans','/plans/index.php'],
                     'daycare'     => ['Daycare',     '/daycare/index.php'],
                     'wacrm'       => ['WACRM',       '/wacrm/index.php'],
                     'n8n'         => ['n8n',         '/n8n/index.php'],
                 ] as $mk => [$mLabel, $mHref]) {
-                    if (user_has_module($user, $mk)) $teacherExtras[] = [$mLabel, $mHref];
+                    if ($mk === 'plans') {
+                        // Dual-gated like materials daily: module OR weekly_plan duty.
+                        require_once __DIR__ . '/plans.php';
+                        if (!plan_can_access($user)) continue;
+                    } elseif (!user_has_module($user, $mk)) {
+                        continue;
+                    }
+                    $teacherExtras[] = [$mLabel, $mHref];
                 }
             ?>
                 <a href="/today.php">My Day</a>
@@ -112,6 +120,12 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php endif; ?>
             <?php if (user_has_module($user, 'materials')): ?>
                 <a href="/materials/daily.php">Materials</a>
+            <?php endif; ?>
+            <?php
+                require_once __DIR__ . '/plans.php';
+                if (plan_can_access($user)):
+            ?>
+                <a href="/plans/index.php">Weekly Plans</a>
             <?php endif; ?>
             <?php if (user_has_module($user, 'daycare')): ?>
                 <a href="/daycare/index.php">Daycare</a>

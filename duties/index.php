@@ -156,7 +156,11 @@ require __DIR__ . '/../includes/header.php';
             <?php if ($actionHref !== ''): ?>
                 <p>
                     <a class="btn btn-primary" href="<?= e($actionHref) ?>">
-                        <?= $action === 'materials_check' ? "Open today's sheet" : 'Open' ?>
+                        <?php
+                            if ($action === 'materials_check') echo "Open today's sheet";
+                            elseif ($action === 'weekly_plan') echo 'Open weekly plan';
+                            else echo 'Open';
+                        ?>
                     </a>
                 </p>
             <?php endif; ?>
