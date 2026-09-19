@@ -29,10 +29,14 @@ function duty_action_label(string $key): string
     return DUTY_ACTIONS[$key]['label'] ?? $key;
 }
 
-function duty_action_href(string $key): string
+function duty_action_href(string $key, ?int $userId = null): string
 {
     if ($key === 'weekly_plan') {
-        return '/plans/edit.php?week=' . rawurlencode((new DateTimeImmutable('now'))->format('o-\WW'));
+        require_once __DIR__ . '/plans.php';
+        $week = $userId && $userId > 0
+            ? plan_teacher_action_week($userId)
+            : plan_next_week_key();
+        return '/plans/edit.php?week=' . rawurlencode($week);
     }
     return DUTY_ACTIONS[$key]['href'] ?? '';
 }
@@ -464,6 +468,10 @@ function duty_materialize_template(array $tpl, ?DateTimeInterface $when = null, 
             ':n'   => $tpl['notes'] !== null && $tpl['notes'] !== '' ? (string)$tpl['notes'] : null,
         ]);
         $n += $st->rowCount();
+        if ((string)($tpl['action_key'] ?? '') === 'weekly_plan' && $slot === 'weekly') {
+            require_once __DIR__ . '/plans.php';
+            plan_sync_duties($uid, $key);
+        }
     }
     db()->prepare("
         UPDATE staff_duty_items
@@ -501,6 +509,10 @@ function duty_materialize_for_user(int $userId, ?DateTimeInterface $when = null)
             ':t'   => (string)$tpl['title'],
             ':n'   => $tpl['notes'] !== null && $tpl['notes'] !== '' ? (string)$tpl['notes'] : null,
         ]);
+        if ((string)($tpl['action_key'] ?? '') === 'weekly_plan' && $slot === 'weekly') {
+            require_once __DIR__ . '/plans.php';
+            plan_sync_duties($userId, $key);
+        }
     }
 }
 

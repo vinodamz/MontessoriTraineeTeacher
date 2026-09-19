@@ -418,14 +418,19 @@ if ($hasPlans) {
     $planPending = 0;
     try {
         require_once __DIR__ . '/includes/plans.php';
+        $openKeys = plan_teacher_open_week_keys();
         if (($user['role'] ?? '') === 'admin') {
-            $st = db()->prepare("SELECT COUNT(*) FROM weekly_plans WHERE week_key = :w AND status = 'submitted'");
-            $st->execute([':w' => plan_current_week_key()]);
+            $ph = implode(',', array_fill(0, count($openKeys), '?'));
+            $st = db()->prepare("SELECT COUNT(*) FROM weekly_plans WHERE week_key IN ($ph) AND status = 'submitted'");
+            $st->execute($openKeys);
             $planPending = (int)$st->fetchColumn();
         } else {
-            $mine = plan_get_by_teacher_week((int)$user['id'], plan_current_week_key());
-            if ($mine === null || in_array((string)$mine['status'], ['draft', 'changes_requested'], true)) {
-                $planPending = 1;
+            foreach ($openKeys as $wk) {
+                $mine = plan_get_by_teacher_week((int)$user['id'], $wk);
+                if ($mine === null || in_array((string)$mine['status'], ['draft', 'changes_requested'], true)) {
+                    $planPending = 1;
+                    break;
+                }
             }
         }
     } catch (Throwable $e) { $planPending = 0; }

@@ -143,6 +143,10 @@ require __DIR__ . '/../includes/header.php';
     <div class="actionbar">
         <a class="btn btn-ghost" href="/plans/index.php">All plans</a>
         <a class="btn btn-ghost" href="/plans/view.php?id=<?= (int)$plan['id'] ?>">Preview</a>
+        <?php if (($user['role'] ?? '') !== 'admin'): ?>
+            <a class="btn btn-ghost" href="/plans/edit.php?week=<?= e(urlencode(plan_current_week_key())) ?>">This week</a>
+            <a class="btn btn-ghost" href="/plans/edit.php?week=<?= e(urlencode(plan_next_week_key())) ?>">Next week</a>
+        <?php endif; ?>
     </div>
 </div>
 

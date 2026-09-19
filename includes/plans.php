@@ -76,6 +76,71 @@ function plan_current_week_key(?DateTimeInterface $when = null): string
     return $d->format('o-\WW');
 }
 
+/** ISO week after $when (teachers plan Mon–Sat ahead). */
+function plan_next_week_key(?DateTimeInterface $when = null): string
+{
+    return plan_shift_week(plan_current_week_key($when), 1);
+}
+
+/**
+ * Weeks a teacher can start or continue from the index: this week + next week.
+ * Admins still navigate any week from the board.
+ *
+ * @return list<array{week_key:string,heading:string,label:string}>
+ */
+function plan_teacher_open_weeks(?DateTimeInterface $when = null): array
+{
+    $current = plan_current_week_key($when);
+    $next = plan_next_week_key($when);
+    return [
+        [
+            'week_key' => $current,
+            'heading'  => 'This week',
+            'label'    => plan_week_label($current),
+        ],
+        [
+            'week_key' => $next,
+            'heading'  => 'Next week',
+            'label'    => plan_week_label($next),
+        ],
+    ];
+}
+
+/** @return list<string> */
+function plan_teacher_open_week_keys(?DateTimeInterface $when = null): array
+{
+    return array_column(plan_teacher_open_weeks($when), 'week_key');
+}
+
+/**
+ * Week the teacher should open next: first of this/next that is missing or still
+ * editable. Falls back to next week when both are locked.
+ */
+function plan_teacher_action_week(int $teacherId, ?DateTimeInterface $when = null): string
+{
+    if ($teacherId <= 0) return plan_next_week_key($when);
+    foreach (plan_teacher_open_weeks($when) as $w) {
+        $plan = plan_get_by_teacher_week($teacherId, $w['week_key']);
+        if ($plan === null || plan_is_editable($plan)) {
+            return $w['week_key'];
+        }
+    }
+    return plan_next_week_key($when);
+}
+
+/** Teacher plans that are not this week or next week. */
+function plan_list_earlier_for_teacher(int $teacherId, int $limit = 16, ?DateTimeInterface $when = null): array
+{
+    $open = plan_teacher_open_week_keys($when);
+    $out = [];
+    foreach (plan_list_for_teacher($teacherId, $limit + count($open)) as $p) {
+        if (in_array((string)$p['week_key'], $open, true)) continue;
+        $out[] = $p;
+        if (count($out) >= $limit) break;
+    }
+    return $out;
+}
+
 /** Validate and normalise a week key; throws InvalidArgumentException. */
 function plan_parse_week_key(string $weekKey): string
 {
@@ -540,6 +605,9 @@ function plan_sync_duties(int $userId, string $weekKey): void
     if (!duty_tables_ready()) return;
     try {
         $weekKey = plan_parse_week_key($weekKey);
+        $plan = plan_get_by_teacher_week($userId, $weekKey);
+        $status = $plan ? (string)$plan['status'] : '';
+        if (!in_array($status, ['submitted', 'approved'], true)) return;
         $st = db()->prepare("
             UPDATE staff_duty_items i
             JOIN staff_duty_templates t ON t.id = i.template_id

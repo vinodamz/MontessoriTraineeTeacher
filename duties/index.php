@@ -151,7 +151,7 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
             <?php
                 $action = (string)($it['action_key'] ?? '');
-                $actionHref = duty_action_href($action);
+                $actionHref = duty_action_href($action, (int)$user['id']);
             ?>
             <?php if ($actionHref !== ''): ?>
                 <p>

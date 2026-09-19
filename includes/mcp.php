@@ -863,7 +863,7 @@ function mcp_tools(): array
                            . 'all_non_teaching, all_staff, or users. Frequency: daily, weekly, monthly, '
                            . 'or adhoc (needs starts_on). Optional ends_on, weekdays, and for adhoc '
                            . 'repeat_as once|daily|weekly|monthly. action_key materials_check opens '
-                           . 'today\'s blank materials sheet; weekly_plan opens this week\'s plan editor. '
+                           . 'today\'s blank materials sheet; weekly_plan opens next week\'s plan editor (or this week if still open). '
                            . 'Do not insert into '
                            . 'staff_duty_templates by hand.',
             'inputSchema' => [
@@ -874,7 +874,7 @@ function mcp_tools(): array
                     'title'      => ['type' => 'string'],
                     'notes'      => ['type' => 'string', 'description' => 'Short help shown under the task.'],
                     'action_key' => ['type' => 'string', 'enum' => ['', 'materials_check', 'weekly_plan'],
-                                     'description' => 'materials_check opens today\'s materials sheet; weekly_plan opens this week\'s plan editor.'],
+                                     'description' => 'materials_check opens today\'s materials sheet; weekly_plan opens the next open week\'s plan editor.'],
                     'frequency'  => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly', 'adhoc']],
                     'audience'   => ['type' => 'string',
                                      'enum' => ['all_teachers', 'all_non_teaching', 'all_staff', 'users']],

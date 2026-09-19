@@ -36,7 +36,8 @@ require __DIR__ . '/../includes/header.php';
         <p class="muted">Plan Mon–Sat ahead, note materials, and send a message to the Principal.</p>
     </div>
     <div class="actionbar">
-        <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(rawurlencode(plan_current_week_key())) ?>">This week’s plan</a>
+        <a class="btn btn-ghost" href="/plans/edit.php?week=<?= e(rawurlencode(plan_current_week_key())) ?>">This week’s plan</a>
+        <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(rawurlencode(plan_next_week_key())) ?>">Next week’s plan</a>
     </div>
 </div>
 
@@ -109,33 +110,38 @@ require __DIR__ . '/../includes/header.php';
     </div>
 <?php else: ?>
     <?php
-        $mine = plan_list_for_teacher((int)$user['id']);
-        $current = plan_get_by_teacher_week((int)$user['id'], plan_current_week_key());
+        $openWeeks = plan_teacher_open_weeks();
+        $earlier = plan_list_earlier_for_teacher((int)$user['id']);
+    ?>
+    <?php foreach ($openWeeks as $slot):
+        $slotPlan = plan_get_by_teacher_week((int)$user['id'], $slot['week_key']);
+        $startLabel = $slot['heading'] === 'Next week' ? 'Start next week' : 'Start this week';
     ?>
     <div class="card">
-        <h2 style="margin-top:0">This week</h2>
-        <p><?= e(plan_week_label(plan_current_week_key())) ?></p>
-        <?php if ($current): ?>
-            <p><span class="pill"><?= e(plan_status_label((string)$current['status'])) ?></span></p>
+        <h2 style="margin-top:0"><?= e($slot['heading']) ?></h2>
+        <p><?= e($slot['label']) ?></p>
+        <?php if ($slotPlan): ?>
+            <p><span class="pill"><?= e(plan_status_label((string)$slotPlan['status'])) ?></span></p>
             <div class="actionbar">
-                <?php if (plan_is_editable($current)): ?>
-                    <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(urlencode((string)$current['week_key'])) ?>">Continue editing</a>
+                <?php if (plan_is_editable($slotPlan)): ?>
+                    <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(urlencode((string)$slotPlan['week_key'])) ?>">Continue editing</a>
                 <?php endif; ?>
-                <a class="btn btn-ghost" href="/plans/view.php?id=<?= (int)$current['id'] ?>">View</a>
+                <a class="btn btn-ghost" href="/plans/view.php?id=<?= (int)$slotPlan['id'] ?>">View</a>
             </div>
         <?php else: ?>
             <p class="muted">No plan started yet.</p>
-            <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(urlencode(plan_current_week_key())) ?>">Start this week</a>
+            <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(urlencode($slot['week_key'])) ?>"><?= e($startLabel) ?></a>
         <?php endif; ?>
     </div>
+    <?php endforeach; ?>
 
     <div class="card">
         <h2 style="margin-top:0">Earlier weeks</h2>
-        <?php if (!$mine): ?>
-            <p class="muted">No weekly plans yet.</p>
+        <?php if (!$earlier): ?>
+            <p class="muted">No earlier weekly plans yet.</p>
         <?php else: ?>
             <ul style="list-style:none;padding:0;margin:0">
-                <?php foreach ($mine as $p): ?>
+                <?php foreach ($earlier as $p): ?>
                     <li style="display:flex;justify-content:space-between;gap:1rem;padding:.4rem 0;border-bottom:1px solid var(--line,#eee)">
                         <div>
                             <a href="/plans/view.php?id=<?= (int)$p['id'] ?>"><?= e(plan_week_label((string)$p['week_key'])) ?></a>
