@@ -48,6 +48,7 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
                     'materials'   => ['Materials',   '/materials/daily.php'],
                     'plans'       => ['Weekly Plans','/plans/index.php'],
                     'daycare'     => ['Daycare',     '/daycare/index.php'],
+                    'transport'   => ['Transport',   '/transport/index.php'],
                     'wacrm'       => ['WACRM',       '/wacrm/index.php'],
                     'n8n'         => ['n8n',         '/n8n/index.php'],
                 ] as $mk => [$mLabel, $mHref]) {
@@ -129,6 +130,9 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
             <?php endif; ?>
             <?php if (user_has_module($user, 'daycare')): ?>
                 <a href="/daycare/index.php">Daycare</a>
+            <?php endif; ?>
+            <?php if (user_has_module($user, 'transport')): ?>
+                <a href="/transport/index.php">Transport</a>
             <?php endif; ?>
             <?php if (user_has_module($user, 'wacrm')): ?>
                 <a href="/wacrm/index.php">WACRM</a>

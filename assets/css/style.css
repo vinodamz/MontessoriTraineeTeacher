@@ -1644,6 +1644,7 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .app-icon-inventory   { color: #4e342e; background: #efebe9; }
 .app-icon-logbook     { color: #5d4037; background: #efebe9; }
 .app-icon-plans       { color: #1565c0; background: #e3f2fd; }
+.app-icon-transport   { color: #e65100; background: #fff3e0; }
 
 /* ----- Check-in card (home + My Day) ----- */
 .checkin-card {
@@ -1675,6 +1676,15 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 }
 .flash-ok    { background: #E7F6E1; color: var(--accent-2-dk); border-color: #BFE4B3; }
 .flash-error { background: #FDECEC; color: var(--danger);      border-color: #F4C2BD; }
+.flash-warn  { background: #FFF4E1; color: #92400e;            border-color: #F6D49A; }
+
+/* ----- Transport trip screen ----- */
+.transport-trip-stop.is-due { border-color: #f0a020; box-shadow: 0 0 0 2px #fde2b0; }
+.transport-trip-stop.is-finished { opacity: .7; }
+.transport-trip-stop .btn { min-height: 44px; }
+.transport-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+.transport-actions .btn { flex: 1 1 auto; justify-content: center; }
+.transport-actions .btn-ghost { border-color: var(--line, #e5ddd2); }
 
 /* ----- Empty states ----- */
 .empty {

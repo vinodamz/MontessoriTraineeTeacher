@@ -70,6 +70,7 @@ $hasWacrm     = user_has_module($user, 'wacrm');
 $hasN8n       = user_has_module($user, 'n8n');
 $hasDaycare   = user_has_module($user, 'daycare');
 $hasPlans     = user_has_module($user, 'plans');
+$hasTransport = user_has_module($user, 'transport');
 try {
     require_once __DIR__ . '/includes/plans.php';
     if (plan_tables_ready() && plan_can_access($user)) $hasPlans = true;
@@ -88,7 +89,7 @@ if ($inStaffRoster) {
 }
 
 // Single-module users go straight in.
-$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n + (int)$hasDaycare + (int)$hasPlans;
+$moduleCount = (int)$hasTasks + (int)$hasMontess + (int)$hasStudents + (int)$hasCrm + (int)$hasRecruit + (int)$hasStaff + (int)$hasExpenses + (int)$hasFees + (int)$hasLogbook + (int)$hasInventory + (int)$hasMaterials + (int)$hasWacrm + (int)$hasN8n + (int)$hasDaycare + (int)$hasPlans + (int)$hasTransport;
 if ($moduleCount === 1) {
     if ($hasTasks)     redirect('/tasks/index.php');
     if ($hasMontess)   redirect('/assessment/index.php');
@@ -105,6 +106,7 @@ if ($moduleCount === 1) {
     if ($hasWacrm)     redirect('/wacrm/index.php');
     if ($hasN8n)       redirect('/n8n/index.php');
     if ($hasDaycare)   redirect('/daycare/index.php');
+    if ($hasTransport) redirect('/transport/index.php');
 }
 // 0 or 2+ modules → render the picker below.
 
@@ -439,6 +441,16 @@ if ($hasPlans) {
         : [];
     $apps[] = ['key' => 'plans', 'name' => 'Weekly Plans', 'subtitle' => 'Mon–Sat · Materials · Principal note', 'href' => '/plans/index.php', 'stats' => $stats];
 }
+if ($hasTransport) {
+    $stats = [];
+    try {
+        $st = db()->prepare("SELECT COUNT(*) FROM transport_trips WHERE trip_date = CURDATE() AND status = 'running'");
+        $st->execute();
+        $onRoad = (int)$st->fetchColumn();
+        if ($onRoad > 0) $stats[] = ['label' => $onRoad . ' on the road', 'tone' => 'warn'];
+    } catch (Throwable $e) { /* transport tables may lag migration */ }
+    $apps[] = ['key' => 'transport', 'name' => 'Transport', 'subtitle' => 'Daily cab · Pickup order · Parent alerts', 'href' => '/transport/index.php', 'stats' => $stats];
+}
 // External apps (wacrm, n8n) — driven by external_apps_registry() in
 // includes/functions.php. Each tile shows the configured host as a hint,
 // or "Not configured" prompting admin to set the URL.
@@ -475,6 +487,7 @@ $icons = [
     'inventory'   => '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
     'materials'   => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/><path d="M15 13l2 2 3-3"/>',
     'plans'       => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    'transport'   => '<path d="M5 17V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v9"/><path d="M3 17h18M5 12h14"/><circle cx="8" cy="18.5" r="1.5"/><circle cx="16" cy="18.5" r="1.5"/>',
 ];
 // External-app SVGs are owned by the registry so they ship in one place.
 foreach (external_apps_registry() as $extKey => $extMeta) {
@@ -486,7 +499,7 @@ $GROUPS = [
     'children'   => ['label' => 'Children',   'keys' => ['students', 'assessment', 'logbook']],
     'admissions' => ['label' => 'Admissions', 'keys' => ['admissions']],
     'money'      => ['label' => 'Money',      'keys' => ['money', 'fees', 'expenses']],
-    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'duties', 'duties_admin', 'tasks', 'inventory', 'materials', 'plans', 'recruitment', 'wacrm', 'n8n']],
+    'ops'        => ['label' => 'School Ops', 'keys' => ['staff', 'duties', 'duties_admin', 'tasks', 'inventory', 'materials', 'plans', 'transport', 'recruitment', 'wacrm', 'n8n']],
 ];
 $grouped = array_fill_keys(array_keys($GROUPS), []);
 foreach ($apps as $app) {
