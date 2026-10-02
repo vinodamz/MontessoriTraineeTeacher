@@ -99,5 +99,14 @@ $route = [
 expect_same(transport_trip_legs($route, 'pickup'), [10 => null, 11 => 6.0, 12 => 9.0], 'pickup legs as stored');
 expect_same(transport_trip_legs($route, 'drop'), [10 => 6.0, 11 => 9.0, 12 => null], 'drop legs come from the next pickup stop');
 
+// Live location
+expect_same((int)round(transport_distance_m(12.9716, 77.5946, 12.9816, 77.5946)), 1112, '0.01° latitude ≈ 1.11 km');
+expect_same(round(transport_live_minutes(1000), 2), 4.67, '1 km straight line ≈ 4.7 min by road');
+$etas = transport_compute_etas([
+    ['id' => 1, 'status' => 'pending', 'done_at' => null, 'reached_at' => null, 'leg' => null],
+    ['id' => 2, 'status' => 'pending', 'done_at' => null, 'reached_at' => null, 'leg' => null],
+], '2026-10-01 07:00:00', strtotime('2026-10-01 08:00:00'), 5.0, 2.2);
+expect_same([$etas[1]['minutes'], $etas[2]['minutes']], [3, 8], 'live first leg replaces the elapsed-time guess');
+
 echo "\n$passed passed, $failed failed\n";
 exit($failed ? 1 : 0);

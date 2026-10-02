@@ -176,7 +176,8 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
         <p class="muted small">
             With a key and stop locations, use “Refresh travel times” on a route to get road times between stops.
-            Parents never see a map or the cab’s location — only an approximate time.
+            When the driver runs the trip from the Little Graduates app, parents also see the cab on a map
+            while their child is waiting, and stops with a location are marked “reached” automatically.
         </p>
         <div class="actionbar form-actions"><button class="btn btn-primary" type="submit">Save settings</button></div>
     </form>

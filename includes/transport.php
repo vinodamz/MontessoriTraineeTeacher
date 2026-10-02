@@ -5,9 +5,10 @@
  *
  * Confidentiality rules the public tracking page relies on:
  *   - parents see their own child's first name, a status, an approximate
- *     time and a count of stops ahead — never other children, stop notes,
- *     coordinates, or the cab's position;
- *   - coordinates and the Maps key are only ever used server-side.
+ *     time and a count of stops ahead — never other children or stop notes;
+ *   - the cab's live position is shown only while their child's trip is
+ *     running and their child is still waiting, plus their own stop;
+ *   - the Maps key is only ever used server-side.
  *
  * Alerts are prepared here and sent by the operator: the app opens the
  * operator's own WhatsApp with the parent's number and text pre-filled.
@@ -132,7 +133,7 @@ function transport_typical_leg_minutes(array $trips): ?float
  * for pending stops only. The cab's progress is measured from the later of
  * the trip start and the last stop it finished.
  */
-function transport_compute_etas(array $stops, ?string $startedAt, int $now, float $defaultLeg): array
+function transport_compute_etas(array $stops, ?string $startedAt, int $now, float $defaultLeg, ?float $liveFirstLeg = null): array
 {
     if ($startedAt === null || $startedAt === '') return [];
     $last = strtotime($startedAt) ?: $now;
@@ -152,7 +153,7 @@ function transport_compute_etas(array $stops, ?string $startedAt, int $now, floa
         $leg = isset($s['leg']) && $s['leg'] !== null && (float)$s['leg'] > 0 ? (float)$s['leg'] : $defaultLeg;
         $reached = !empty($s['reached_at']);
         if ($ahead === 0) {
-            $cumulative = $reached ? 0.0 : max(0.0, $leg - $elapsed);
+            $cumulative = $reached ? 0.0 : ($liveFirstLeg ?? max(0.0, $leg - $elapsed));
         } else {
             $cumulative += $leg;
         }
@@ -164,6 +165,25 @@ function transport_compute_etas(array $stops, ?string $startedAt, int $now, floa
         $ahead++;
     }
     return $out;
+}
+
+/** Great-circle distance in metres. */
+function transport_distance_m(float $lat1, float $lng1, float $lat2, float $lng2): float
+{
+    $r = 6371000.0;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLng = deg2rad($lng2 - $lng1);
+    $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+    return 2 * $r * asin(min(1.0, sqrt($a)));
+}
+
+/**
+ * Minutes to cover a straight-line distance by road in town: roads run ~1.4×
+ * the straight line, and a school cab averages ~18 km/h with stops.
+ */
+function transport_live_minutes(float $straightLineM): float
+{
+    return ($straightLineM * 1.4) / (18000 / 60);
 }
 
 /** Parent-facing approximate time, rounded up to 5-minute steps. */
@@ -624,7 +644,24 @@ function transport_trip_etas(array $trip, ?array $tripStops = null): array
 {
     if (($trip['status'] ?? '') !== 'running') return [];
     $tripStops ??= transport_trip_stops((int)$trip['id']);
-    $legs = transport_trip_legs(transport_route_stops((int)$trip['route_id']), (string)$trip['direction']);
+    $routeStops = transport_route_stops((int)$trip['route_id']);
+    $legs = transport_trip_legs($routeStops, (string)$trip['direction']);
+
+    $liveFirstLeg = null;
+    $cab = transport_trip_live_position($trip);
+    if ($cab !== null) {
+        $coords = [];
+        foreach ($routeStops as $rs) {
+            if ($rs['lat'] !== null) $coords[(int)$rs['student_id']] = [(float)$rs['lat'], (float)$rs['lng']];
+        }
+        foreach ($tripStops as $s) {
+            if ($s['status'] !== 'pending') continue;
+            $c = $coords[(int)$s['student_id']] ?? null;
+            if ($c !== null) $liveFirstLeg = transport_live_minutes(transport_distance_m($cab['lat'], $cab['lng'], $c[0], $c[1]));
+            break;
+        }
+    }
+
     $rows = [];
     foreach ($tripStops as $s) {
         $rows[] = [
@@ -639,8 +676,95 @@ function transport_trip_etas(array $trip, ?array $tripStops = null): array
         $rows,
         (string)$trip['started_at'],
         time(),
-        transport_route_leg_minutes((int)$trip['route_id'], (string)$trip['direction'])
+        transport_route_leg_minutes((int)$trip['route_id'], (string)$trip['direction']),
+        $liveFirstLeg
     );
+}
+
+// ---------- Live location (driver app) --------------------------------------
+
+const TRANSPORT_LIVE_FRESH_SECONDS = 180;
+
+/** Latest cab position if the phone reported within the last 3 minutes. */
+function transport_trip_live_position(array $trip): ?array
+{
+    if (($trip['status'] ?? '') !== 'running' || empty($trip['last_location_at']) || $trip['last_lat'] === null) return null;
+    $at = strtotime((string)$trip['last_location_at']);
+    if ($at === false || time() - $at > TRANSPORT_LIVE_FRESH_SECONDS) return null;
+    return ['lat' => (float)$trip['last_lat'], 'lng' => (float)$trip['last_lng'], 'at' => $at];
+}
+
+function transport_reached_radius_m(): float
+{
+    $v = (float)app_setting('transport_reached_radius_m', '80');
+    return $v >= 20 && $v <= 500 ? $v : 80.0;
+}
+
+/**
+ * Store GPS points from the driver's phone for a running trip. Points are
+ * [lat, lng, accuracy?, speed?, heading?, t (unix ms)]. Updates the trip's
+ * latest position and marks pending stops within the reached radius.
+ * Returns ['accepted' => int, 'reached' => int[] trip_stop ids, 'status' => trip status].
+ */
+function transport_record_locations(int $tripId, array $points): array
+{
+    $trip = transport_trip_get($tripId);
+    if (!$trip) throw new InvalidArgumentException('Trip not found.');
+    if ($trip['status'] !== 'running') return ['accepted' => 0, 'reached' => [], 'status' => $trip['status']];
+
+    $now = time();
+    $clean = [];
+    foreach (array_slice($points, 0, 500) as $p) {
+        if (!is_array($p) || !isset($p['lat'], $p['lng'])) continue;
+        $lat = (float)$p['lat'];
+        $lng = (float)$p['lng'];
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180 || ($lat == 0.0 && $lng == 0.0)) continue;
+        $t = isset($p['t']) ? (int)floor((float)$p['t'] / 1000) : $now;
+        if ($t > $now + 60 || $t < $now - 6 * 3600) $t = $now;
+        $acc = isset($p['accuracy']) ? (int)round((float)$p['accuracy']) : null;
+        if ($acc !== null && $acc > 500) continue;
+        $clean[] = [
+            'lat' => $lat, 'lng' => $lng, 't' => $t,
+            'acc' => $acc !== null ? max(0, min(65535, $acc)) : null,
+            'spd' => isset($p['speed']) && (float)$p['speed'] >= 0 ? min(999.99, (float)$p['speed']) : null,
+            'hdg' => isset($p['heading']) && (float)$p['heading'] >= 0 ? ((int)round((float)$p['heading'])) % 360 : null,
+        ];
+    }
+    if (!$clean) return ['accepted' => 0, 'reached' => [], 'status' => 'running'];
+    usort($clean, static fn($a, $b) => $a['t'] <=> $b['t']);
+
+    $ins = db()->prepare('INSERT INTO transport_locations (trip_id, lat, lng, accuracy_m, speed_mps, heading, recorded_at)
+                          VALUES (:t, :la, :lo, :a, :s, :h, :r)');
+    foreach ($clean as $c) {
+        $ins->execute([':t' => $tripId, ':la' => $c['lat'], ':lo' => $c['lng'], ':a' => $c['acc'],
+                       ':s' => $c['spd'], ':h' => $c['hdg'], ':r' => date('Y-m-d H:i:s', $c['t'])]);
+    }
+    $last = end($clean);
+    db()->prepare('UPDATE transport_trips SET last_lat = :la, last_lng = :lo, last_location_at = :r
+                   WHERE id = :id AND (last_location_at IS NULL OR last_location_at <= :r2)')
+        ->execute([':la' => $last['lat'], ':lo' => $last['lng'], ':r' => date('Y-m-d H:i:s', $last['t']),
+                   ':r2' => date('Y-m-d H:i:s', $last['t']), ':id' => $tripId]);
+
+    $reached = [];
+    $radius = transport_reached_radius_m();
+    $coords = [];
+    foreach (transport_route_stops((int)$trip['route_id']) as $rs) {
+        if ($rs['lat'] !== null) $coords[(int)$rs['student_id']] = [(float)$rs['lat'], (float)$rs['lng']];
+    }
+    $mark = db()->prepare("UPDATE transport_trip_stops SET reached_at = :r WHERE id = :id AND status = 'pending' AND reached_at IS NULL");
+    foreach (transport_trip_stops($tripId) as $s) {
+        if ($s['status'] !== 'pending' || !empty($s['reached_at'])) continue;
+        $c = $coords[(int)$s['student_id']] ?? null;
+        if ($c === null) continue;
+        foreach ($clean as $p) {
+            if (transport_distance_m($p['lat'], $p['lng'], $c[0], $c[1]) <= $radius) {
+                $mark->execute([':r' => date('Y-m-d H:i:s', $p['t']), ':id' => (int)$s['id']]);
+                $reached[] = (int)$s['id'];
+                break;
+            }
+        }
+    }
+    return ['accepted' => count($clean), 'reached' => $reached, 'status' => 'running'];
 }
 
 /** Pending stops whose 5-minute alert is due and not yet opened. */
@@ -767,7 +891,8 @@ function transport_parent_status(int $studentId, ?string $date = null): array
     $row = $rows[0] ?? null;
 
     $status = ['child' => $first, 'state' => 'no_trip', 'direction' => null,
-               'minutes' => null, 'stops_ahead' => null, 'time' => null, 'phrase' => ''];
+               'minutes' => null, 'stops_ahead' => null, 'time' => null, 'phrase' => '',
+               'cab' => null, 'home' => null];
     if (!$row) {
         $status['phrase'] = 'No cab trip for today yet.';
         return $status;
@@ -805,6 +930,13 @@ function transport_parent_status(int $studentId, ?string $date = null): array
         } else {
             $status['state'] = 'on_the_way';
             $status['phrase'] = 'The cab is on the way.';
+        }
+        $cab = transport_trip_live_position($row);
+        if ($cab !== null) {
+            $status['cab'] = ['lat' => round($cab['lat'], 5), 'lng' => round($cab['lng'], 5), 'at' => date('c', $cab['at'])];
+            $hs = db()->prepare('SELECT lat, lng FROM transport_stops WHERE route_id = :r AND student_id = :s AND lat IS NOT NULL');
+            $hs->execute([':r' => (int)$row['route_id'], ':s' => $studentId]);
+            if ($h = $hs->fetch()) $status['home'] = ['lat' => (float)$h['lat'], 'lng' => (float)$h['lng']];
         }
     }
     return $status;
