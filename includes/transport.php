@@ -798,23 +798,55 @@ function transport_maps_key(): string
     return trim((string)app_setting('transport_maps_api_key', ''));
 }
 
+/** Traffic-aware road time between two stops. The key stays in the request header. */
+function transport_maps_compute_leg(string $key, array $origin, array $destination, ?callable $fetch = null): array
+{
+    foreach ([$origin, $destination] as $point) {
+        if (!isset($point['lat'], $point['lng']) || !is_numeric($point['lat']) || !is_numeric($point['lng'])
+            || !is_finite((float)$point['lat']) || !is_finite((float)$point['lng'])
+            || abs((float)$point['lat']) > 90 || abs((float)$point['lng']) > 180) {
+            return ['minutes' => null, 'error' => 'A stop has missing or invalid coordinates.'];
+        }
+    }
+    $waypoint = static fn(array $p): array => ['location' => ['latLng' => [
+        'latitude' => (float)$p['lat'], 'longitude' => (float)$p['lng'],
+    ]]];
+    $body = json_encode([
+        'origin' => $waypoint($origin), 'destination' => $waypoint($destination),
+        'travelMode' => 'DRIVE', 'routingPreference' => 'TRAFFIC_AWARE',
+        'computeAlternativeRoutes' => false, 'units' => 'METRIC',
+    ], JSON_THROW_ON_ERROR);
+    $headers = ['Content-Type: application/json', 'X-Goog-Api-Key: ' . $key,
+                'X-Goog-FieldMask: routes.duration'];
+    $fetch ??= static function (string $url, string $body, array $headers): ?string {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 10, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => $headers]);
+        $r = curl_exec($ch);
+        curl_close($ch);
+        return $r === false ? null : (string)$r;
+    };
+    $data = json_decode((string)$fetch('https://routes.googleapis.com/directions/v2:computeRoutes', $body, $headers), true);
+    $duration = $data['routes'][0]['duration'] ?? null;
+    if (!is_string($duration) || !preg_match('/^(\d+(?:\.\d+)?)s$/D', $duration, $match)) {
+        // Google errors can contain request details. Never show the key or raw payload to users.
+        return ['minutes' => null, 'error' => 'Google Maps could not calculate this leg. Check the key, API restrictions, billing and stop locations.'];
+    }
+    $minutes = (float)$match[1] / 60;
+    if (!is_finite($minutes)) return ['minutes' => null, 'error' => 'Google Maps returned an invalid travel time.'];
+    return ['minutes' => max(1, (int)ceil($minutes)), 'error' => null];
+}
+
 /**
- * Fill leg_minutes for each stop (travel time from the previous stop) using
- * the Google Distance Matrix API. Needs a key and coordinates on consecutive
- * stops. $fetch(url): ?string is injectable for tests.
- * Returns ['updated' => int, 'skipped' => int, 'error' => ?string].
+ * Refresh saved road times between consecutive stops with Routes API.
+ * $fetch(url, jsonBody, headers): ?string is injectable for tests.
+ * Calls Google only when an operator explicitly refreshes a route.
  */
 function transport_maps_refresh_route(int $routeId, ?callable $fetch = null): array
 {
     $key = transport_maps_key();
     if ($key === '') return ['updated' => 0, 'skipped' => 0, 'error' => 'Add a Google Maps API key first.'];
-    $fetch ??= static function (string $url): ?string {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
-        $r = curl_exec($ch);
-        curl_close($ch);
-        return $r === false ? null : (string)$r;
-    };
     $stops = transport_route_stops($routeId);
     $updated = 0;
     $skipped = 0;
@@ -824,22 +856,13 @@ function transport_maps_refresh_route(int $routeId, ?callable $fetch = null): ar
         $a = $stops[$i - 1];
         $b = $stops[$i];
         if ($a['lat'] === null || $b['lat'] === null) { $skipped++; continue; }
-        $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?'
-             . http_build_query([
-                 'origins'        => $a['lat'] . ',' . $a['lng'],
-                 'destinations'   => $b['lat'] . ',' . $b['lng'],
-                 'departure_time' => 'now',
-                 'key'            => $key,
-             ]);
-        $data = json_decode((string)$fetch($url), true);
-        $el = $data['rows'][0]['elements'][0] ?? null;
-        if (($data['status'] ?? '') !== 'OK' || ($el['status'] ?? '') !== 'OK') {
-            $error = 'Google Maps: ' . (string)($data['error_message'] ?? $el['status'] ?? $data['status'] ?? 'no response');
+        $result = transport_maps_compute_leg($key, $a, $b, $fetch);
+        if ($result['minutes'] === null) {
+            $error = $result['error'];
             $skipped++;
             continue;
         }
-        $secs = (int)($el['duration_in_traffic']['value'] ?? $el['duration']['value'] ?? 0);
-        $upd->execute([':m' => max(1, (int)ceil($secs / 60)), ':id' => (int)$b['id']]);
+        $upd->execute([':m' => $result['minutes'], ':id' => (int)$b['id']]);
         $updated++;
     }
     return ['updated' => $updated, 'skipped' => $skipped, 'error' => $error];

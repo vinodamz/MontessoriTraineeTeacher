@@ -167,7 +167,7 @@ require __DIR__ . '/../includes/header.php';
             <input type="number" name="transport_default_stop_minutes" min="1" max="30"
                    value="<?= e((string)app_setting('transport_default_stop_minutes', '5')) ?>">
         </label>
-        <label>Google Maps API key (optional, Distance Matrix API)
+        <label>Google Maps API key (optional, Routes API)
             <input type="password" name="transport_maps_api_key" autocomplete="off"
                    placeholder="<?= $hasKey ? 'Saved — leave blank to keep' : 'Not set' ?>">
         </label>
@@ -175,7 +175,7 @@ require __DIR__ . '/../includes/header.php';
             <label><input type="checkbox" name="clear_maps_key" value="1"> Remove the saved key</label>
         <?php endif; ?>
         <p class="muted small">
-            With a key and stop locations, use “Refresh travel times” on a route to get road times between stops.
+            With a key and stop locations, use “Refresh travel times” on a route to get traffic-aware road times between stops.
             When the driver runs the trip from the Little Graduates app, parents also see the cab on a map
             while their child is waiting, and stops with a location are marked “reached” automatically.
         </p>

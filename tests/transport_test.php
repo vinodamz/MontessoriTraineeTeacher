@@ -108,5 +108,28 @@ $etas = transport_compute_etas([
 ], '2026-10-01 07:00:00', strtotime('2026-10-01 08:00:00'), 5.0, 2.2);
 expect_same([$etas[1]['minutes'], $etas[2]['minutes']], [3, 8], 'live first leg replaces the elapsed-time guess');
 
+// Routes API contract: traffic-aware POST, fractional duration, and safe failures.
+$origin = ['lat' => 12.9716, 'lng' => 77.5946];
+$destination = ['lat' => 12.9816, 'lng' => 77.5946];
+$fetch = function ($url, $body, $headers) {
+    expect_same($url, 'https://routes.googleapis.com/directions/v2:computeRoutes', 'Routes endpoint has no key in URL');
+    $request = json_decode($body, true);
+    expect_same($request['routingPreference'], 'TRAFFIC_AWARE', 'traffic-aware routing requested');
+    expect_same($request['origin']['location']['latLng']['latitude'], 12.9716, 'origin coordinates sent');
+    expect_same(in_array('X-Goog-Api-Key: test-key', $headers, true), true, 'key sent only in header');
+    return '{"routes":[{"duration":"120.5s"}]}';
+};
+expect_same(transport_maps_compute_leg('test-key', $origin, $destination, $fetch),
+    ['minutes' => 3, 'error' => null], 'fractional route time rounds up');
+foreach ([null, '{}', '{"routes":[]}', '{"routes":[{"duration":"bad"}]}',
+          '{"error":{"message":"test-key rejected"}}'] as $response) {
+    $result = transport_maps_compute_leg('test-key', $origin, $destination, static fn() => $response);
+    expect_same($result['minutes'], null, 'failed route cannot overwrite saved time');
+    expect_same(str_contains($result['error'], 'test-key'), false, 'failure never reveals credential');
+}
+$result = transport_maps_compute_leg('test-key', ['lat' => 91, 'lng' => 77], $destination,
+    static function () { throw new RuntimeException('Invalid coordinates must not call Google'); });
+expect_same($result['minutes'], null, 'invalid coordinates rejected before API call');
+
 echo "\n$passed passed, $failed failed\n";
 exit($failed ? 1 : 0);
