@@ -155,7 +155,7 @@ function api_app_modules(array $user): array
         'students'   => ['Students',    '/students/index.php',  false],
         'montessori' => ['Assessment',  '/assessment/index.php', false],
         'tasks'      => ['Tasks',       '/tasks/index.php',     false],
-        'staff'      => ['Staff',       '/staff/index.php',     false],
+        'staff'      => ['Staff',       '/staff/index.php',     true],
         'crm'        => ['Admissions',  '/crm/index.php',       false],
         'fees'       => ['Fees',        '/fees/index.php',      false],
         'expenses'   => ['Expenses',    '/expenses/index.php',  false],

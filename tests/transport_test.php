@@ -58,6 +58,8 @@ expect_same(transport_eta_phrase(11), 'about 15 minutes away', 'eta 11 rounds up
 expect_same(transport_typical_leg_minutes([[0, 300]]), null, 'too few gaps → null');
 expect_same(transport_typical_leg_minutes([[0, 240, 480, 900]]), 4.0, 'median of 4,4,7 min');
 expect_same(transport_typical_leg_minutes([[0, 6000, 6060, 6120, 6180]]), 1.0, 'outlier ignored, clamped to ≥1');
+expect_same(transport_leg_minutes_from_distance(0), 1, 'a zero-length leg stays at 1 minute');
+expect_same(transport_leg_minutes_from_distance(1000), 5, '1 km of town driving is about 5 minutes');
 
 // ETA: trip started 3 min ago, default 5 min/stop
 $now = strtotime('2026-10-01 08:00:00');
@@ -107,6 +109,35 @@ $etas = transport_compute_etas([
     ['id' => 2, 'status' => 'pending', 'done_at' => null, 'reached_at' => null, 'leg' => null],
 ], '2026-10-01 07:00:00', strtotime('2026-10-01 08:00:00'), 5.0, 2.2);
 expect_same([$etas[1]['minutes'], $etas[2]['minutes']], [3, 8], 'live first leg replaces the elapsed-time guess');
+
+expect_same(transport_valid_date('2026-10-05'), '2026-10-05', 'iso date passes');
+$badDate = false;
+try { transport_valid_date('2026-02-31'); } catch (InvalidArgumentException $e) { $badDate = true; }
+expect_same($badDate, true, '31 Feb is rejected');
+$folded = transport_calendar_fold([
+    ['trip_date' => '2026-10-05', 'status' => 'running', 'n' => 1],
+    ['trip_date' => '2026-10-05', 'status' => 'completed', 'n' => 2],
+    ['trip_date' => '2026-10-02', 'status' => 'cancelled', 'n' => 1],
+]);
+expect_same($folded[0]['date'], '2026-10-02', 'calendar days are sorted');
+expect_same($folded[0]['cancelled'], 1, 'cancelled count is kept');
+expect_same([$folded[1]['running'], $folded[1]['completed']], [1, 2], 'same day counts fold together');
+
+expect_same(transport_trip_rank('running'), 3, 'a running trip outranks a finished one');
+expect_same(transport_trip_rank('scheduled') > transport_trip_rank('completed'), true, 'a new run replaces a completed one on the board');
+
+expect_same(transport_speed_kmh(10.0), 36, '10 m/s is 36 km/h');
+expect_same(transport_speed_kmh(null), null, 'no speed stays empty');
+expect_same(transport_started_on_time('2026-10-05 07:32:00', '07:30', 15), true, '2 minutes late is still on time');
+expect_same(transport_started_on_time('2026-10-05 08:00:00', '07:30', 15), false, '30 minutes late is not on time');
+expect_same(transport_is_late_start('2026-10-05', '07:30', 'scheduled', strtotime('2026-10-05 07:45:00')), true, '15 minutes past the clock is late');
+expect_same(transport_is_late_start('2026-10-05', '07:30', 'running', strtotime('2026-10-05 08:00:00')), false, 'a running trip is not a late start');
+expect_same(transport_week_bounds('2026-10-05'), ['2026-10-05', '2026-10-11'], 'Monday starts the week');
+expect_same(transport_week_bounds('2026-10-01'), ['2026-09-28', '2026-10-04'], 'Thursday belongs to the previous Monday');
+expect_same(transport_absence_directions('both'), ['pickup', 'drop'], 'both covers pickup and drop');
+expect_same(transport_absence_label('morning'), 'Not riding this morning', 'morning notice label');
+expect_same(transport_child_desk_status('running', 'pending', false), 'en_route', 'pending on a live trip is on the way');
+expect_same(transport_child_desk_status('scheduled', 'pending', true), 'absent', 'a family notice wins over waiting');
 
 echo "\n$passed passed, $failed failed\n";
 exit($failed ? 1 : 0);

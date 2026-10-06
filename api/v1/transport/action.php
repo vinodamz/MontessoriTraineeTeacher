@@ -1,7 +1,10 @@
 <?php
 /**
- * POST {trip_id, op, stop_id?} — op: start | finish | cancel | reached |
- * done | absent | undo. Returns the updated trip.
+ * POST {trip_id, op, stop_id?, route_id?, student_id?}
+ * op: start | finish | cancel | reached | done | absent | undo |
+ *     set_route | add | remove | up | down | set_location.
+ * set_location needs stop_id, lat and lng, and the stop must already be reached.
+ * Returns the updated trip.
  */
 declare(strict_types=1);
 
@@ -25,6 +28,19 @@ try {
         $stop = transport_trip_stop_get((int)($in['stop_id'] ?? 0));
         if (!$stop || (int)$stop['trip_id'] !== (int)$trip['id']) api_error('Stop not found.', 404, 'not_found');
         transport_mark_stop((int)$stop['id'], $op, $user['id']);
+    } elseif ($op === 'set_route') {
+        transport_trip_set_route((int)$trip['id'], (int)($in['route_id'] ?? 0));
+    } elseif ($op === 'add') {
+        transport_trip_add_student((int)$trip['id'], (int)($in['student_id'] ?? 0));
+    } elseif (in_array($op, ['remove', 'up', 'down'], true)) {
+        $stop = transport_trip_stop_get((int)($in['stop_id'] ?? 0));
+        if (!$stop || (int)$stop['trip_id'] !== (int)$trip['id']) api_error('Stop not found.', 404, 'not_found');
+        if ($op === 'remove') transport_trip_remove_stop((int)$stop['id']);
+        else transport_trip_move_stop((int)$stop['id'], $op);
+    } elseif ($op === 'set_location') {
+        $stop = transport_trip_stop_get((int)($in['stop_id'] ?? 0));
+        if (!$stop || (int)$stop['trip_id'] !== (int)$trip['id']) api_error('Stop not found.', 404, 'not_found');
+        transport_save_reached_location((int)$stop['id'], (float)($in['lat'] ?? 0), (float)($in['lng'] ?? 0));
     } else {
         api_error('Unknown action.');
     }

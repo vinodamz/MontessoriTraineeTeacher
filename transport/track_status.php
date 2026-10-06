@@ -22,10 +22,14 @@ if ($studentId === null) {
 }
 $s = transport_parent_status($studentId);
 echo json_encode([
-    'ok'     => true,
-    'state'  => $s['state'],
-    'phrase' => $s['phrase'],
-    'cab'    => $s['cab'],
-    'home'   => $s['home'],
-    'updated'=> date('g:i a'),
+    'ok'          => true,
+    'state'       => $s['state'],
+    'phrase'      => $s['phrase'],
+    'eta'         => $s['minutes'] !== null ? transport_eta_phrase((int)$s['minutes']) : null,
+    'stops_ahead' => $s['stops_ahead'],
+    'speed_kmh'   => $s['speed_kmh'] ?? null,
+    'seat'        => $s['seat'] ?? null,
+    'cab'         => $s['cab'],
+    'home'        => $s['home'],
+    'updated'     => date('g:i a'),
 ], JSON_UNESCAPED_UNICODE);
