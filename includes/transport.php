@@ -52,6 +52,55 @@ function transport_trip_status_label(string $status): string
     ][$status] ?? $status;
 }
 
+/** Which trip to show when a route has more than one run today. */
+function transport_trip_rank(string $status): int
+{
+    return ['running' => 3, 'scheduled' => 2, 'completed' => 1, 'cancelled' => 0][$status] ?? 0;
+}
+
+/** A real calendar day, or an error. Empty means today when $blankToday is set. */
+function transport_valid_date(?string $date, bool $blankToday = false): string
+{
+    $date = trim((string)$date);
+    if ($date === '') {
+        if ($blankToday) return date('Y-m-d');
+        throw new InvalidArgumentException('Pick a date.');
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) throw new InvalidArgumentException('Bad date.');
+    [$y, $m, $d] = array_map('intval', explode('-', $date));
+    if (!checkdate($m, $d, $y)) throw new InvalidArgumentException('Bad date.');
+    return sprintf('%04d-%02d-%02d', $y, $m, $d);
+}
+
+/** Dates a driver may create or open a trip for: the past year through the next few months. */
+function transport_writable_date(?string $date): string
+{
+    $date = transport_valid_date($date, true);
+    $ts = strtotime($date);
+    $today = strtotime(date('Y-m-d'));
+    if ($ts < $today - 366 * 86400 || $ts > $today + 120 * 86400) {
+        throw new InvalidArgumentException('Pick a date within the last year or the next few months.');
+    }
+    return $date;
+}
+
+/**
+ * Collapse trip rows (trip_date, status, n) into one entry per day.
+ * @param array<int, array{trip_date: string, status: string, n: int|string}> $rows
+ */
+function transport_calendar_fold(array $rows): array
+{
+    $days = [];
+    foreach ($rows as $row) {
+        $date = (string)$row['trip_date'];
+        $days[$date] ??= ['date' => $date, 'running' => 0, 'scheduled' => 0, 'completed' => 0, 'cancelled' => 0];
+        $status = (string)$row['status'];
+        if (isset($days[$date][$status])) $days[$date][$status] += (int)$row['n'];
+    }
+    ksort($days);
+    return array_values($days);
+}
+
 /** Directions a route runs: 'both' → pickup then drop. */
 function transport_route_directions(array $route): array
 {
@@ -372,6 +421,68 @@ function transport_stop_add(int $routeId, int $studentId, string $note = ''): vo
     }
 }
 
+/**
+ * Minutes for a town leg from a straight-line distance. Same pace the live
+ * ETA uses: roads about 1.4× the straight line, cab about 18 km/h.
+ */
+function transport_leg_minutes_from_distance(float $meters): int
+{
+    return max(1, min(180, (int)ceil(transport_live_minutes(max(0.0, $meters)))));
+}
+
+/**
+ * Rewrite each stop's leg from the previous stop once both have coordinates.
+ * A Google Maps key, when one is saved, replaces those estimates with road times.
+ * Returns how many legs were written.
+ */
+function transport_recalculate_route_legs(int $routeId): int
+{
+    $stops = transport_route_stops($routeId);
+    $upd = db()->prepare('UPDATE transport_stops SET leg_minutes = :m WHERE id = :id');
+    $written = 0;
+    for ($i = 1, $n = count($stops); $i < $n; $i++) {
+        $a = $stops[$i - 1];
+        $b = $stops[$i];
+        if ($a['lat'] === null || $b['lat'] === null) continue;
+        $mins = transport_leg_minutes_from_distance(
+            transport_distance_m((float)$a['lat'], (float)$a['lng'], (float)$b['lat'], (float)$b['lng'])
+        );
+        $upd->execute([':m' => $mins, ':id' => (int)$b['id']]);
+        $written++;
+    }
+    if (transport_maps_key() !== '') {
+        $google = transport_maps_refresh_route($routeId);
+        if (($google['updated'] ?? 0) > 0) $written = (int)$google['updated'];
+    }
+    return $written;
+}
+
+/**
+ * Save the cab's position as a pickup that had no coordinates, then rebuild
+ * the route's leg times. Only after the driver has marked the stop reached.
+ */
+function transport_save_reached_location(int $tripStopId, float $lat, float $lng): void
+{
+    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180 || ($lat == 0.0 && $lng == 0.0)) {
+        throw new InvalidArgumentException('That location is not usable.');
+    }
+    $stop = transport_trip_stop_get($tripStopId);
+    if (!$stop) throw new InvalidArgumentException('Stop not found.');
+    $trip = transport_trip_get((int)$stop['trip_id']);
+    if (!$trip || $trip['status'] !== 'running') throw new InvalidArgumentException('Start the trip first.');
+    if (empty($stop['reached_at'])) {
+        throw new InvalidArgumentException('Mark the stop reached before saving its location.');
+    }
+    $rs = db()->prepare('SELECT id, lat FROM transport_stops WHERE route_id = :r AND student_id = :s');
+    $rs->execute([':r' => (int)$trip['route_id'], ':s' => (int)$stop['student_id']]);
+    $row = $rs->fetch();
+    if (!$row) throw new InvalidArgumentException('This child is not on the route.');
+    if ($row['lat'] !== null) throw new InvalidArgumentException('This stop already has a location.');
+    db()->prepare('UPDATE transport_stops SET lat = :la, lng = :lo WHERE id = :id AND lat IS NULL')
+        ->execute([':la' => round($lat, 7), ':lo' => round($lng, 7), ':id' => (int)$row['id']]);
+    transport_recalculate_route_legs((int)$trip['route_id']);
+}
+
 function transport_stop_update(int $stopId, string $note, string $lat, string $lng): void
 {
     $lat = trim($lat);
@@ -502,10 +613,10 @@ function transport_trip_snapshot(int $tripId): void
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
+    transport_after_snapshot($tripId);
 }
 
-/** Find or create the trip for a route/day/direction. */
-function transport_trip_ensure(int $routeId, string $date, string $direction): array
+function transport_trip_slot_check(int $routeId, string $date, string $direction): array
 {
     if (!in_array($direction, TRANSPORT_DIRECTIONS, true)) throw new InvalidArgumentException('Unknown direction.');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) throw new InvalidArgumentException('Bad date.');
@@ -514,13 +625,240 @@ function transport_trip_ensure(int $routeId, string $date, string $direction): a
     if (!in_array($direction, transport_route_directions($route), true)) {
         throw new InvalidArgumentException('This route does not run that direction.');
     }
-    db()->prepare('INSERT IGNORE INTO transport_trips (route_id, trip_date, direction) VALUES (:r, :d, :dir)')
+    return $route;
+}
+
+/** Open (scheduled or running) trip for a route/day/direction, if any. */
+function transport_trip_open_id(int $routeId, string $date, string $direction): int
+{
+    $st = db()->prepare("SELECT id FROM transport_trips
+                          WHERE route_id = :r AND trip_date = :d AND direction = :dir
+                            AND status IN ('scheduled','running')
+                          ORDER BY run_no DESC, id DESC LIMIT 1");
+    $st->execute([':r' => $routeId, ':d' => $date, ':dir' => $direction]);
+    return (int)$st->fetchColumn();
+}
+
+/** Find or create the first trip for a route/day/direction. Does not start another run. */
+function transport_trip_ensure(int $routeId, string $date, string $direction): array
+{
+    transport_trip_slot_check($routeId, $date, $direction);
+    $open = transport_trip_open_id($routeId, $date, $direction);
+    if ($open > 0) {
+        $trip = transport_trip_get($open);
+        if ($trip && $trip['status'] === 'scheduled') transport_trip_snapshot($open);
+        return transport_trip_get($open);
+    }
+    $st = db()->prepare('SELECT id FROM transport_trips WHERE route_id = :r AND trip_date = :d AND direction = :dir
+                          ORDER BY run_no DESC, id DESC LIMIT 1');
+    $st->execute([':r' => $routeId, ':d' => $date, ':dir' => $direction]);
+    $existing = (int)$st->fetchColumn();
+    if ($existing > 0) return transport_trip_get($existing);
+    db()->prepare('INSERT IGNORE INTO transport_trips (route_id, trip_date, direction, run_no) VALUES (:r, :d, :dir, 1)')
         ->execute([':r' => $routeId, ':d' => $date, ':dir' => $direction]);
-    $st = db()->prepare('SELECT id FROM transport_trips WHERE route_id = :r AND trip_date = :d AND direction = :dir');
     $st->execute([':r' => $routeId, ':d' => $date, ':dir' => $direction]);
     $id = (int)$st->fetchColumn();
     transport_trip_snapshot($id);
     return transport_trip_get($id);
+}
+
+/**
+ * Start another run when today's trip for this route is finished or cancelled.
+ * If one is already scheduled or on the road, that trip is returned.
+ */
+function transport_trip_begin(int $routeId, string $date, string $direction): array
+{
+    transport_trip_slot_check($routeId, $date, $direction);
+    $open = transport_trip_open_id($routeId, $date, $direction);
+    if ($open > 0) {
+        if ((transport_trip_get($open)['status'] ?? '') === 'scheduled') transport_trip_snapshot($open);
+        return transport_trip_get($open);
+    }
+    $st = db()->prepare('SELECT COALESCE(MAX(run_no), 0) + 1 FROM transport_trips
+                          WHERE route_id = :r AND trip_date = :d AND direction = :dir');
+    $st->execute([':r' => $routeId, ':d' => $date, ':dir' => $direction]);
+    $run = (int)$st->fetchColumn();
+    try {
+        db()->prepare('INSERT INTO transport_trips (route_id, trip_date, direction, run_no) VALUES (:r, :d, :dir, :n)')
+            ->execute([':r' => $routeId, ':d' => $date, ':dir' => $direction, ':n' => $run]);
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '23000') throw $e;
+        $again = transport_trip_open_id($routeId, $date, $direction);
+        if ($again > 0) return transport_trip_get($again);
+        throw $e;
+    }
+    $id = (int)db()->lastInsertId();
+    transport_trip_snapshot($id);
+    return transport_trip_get($id);
+}
+
+/** A new route plus today's trip, for a run that was not set up ahead of time. */
+function transport_trip_custom(string $name, string $direction, array $studentIds, ?string $date = null): array
+{
+    $name = trim($name);
+    if ($name === '') throw new InvalidArgumentException('Give this trip a name.');
+    if (!in_array($direction, TRANSPORT_DIRECTIONS, true)) throw new InvalidArgumentException('Pick pickup or drop.');
+    $ids = [];
+    foreach ($studentIds as $id) {
+        $id = (int)$id;
+        if ($id > 0 && !in_array($id, $ids, true)) $ids[] = $id;
+    }
+    if (!$ids) throw new InvalidArgumentException('Add at least one child.');
+    if (count($ids) > 40) throw new InvalidArgumentException('A trip can have at most 40 children.');
+    $chk = db()->prepare('SELECT id FROM students WHERE id = :id');
+    foreach ($ids as $id) {
+        $chk->execute([':id' => $id]);
+        if (!$chk->fetchColumn()) throw new InvalidArgumentException('One of the children was not found.');
+    }
+    $routeId = transport_route_save([
+        'name' => $name,
+        'direction' => $direction,
+        'is_active' => 1,
+    ]);
+    // Drop trips visit the route in reverse, so store a drop in reverse of the order the driver picked.
+    if ($direction === 'drop') $ids = array_reverse($ids);
+    foreach ($ids as $id) transport_stop_add($routeId, $id);
+    return transport_trip_begin($routeId, transport_writable_date($date), $direction);
+}
+
+function transport_trip_require_editable(array $trip): void
+{
+    if (!in_array($trip['status'] ?? '', ['scheduled', 'running'], true)) {
+        throw new InvalidArgumentException('This trip can no longer be changed.');
+    }
+}
+
+function transport_renumber_trip_stops(int $tripId): void
+{
+    $ids = array_map(static fn($s) => (int)$s['id'], transport_trip_stops($tripId));
+    $upd = db()->prepare('UPDATE transport_trip_stops SET stop_order = :o WHERE id = :id AND trip_id = :t');
+    foreach ($ids as $i => $id) $upd->execute([':o' => $i + 1, ':id' => $id, ':t' => $tripId]);
+}
+
+/** Point this trip at another route. Children already marked stay; waiting children come from the new route. */
+function transport_trip_set_route(int $tripId, int $routeId): void
+{
+    $trip = transport_trip_get($tripId);
+    if (!$trip) throw new InvalidArgumentException('Trip not found.');
+    transport_trip_require_editable($trip);
+    $route = transport_route_get($routeId);
+    if (!$route || !(int)$route['is_active']) throw new InvalidArgumentException('Route is not active.');
+    if (!in_array($trip['direction'], transport_route_directions($route), true)) {
+        throw new InvalidArgumentException('That route does not run this direction.');
+    }
+    if ($trip['status'] === 'scheduled') {
+        db()->prepare('UPDATE transport_trips SET route_id = :r WHERE id = :id')
+            ->execute([':r' => $routeId, ':id' => $tripId]);
+        transport_trip_snapshot($tripId);
+        return;
+    }
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare('UPDATE transport_trips SET route_id = :r WHERE id = :id')
+            ->execute([':r' => $routeId, ':id' => $tripId]);
+        $pdo->prepare("DELETE FROM transport_trip_stops WHERE trip_id = :t AND status = 'pending'")
+            ->execute([':t' => $tripId]);
+        $have = $pdo->prepare('SELECT student_id FROM transport_trip_stops WHERE trip_id = :t');
+        $have->execute([':t' => $tripId]);
+        $already = array_map('intval', $have->fetchAll(PDO::FETCH_COLUMN));
+        $stops = transport_route_stops($routeId);
+        if ($trip['direction'] === 'drop') $stops = array_reverse($stops);
+        $max = $pdo->prepare('SELECT COALESCE(MAX(stop_order), 0) FROM transport_trip_stops WHERE trip_id = :t');
+        $max->execute([':t' => $tripId]);
+        $order = (int)$max->fetchColumn();
+        $ins = $pdo->prepare('INSERT INTO transport_trip_stops (trip_id, student_id, stop_order) VALUES (:t, :s, :o)');
+        foreach ($stops as $s) {
+            $sid = (int)$s['student_id'];
+            if (in_array($sid, $already, true)) continue;
+            $order++;
+            $ins->execute([':t' => $tripId, ':s' => $sid, ':o' => $order]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+    transport_renumber_trip_stops($tripId);
+}
+
+/** Move a stop one place. On a running trip, only children still waiting can move. */
+function transport_trip_move_stop(int $tripStopId, string $dir): void
+{
+    if (!in_array($dir, ['up', 'down'], true)) throw new InvalidArgumentException('Unknown direction.');
+    $stop = transport_trip_stop_get($tripStopId);
+    if (!$stop) throw new InvalidArgumentException('Stop not found.');
+    $trip = transport_trip_get((int)$stop['trip_id']);
+    if (!$trip) throw new InvalidArgumentException('Trip not found.');
+    transport_trip_require_editable($trip);
+    if ($trip['status'] === 'running' && $stop['status'] !== 'pending') {
+        throw new InvalidArgumentException('Only children still waiting can be moved.');
+    }
+    $stops = transport_trip_stops((int)$trip['id']);
+    $ids = array_map(static fn($s) => (int)$s['id'], $stops);
+    $pos = array_search($tripStopId, $ids, true);
+    $swap = $dir === 'up' ? $pos - 1 : $pos + 1;
+    if ($pos === false || $swap < 0 || $swap >= count($ids)) return;
+    if ($trip['status'] === 'running' && $stops[$swap]['status'] !== 'pending') return;
+    $upd = db()->prepare('UPDATE transport_trip_stops SET stop_order = :o WHERE id = :id');
+    $upd->execute([':o' => (int)$stops[$swap]['stop_order'], ':id' => $tripStopId]);
+    $upd->execute([':o' => (int)$stops[$pos]['stop_order'], ':id' => (int)$stops[$swap]['id']]);
+    transport_renumber_trip_stops((int)$trip['id']);
+}
+
+function transport_trip_add_student(int $tripId, int $studentId): void
+{
+    $trip = transport_trip_get($tripId);
+    if (!$trip) throw new InvalidArgumentException('Trip not found.');
+    transport_trip_require_editable($trip);
+    $chk = db()->prepare('SELECT id FROM students WHERE id = :id');
+    $chk->execute([':id' => $studentId]);
+    if (!$chk->fetchColumn()) throw new InvalidArgumentException('Pick a child to add.');
+    $next = db()->prepare('SELECT COALESCE(MAX(stop_order), 0) + 1 FROM transport_trip_stops WHERE trip_id = :t');
+    $next->execute([':t' => $tripId]);
+    try {
+        db()->prepare('INSERT INTO transport_trip_stops (trip_id, student_id, stop_order) VALUES (:t, :s, :o)')
+            ->execute([':t' => $tripId, ':s' => $studentId, ':o' => (int)$next->fetchColumn()]);
+    } catch (PDOException $e) {
+        if ($e->getCode() === '23000') throw new InvalidArgumentException('That child is already on this trip.');
+        throw $e;
+    }
+}
+
+function transport_trip_remove_stop(int $tripStopId): void
+{
+    $stop = transport_trip_stop_get($tripStopId);
+    if (!$stop) throw new InvalidArgumentException('Stop not found.');
+    $trip = transport_trip_get((int)$stop['trip_id']);
+    if (!$trip) throw new InvalidArgumentException('Trip not found.');
+    transport_trip_require_editable($trip);
+    if ($stop['status'] !== 'pending') throw new InvalidArgumentException('Only a child still waiting can be taken off the trip.');
+    db()->prepare('DELETE FROM transport_trip_stops WHERE id = :id')->execute([':id' => $tripStopId]);
+    transport_renumber_trip_stops((int)$trip['id']);
+    if ($trip['status'] === 'running') {
+        $left = db()->prepare("SELECT COUNT(*) FROM transport_trip_stops WHERE trip_id = :t AND status = 'pending'");
+        $left->execute([':t' => (int)$trip['id']]);
+        if ((int)$left->fetchColumn() === 0) transport_trip_finish((int)$trip['id']);
+    }
+}
+
+/** Enrolled children for the "add a child" picker. */
+function transport_student_choices(string $q, int $limit = 40): array
+{
+    $limit = max(1, min(50, $limit));
+    $sql = "SELECT id, first_name, last_name, grade FROM students
+            WHERE COALESCE(is_active, 1) = 1
+              AND COALESCE(enrollment_status, 'enrolled') IN ('enrolled','promoted')";
+    $params = [];
+    $q = trim($q);
+    if ($q !== '') {
+        $sql .= " AND CONCAT(first_name, ' ', last_name) LIKE :q";
+        $params[':q'] = '%' . str_replace(['%', '_'], '', $q) . '%';
+    }
+    $sql .= " ORDER BY (transport = 'cab') DESC, first_name, last_name LIMIT $limit";
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    return $st->fetchAll();
 }
 
 function transport_trip_start(int $tripId, int $userId): void
@@ -740,6 +1078,7 @@ function transport_record_locations(int $tripId, array $points): array
                        ':s' => $c['spd'], ':h' => $c['hdg'], ':r' => date('Y-m-d H:i:s', $c['t'])]);
     }
     $last = end($clean);
+    transport_after_locations($tripId, $last);
     db()->prepare('UPDATE transport_trips SET last_lat = :la, last_lng = :lo, last_location_at = :r
                    WHERE id = :id AND (last_location_at IS NULL OR last_location_at <= :r2)')
         ->execute([':la' => $last['lat'], ':lo' => $last['lng'], ':r' => date('Y-m-d H:i:s', $last['t']),
@@ -782,12 +1121,19 @@ function transport_due_eta_alerts(array $tripStops, array $etas): array
 /** Changes whenever the trip screen would render differently (status, marks, alerts due). */
 function transport_trip_signature(array $trip, array $tripStops, array $due): string
 {
-    $parts = [(string)$trip['status']];
+    $parts = [(string)$trip['status'], (string)($trip['route_id'] ?? '')];
     foreach ($tripStops as $s) {
-        $parts[] = $s['id'] . ':' . $s['status'] . ':' . ($s['reached_at'] ? 1 : 0)
+        $parts[] = $s['id'] . ':' . $s['stop_order'] . ':' . $s['status'] . ':' . ($s['reached_at'] ? 1 : 0)
                  . ':' . ($s['eta_alert_at'] ? 1 : 0) . ':' . ($s['reached_alert_at'] ? 1 : 0);
     }
     $parts[] = implode(',', $due);
+    if (!empty($trip['route_id'])) {
+        $pins = [];
+        foreach (transport_route_stops((int)$trip['route_id']) as $rs) {
+            if ($rs['lat'] !== null) $pins[] = (int)$rs['student_id'] . ':' . $rs['lat'] . ',' . $rs['lng'];
+        }
+        $parts[] = implode(';', $pins);
+    }
     return substr(sha1(implode('|', $parts)), 0, 16);
 }
 
@@ -856,7 +1202,16 @@ function transport_board(string $date): array
                            FROM transport_trips t WHERE t.trip_date = :d");
     $st->execute([':d' => $date]);
     $trips = [];
-    foreach ($st as $t) $trips[(int)$t['route_id'] . '|' . $t['direction']] = $t;
+    foreach ($st as $t) {
+        $key = (int)$t['route_id'] . '|' . $t['direction'];
+        $prev = $trips[$key] ?? null;
+        if ($prev === null
+            || transport_trip_rank((string)$t['status']) > transport_trip_rank((string)$prev['status'])
+            || (transport_trip_rank((string)$t['status']) === transport_trip_rank((string)$prev['status'])
+                && (int)$t['id'] > (int)$prev['id'])) {
+            $trips[$key] = $t;
+        }
+    }
 
     $out = [];
     foreach (transport_routes(true) as $r) {
@@ -865,6 +1220,71 @@ function transport_board(string $date): array
         }
     }
     return $out;
+}
+
+/**
+ * Every trip already created today, plus a row for each active route that
+ * has no trip yet. can_start_another is true when that route has no run
+ * still scheduled or on the road.
+ */
+function transport_today_runs(string $date): array
+{
+    $st = db()->prepare("SELECT t.*, r.name AS route_name, r.pickup_time, r.drop_time, r.cab_id,
+                                c.name AS cab_name, c.vehicle_no, c.driver_name,
+                                (SELECT COUNT(*) FROM transport_stops s WHERE s.route_id = r.id) AS stop_count,
+                                (SELECT COUNT(*) FROM transport_trip_stops x WHERE x.trip_id = t.id) AS total,
+                                (SELECT COUNT(*) FROM transport_trip_stops x WHERE x.trip_id = t.id AND x.status <> 'pending') AS finished
+                           FROM transport_trips t
+                           JOIN transport_routes r ON r.id = t.route_id
+                           LEFT JOIN transport_cabs c ON c.id = r.cab_id
+                          WHERE t.trip_date = :d
+                          ORDER BY r.name, t.direction, t.run_no, t.id");
+    $st->execute([':d' => $date]);
+    $trips = $st->fetchAll();
+    $open = [];
+    $seen = [];
+    foreach ($trips as $t) {
+        $key = (int)$t['route_id'] . '|' . $t['direction'];
+        $seen[$key] = true;
+        if (in_array($t['status'], ['scheduled', 'running'], true)) $open[$key] = true;
+    }
+    $out = [];
+    foreach ($trips as $t) {
+        $key = (int)$t['route_id'] . '|' . $t['direction'];
+        $out[] = [
+            'route' => [
+                'id' => (int)$t['route_id'],
+                'name' => (string)$t['route_name'],
+                'pickup_time' => $t['pickup_time'],
+                'drop_time' => $t['drop_time'],
+                'cab_name' => (string)($t['cab_name'] ?? ''),
+                'stop_count' => (int)$t['stop_count'],
+            ],
+            'direction' => (string)$t['direction'],
+            'trip' => $t,
+            'can_start_another' => empty($open[$key]),
+        ];
+    }
+    foreach (transport_routes(true) as $r) {
+        foreach (transport_route_directions($r) as $dir) {
+            $key = (int)$r['id'] . '|' . $dir;
+            if (isset($seen[$key])) continue;
+            $out[] = ['route' => $r, 'direction' => $dir, 'trip' => null, 'can_start_another' => true];
+        }
+    }
+    return $out;
+}
+
+/** Trip counts for each day in a YYYY-MM month that already has a trip. */
+function transport_calendar_month(string $month): array
+{
+    if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) throw new InvalidArgumentException('Bad month.');
+    $start = $month . '-01';
+    $end = date('Y-m-t', strtotime($start));
+    $st = db()->prepare('SELECT trip_date, status, COUNT(*) AS n FROM transport_trips
+                          WHERE trip_date BETWEEN :a AND :b GROUP BY trip_date, status');
+    $st->execute([':a' => $start, ':b' => $end]);
+    return ['month' => $month, 'start' => $start, 'end' => $end, 'days' => transport_calendar_fold($st->fetchAll())];
 }
 
 /**
@@ -895,7 +1315,7 @@ function transport_parent_status(int $studentId, ?string $date = null): array
                'cab' => null, 'home' => null];
     if (!$row) {
         $status['phrase'] = 'No cab trip for today yet.';
-        return $status;
+        return transport_parent_finish($studentId, $date, null, $status);
     }
     $dir = (string)$row['direction'];
     $status['direction'] = $dir;
@@ -939,5 +1359,12 @@ function transport_parent_status(int $studentId, ?string $date = null): array
             if ($h = $hs->fetch()) $status['home'] = ['lat' => (float)$h['lat'], 'lng' => (float)$h['lng']];
         }
     }
-    return $status;
+    return transport_parent_finish($studentId, $date, $row, $status);
 }
+
+function transport_parent_finish(int $studentId, string $date, ?array $row, array $status): array
+{
+    return array_merge($status, transport_parent_extras($studentId, $date, $row));
+}
+
+require_once __DIR__ . '/transport_ops.php';

@@ -19,6 +19,6 @@ try {
 }
 $trip = api_transport_trip_or_404((int)($in['trip_id'] ?? 0));
 $stops = transport_trip_stops((int)$trip['id']);
-$due = transport_due_eta_alerts($stops, transport_trip_etas($trip, $stops));
+$due = transport_parents_notified() ? transport_due_eta_alerts($stops, transport_trip_etas($trip, $stops)) : [];
 api_json(['ok' => true, 'accepted' => $res['accepted'], 'reached' => $res['reached'], 'due' => $due,
           'status' => $trip['status'], 'signature' => transport_trip_signature($trip, $stops, $due)]);
