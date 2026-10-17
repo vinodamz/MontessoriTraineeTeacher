@@ -132,8 +132,9 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($hasBl): ?><span class="pill">First assessment ✓</span><?php endif; ?>
             </div>
             <div class="student-actions">
-                <a class="btn btn-primary" href="assess.php?student_id=<?= $sid ?>">Assess</a>
-                <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress</a>
+                <a class="btn btn-primary" href="observe.php?student_id=<?= $sid ?>">Record observation</a>
+                <a class="btn" href="assess.php?student_id=<?= $sid ?>&amp;month=<?= e(urlencode($currentMonth)) ?>">Monthly assessment</a>
+                <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress/history</a>
                 <?php if (!$hasBl): ?>
                     <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>">Add first assessment</a>
                 <?php endif; ?>

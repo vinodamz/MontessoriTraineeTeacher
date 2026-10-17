@@ -8,6 +8,8 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
+require_once __DIR__ . '/../includes/observations.php';
+
 $user = require_module('montessori');
 
 $studentId = isset($_REQUEST['student_id']) ? (int)$_REQUEST['student_id'] : 0;
@@ -102,7 +104,8 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="head-actions">
-        <a class="btn" href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Assess this month</a>
+        <a class="btn btn-primary" href="observe.php?student_id=<?= $studentId ?>">Record observation</a>
+        <a class="btn" href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Monthly assessment</a>
         <a class="btn btn-ghost" href="baseline.php?student_id=<?= $studentId ?>"><?= $baseline ? 'Edit baseline' : 'Add baseline' ?></a>
         <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
         <?php if ($editUrl = student_edit_url($user, $studentId)): ?>
@@ -117,6 +120,8 @@ require __DIR__ . '/../includes/header.php';
     <h2>Progress report</h2>
     <p class="muted">Generated <?= e(date('j M Y')) ?> · <?= count($months) ?> month<?= count($months)===1?'':'s' ?> of data</p>
 </section>
+
+<?php observation_history_render(observation_history(db(), $studentId)); ?>
 
 <?php if ($baseline): ?>
 <section class="card">
@@ -144,7 +149,7 @@ require __DIR__ . '/../includes/header.php';
 
 <?php if (!$months): ?>
     <div class="empty">
-        <p>No assessments recorded yet. <a href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Start the first one →</a></p>
+        <p>No monthly assessments recorded yet. <a href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Start the first one →</a></p>
     </div>
 <?php else: ?>
 

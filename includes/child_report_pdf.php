@@ -415,6 +415,23 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
     }
 
     // ---- Summary by area --------------------------------------------------
+    if (!empty($d['observations'])) {
+        $pdf->sectionTitle('Dated observations');
+        $pdf->muted('Only observed skills are recorded. Monthly assessments are separate. Earlier/latest records are grouped by grade and rating scale.');
+        foreach (observation_skill_history($d['observations']) as $pair) {
+            $a = $pair['first']; $b = $pair['latest'];
+            $pdf->subTitle($b['skill_text'] . ' - ' . $b['category'] . ' - ' . $b['grade']);
+            if ($a['observation_id'] === $b['observation_id']) $pdf->para('Only observation: ' . $a['observed_on'] . ' - ' . $a['rating_label']);
+            else $pdf->para('Earlier: ' . $a['observed_on'] . ' - ' . $a['rating_label'] . "\nLatest: " . $b['observed_on'] . ' - ' . $b['rating_label']);
+        }
+        foreach (array_reverse($d['observations']) as $r) {
+            $pdf->subTitle($r['observed_on'] . ' - ' . $r['author_name'] . ' - ' . $r['grade']);
+            $pdf->para($r['skill_text'] . ' - ' . $r['category'] . ': ' . $r['rating_label'] . ' (' . $r['rating_code'] . ')');
+            if ($r['evidence'] !== '') $pdf->para('Evidence: ' . $r['evidence']);
+            if ($r['next_steps'] !== '') $pdf->para('Next steps: ' . $r['next_steps']);
+        }
+    }
+
     if ($d['categories'] && $months) {
         $pdf->sectionTitle('Summary by area');
 
