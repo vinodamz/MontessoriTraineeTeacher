@@ -363,18 +363,12 @@ require __DIR__ . '/../includes/header.php';
 </div>
 
 <?php
-// Preserve the full historical month range in a compact, accessible selector.
+// Offer the June-start academic year plus saved historical months.
+// Do not generate empty April/May gaps just because March has saved data.
 $usedSet = array_flip($existingMonths);
 $todayMy = current_month_year();
-$bounds = array_merge($allAcademic, $existingMonths, [$todayMy, $month]);
-usort($bounds, 'compare_month_year');
-$rangeStart = DateTime::createFromFormat('!M-y', $bounds[0]);
-$rangeEnd = DateTime::createFromFormat('!M-y', end($bounds));
-$monthsOrdered = [];
-for ($d = clone $rangeStart; $d <= $rangeEnd; $d->modify('+1 month')) {
-    $monthsOrdered[] = $d->format('M-y');
-}
-$monthsOrdered = array_reverse($monthsOrdered);
+$monthsOrdered = array_values(array_unique(array_merge($allAcademic, $existingMonths, [$todayMy, $month])));
+usort($monthsOrdered, fn($a, $b) => compare_month_year($b, $a));
 ?>
 <section class="card assessment-period no-print" aria-labelledby="assessment-period-title">
     <div class="assessment-period-heading">
