@@ -16,6 +16,7 @@
  * recorded" placeholders. Every section below is wrapped in a has-data guard.
  */
 declare(strict_types=1);
+require_once __DIR__ . '/observations.php';
 
 // ---------------------------------------------------------------------------
 // Data
@@ -40,6 +41,7 @@ function child_report_data(int $studentId): ?array
 
     $d = [
         'student'    => $student,
+        'observations' => observation_history(db(), $studentId),
         'baseline'   => null,
         'months'     => [],
         'categories' => [],
@@ -370,6 +372,8 @@ function child_report_render(array $d): void
     </section>
 
     <?php
+    observation_history_render($d['observations'] ?? []);
+
     // ---- Child details (only the fields that are filled) -----------------
     $facts = [];
     if (!empty($s['admission_number'])) $facts['Admission no.'] = (string)$s['admission_number'];
@@ -527,7 +531,7 @@ function child_report_render(array $d): void
     $chart = child_report_chart($d);
     if ($chart !== ''): ?>
         <section class="cr-card cr-break">
-            <h2>Progress over time</h2>
+            <h2>Monthly assessment averages over time</h2>
             <?= $chart ?>
         </section>
     <?php endif; ?>
