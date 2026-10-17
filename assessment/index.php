@@ -50,6 +50,20 @@ if ($students) {
     }
 }
 
+// Observations are dated independently of monthly assessments.
+$lastObservation = [];
+if ($students) {
+    try {
+        $ids = array_column($students, 'id');
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $q = db()->prepare("SELECT student_id, MAX(observed_on) AS latest FROM child_observations WHERE student_id IN ($place) GROUP BY student_id");
+        $q->execute($ids);
+        foreach ($q as $row) $lastObservation[(int)$row['student_id']] = $row['latest'];
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '42S02') throw $e;
+    }
+}
+
 // Which students already have a baseline?
 $hasBaseline = [];
 if ($students) {
@@ -109,6 +123,11 @@ require __DIR__ . '/../includes/header.php';
             $statusTxt = $last
                 ? ($isCurrent ? 'Assessed this month' : 'Last: ' . month_year_label($last))
                 : 'Not yet assessed';
+            if (isset($lastObservation[$sid])) {
+                $statusCls = 'ok';
+                $statusTxt = 'Observed: ' . date('j M Y', strtotime($lastObservation[$sid]));
+                if ($last) $statusTxt .= ' · Monthly: ' . month_year_label($last);
+            }
             $hasBl     = !empty($hasBaseline[$sid]);
             $fullName  = trim($s['first_name'] . ' ' . $s['last_name']);
         ?>
