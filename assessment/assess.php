@@ -345,9 +345,9 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="page-head">
     <div>
-        <h1>Assess <?= e($fullName) ?></h1>
+        <h1>Monthly assessment</h1>
         <p class="muted">
-            <?= e($student['grade']) ?> ·
+            <?= e($fullName) ?> · <?= e($student['grade']) ?> ·
             <strong><?= e(month_year_label($month)) ?></strong>
             <?php if ($isNewMonth): ?>
                 <span class="pill" style="background:#e8f4ff;color:#1c5b9c">New assessment</span>
@@ -362,53 +362,40 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<section class="card month-card no-print">
-    <div class="card-head">
-        <h2>Pick a month</h2>
-        <p class="muted small">
-            <span class="legend-dot is-used"></span> has data ·
-            <span class="legend-dot is-empty"></span> empty ·
-            <span class="legend-dot is-active"></span> viewing now
-        </p>
+<?php
+// Preserve the full historical month range in a compact, accessible selector.
+$usedSet = array_flip($existingMonths);
+$todayMy = current_month_year();
+$bounds = array_merge($allAcademic, $existingMonths, [$todayMy, $month]);
+usort($bounds, 'compare_month_year');
+$rangeStart = DateTime::createFromFormat('!M-y', $bounds[0]);
+$rangeEnd = DateTime::createFromFormat('!M-y', end($bounds));
+$monthsOrdered = [];
+for ($d = clone $rangeStart; $d <= $rangeEnd; $d->modify('+1 month')) {
+    $monthsOrdered[] = $d->format('M-y');
+}
+$monthsOrdered = array_reverse($monthsOrdered);
+?>
+<section class="card assessment-period no-print" aria-labelledby="assessment-period-title">
+    <div class="assessment-period-heading">
+        <div><h2 id="assessment-period-title">Assessment month</h2><p>Choose a month to start or review its assessment.</p></div>
+        <span class="assessment-period-status"><?= $isNewMonth ? 'Not saved yet' : 'Saved assessment' ?></span>
     </div>
-    <div class="month-grid">
-        <?php
-        $usedSet     = array_flip($existingMonths);
-        $todayMy     = current_month_year();
-        // A CONTINUOUS month range, not just the current academic year:
-        // from the student's earliest assessment (or the academic-year start,
-        // whichever is older) through the latest of today / academic-year end
-        // / the month being viewed. Last year's months are all present — with
-        // data or as fillable gaps — so history is never out of reach.
-        $bounds = array_merge($allAcademic, $existingMonths, [$todayMy, $month]);
-        usort($bounds, 'compare_month_year');
-        $rangeStart = DateTime::createFromFormat('!M-y', $bounds[0]);
-        $rangeEnd   = DateTime::createFromFormat('!M-y', end($bounds));
-        $monthsOrdered = [];
-        for ($d = clone $rangeStart; $d <= $rangeEnd; $d->modify('+1 month')) {
-            $monthsOrdered[] = $d->format('M-y');
-        }
-        // Most recent month first, so any cell with data lands in the top-left.
-        $monthsOrdered = array_reverse($monthsOrdered);
-        foreach ($monthsOrdered as $my):
-            $isUsed   = isset($usedSet[$my]);
-            $isActive = $my === $month;
-            $isToday  = $my === $todayMy;
-            $classes  = ['month-tile'];
-            $classes[] = $isUsed ? 'is-used' : 'is-empty';
-            if ($isActive) $classes[] = 'is-active';
-            $url = "assess.php?student_id=$studentId&month=" . urlencode($my);
-        ?>
-            <a class="<?= e(implode(' ', $classes)) ?>" href="<?= e($url) ?>" aria-current="<?= $isActive ? 'page' : 'false' ?>">
-                <?php if ($isToday): ?><span class="month-today">today</span><?php endif; ?>
-                <span class="month-name"><?= e(month_year_label($my)) ?></span>
-                <span class="month-status">
-                    <?= $isUsed ? '<span class="month-icon used" aria-label="Has assessment">✓ has data</span>'
-                                : '<span class="month-icon empty" aria-label="No assessment yet">+ new</span>' ?>
-                </span>
-            </a>
-        <?php endforeach; ?>
-    </div>
+    <form method="get" action="assess.php" class="assessment-period-form">
+        <input type="hidden" name="student_id" value="<?= $studentId ?>">
+        <div class="assessment-period-field">
+            <label for="assessment-month">Month and year</label>
+            <select id="assessment-month" name="month">
+                <?php foreach ($monthsOrdered as $my): ?>
+                <option value="<?= e($my) ?>" <?= $my === $month ? 'selected' : '' ?>><?= e(month_year_label($my)) ?><?= $my === $todayMy ? ' · This month' : '' ?><?= isset($usedSet[$my]) ? ' · Saved' : '' ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <button class="btn btn-primary" type="submit">View month</button>
+        <?php if ($month !== $todayMy): ?>
+        <a class="btn btn-ghost" href="assess.php?student_id=<?= $studentId ?>&amp;month=<?= e(urlencode($todayMy)) ?>">This month →</a>
+        <?php endif; ?>
+    </form>
 </section>
 
 <?php if ($isNewMonth): ?>
