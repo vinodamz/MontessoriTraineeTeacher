@@ -1805,3 +1805,16 @@ tr.timesheet-leave-pending { background: #f7f5f2; }
 }
 
 /* ==================================================
+
+/* Monthly assessment period selector: scoped to avoid empty-state styles. */
+.assessment-period { padding:1.25rem; margin-bottom:1rem; }
+.assessment-period-heading { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:.75rem; margin-bottom:1rem; }
+.assessment-period-heading h2 { font-size:1.1rem; margin:0 0 .25rem; }
+.assessment-period-heading p { color:var(--muted); font-size:.9rem; margin:0; }
+.assessment-period-status { display:inline-block; padding:.35rem .65rem; border-radius:8px; background:#f3f4f6; color:#4b5563; font-size:.8rem; font-weight:600; }
+.assessment-period-form { display:flex; align-items:flex-end; flex-wrap:wrap; gap:.75rem; }
+.assessment-period-field { flex:1 1 240px; max-width:420px; min-width:0; }
+.assessment-period-field label { display:block; margin:0 0 .35rem; font-size:.85rem; font-weight:600; }
+.assessment-period-field select { width:100%; min-height:46px; margin:0; }
+.assessment-period-form .btn { min-height:46px; }
+@media(max-width:480px) { .assessment-period { padding:1rem; } .assessment-period-field { flex-basis:100%; max-width:none; } .assessment-period-form .btn-primary { flex:1; } }
