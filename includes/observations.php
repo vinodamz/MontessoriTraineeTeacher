@@ -112,7 +112,7 @@ function observation_skill_history(array $rows): array
 function observation_history_render(array $rows): void
 {
     if (!$rows) return;
-    echo '<section class="card cr-section"><h2>Dated observations</h2><p>Only skills observed on each date are recorded. Monthly assessments and their averages are shown separately below.</p>';
+    echo '<section class="card cr-card cr-section"><h2>Dated observations</h2><p>Only skills observed on each date are recorded. Monthly assessments and their averages are shown separately below.</p>';
     echo '<h3>Earlier and latest recorded levels</h3>';
     foreach (observation_skill_history($rows) as $pair) {
         $a=$pair['first']; $b=$pair['latest'];
