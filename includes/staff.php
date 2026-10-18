@@ -1345,6 +1345,39 @@ function staff_payslip_draft(int $userId, int $year, int $month): array
     ];
 }
 
+/**
+ * Recalculate LOP amount and net after an admin sets working / LOP days.
+ * Earnings and fixed deductions stay as they were (draft or issued snapshot).
+ */
+function staff_payslip_apply_days(array $view, float $workingDays, float $lopDays): array
+{
+    $workingDays = max(1.0, round($workingDays, 2));
+    $lopDays     = max(0.0, round($lopDays, 2));
+    $gross       = (float)($view['gross_earnings'] ?? 0);
+    $totDed      = (float)($view['total_deductions'] ?? 0);
+    $perDay      = $workingDays > 0 ? $gross / $workingDays : 0.0;
+    $leaveLop    = (float)($view['lop_leave_days'] ?? 0);
+
+    $view['working_days']    = $workingDays;
+    $view['lop_days']        = $lopDays;
+    $view['lop_leave_days']  = min($lopDays, $leaveLop);
+    $view['lop_absent_days'] = round(max(0.0, $lopDays - (float)$view['lop_leave_days']), 2);
+    $view['lop_amount']      = round($perDay * $lopDays, 2);
+    $view['net_pay']         = round($gross - (float)$view['lop_amount'] - $totDed, 2);
+    return $view;
+}
+
+/** Clamp a posted/query day count. Empty/invalid → $fallback. */
+function staff_payslip_day_input($raw, float $fallback, float $min, float $max): float
+{
+    if ($raw === null || $raw === '') return $fallback;
+    if (!is_numeric($raw)) return $fallback;
+    $n = (float)$raw;
+    if ($n < $min) $n = $min;
+    if ($n > $max) $n = $max;
+    return round($n, 2);
+}
+
 /** An already-issued payslip for (user, year, month), or null. */
 function staff_payslip(int $userId, int $year, int $month): ?array
 {
@@ -1355,6 +1388,40 @@ function staff_payslip(int $userId, int $year, int $month): ?array
     $stmt->execute([':u' => $userId, ':y' => $year, ':m' => $month]);
     $row = $stmt->fetch();
     return $row ?: null;
+}
+
+/** Drop an issued payslip so the month is a draft again. */
+function staff_payslip_recall(int $userId, int $year, int $month): bool
+{
+    $s = db()->prepare("
+        DELETE FROM staff_payslips
+         WHERE user_id = :u AND period_year = :y AND period_month = :m
+    ");
+    $s->execute([':u' => $userId, ':y' => $year, ':m' => $month]);
+    return $s->rowCount() > 0;
+}
+
+/** Issued payslip row → the same shape as staff_payslip_draft() for rendering. */
+function staff_payslip_view_from_issued(array $issued): array
+{
+    $earnings   = json_decode((string)$issued['earnings_json'], true) ?: [];
+    $deductions = json_decode((string)$issued['deductions_json'], true) ?: [];
+    return [
+        'working_days'     => (float)$issued['working_days'],
+        'present_days'     => (float)$issued['present_days'],
+        'paid_leave_days'  => (float)$issued['paid_leave_days'],
+        'lop_days'         => (float)$issued['lop_days'],
+        'lop_leave_days'   => (float)($issued['lop_leave_days'] ?? 0),
+        'lop_absent_days'  => (float)($issued['lop_absent_days'] ?? 0),
+        'hours_worked'     => (float)$issued['hours_worked'],
+        'earnings'         => $earnings,
+        'deductions'       => $deductions,
+        'gross_earnings'   => (float)$issued['gross_earnings'],
+        'lop_amount'       => (float)$issued['lop_amount'],
+        'total_deductions' => (float)$issued['total_deductions'],
+        'net_pay'          => (float)$issued['net_pay'],
+        'has_pay'          => true,
+    ];
 }
 
 function staff_money(float $v): string
