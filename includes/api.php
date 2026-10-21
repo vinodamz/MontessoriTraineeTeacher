@@ -161,14 +161,21 @@ function api_app_modules(array $user): array
         'expenses'   => ['Expenses',    '/expenses/index.php',  false],
         'logbook'    => ['Logbook',     '/logbook/index.php',   false],
         'inventory'  => ['Inventory',   '/inventory/index.php', false],
-        'materials'  => ['Materials',   '/materials/daily.php', false],
+        'materials'  => ['Materials',   '/materials/daily.php', true],
         'plans'      => ['Weekly Plans','/plans/index.php',     false],
         'daycare'    => ['Daycare',     '/daycare/index.php',   false],
         'recruitment'=> ['Recruitment', '/recruitment/index.php', false],
     ];
     $out = [];
     foreach ($catalog as $key => [$label, $path, $native]) {
-        if (!user_has_module($user, $key)) continue;
+        $allowed = user_has_module($user, $key);
+        // A materials-check duty is enough on the website. Show the same
+        // native sheet in the app, even without the Materials module.
+        if (!$allowed && $key === 'materials') {
+            require_once __DIR__ . '/materials.php';
+            $allowed = mm_can_daily_check($user);
+        }
+        if (!$allowed) continue;
         $out[] = ['key' => $key, 'label' => $label, 'native' => $native, 'web_url' => $base . $path];
     }
     return $out;
