@@ -8,6 +8,8 @@
  * report can never disagree about the data.
  *
  * Same rendering rule as the HTML: a section with no data is omitted entirely.
+ * Month grids include every assessed month, skill names are wrapped in full,
+ * and the summary prints the rating word beside the letter.
  *
  * Text encoding: FPDF's core fonts are Latin-1, so every string goes through
  * pdf_txt() which transliterates from UTF-8. Scripts with no Latin-1
@@ -17,6 +19,25 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/fpdf/fpdf.php';
+
+/**
+ * How many month columns fit beside the fixed columns.
+ * A count of 1 still returns 1 so a very wide scale never drops a month.
+ */
+function pdf_fit_columns(float $contentW, float $fixedW, float $minCol, int $count): int
+{
+    if ($count <= 1) return max(0, $count);
+    $fit = (int)floor(($contentW - $fixedW) / max(1.0, $minCol));
+    if ($fit < 1) $fit = 1;
+    return min($count, $fit);
+}
+
+/** @param list<string> $months @return list<list<string>> */
+function pdf_month_groups(array $months, int $per): array
+{
+    if ($months === []) return [];
+    return array_chunk($months, max(1, $per));
+}
 
 /** UTF-8 → Latin-1 for FPDF's core fonts, never throwing on odd input. */
 function pdf_txt(?string $s): string
@@ -168,75 +189,173 @@ final class ChildReportPdf extends FPDF
         $this->SetTextColor(43, 43, 43);
     }
 
+    /** How many lines MultiCell will use for $txt in a cell of width $w. */
+    public function lineCount(float $w, string $txt): int
+    {
+        if (!isset($this->CurrentFont) || $w <= 0 || $this->FontSize <= 0) return 1;
+        $cw = $this->CurrentFont['cw'];
+        $wmax = ($w - 2 * $this->cMargin) * 1000 / $this->FontSize;
+        if ($wmax <= 0) return 1;
+        $s = str_replace("\r", '', $txt);
+        $nb = strlen($s);
+        if ($nb > 0 && $s[$nb - 1] === "\n") $nb--;
+        $sep = -1;
+        $i = 0;
+        $j = 0;
+        $l = 0;
+        $nl = 1;
+        while ($i < $nb) {
+            $c = $s[$i];
+            if ($c === "\n") {
+                $i++;
+                $sep = -1;
+                $j = $i;
+                $l = 0;
+                $nl++;
+                continue;
+            }
+            if ($c === ' ') $sep = $i;
+            $l += $cw[$c] ?? 0;
+            if ($l > $wmax) {
+                if ($sep === -1) {
+                    if ($i === $j) $i++;
+                } else {
+                    $i = $sep + 1;
+                }
+                $sep = -1;
+                $j = $i;
+                $l = 0;
+                $nl++;
+            } else {
+                $i++;
+            }
+        }
+        return max(1, $nl);
+    }
+
     /**
      * Generic table. $head = string[]; $rows = array of cells where each cell
      * is ['t' => text] or ['chip' => code] or ['chip' => code, 't' => label].
-     * $widths in mm; first column is left-aligned, the rest centred.
+     * $widths in mm; the first column is left-aligned and wraps in full.
+     * A chip label sits beside the chip when it fits, otherwise under it.
+     * Nothing is cut off with an ellipsis.
      */
     public function table(array $head, array $rows, array $widths, bool $totalLast = false): void
     {
-        $rowH = 6.2;
-        $drawHead = function () use ($head, $widths, $rowH) {
+        $headH = 6.2;
+        $drawHead = function () use ($head, $widths, $headH) {
             $this->SetFont('Helvetica', 'B', 7.6);
             $this->SetFillColor(250, 244, 234);
             $this->SetTextColor(122, 106, 85);
             $this->SetX(self::MARGIN);
             foreach ($head as $i => $h) {
-                $this->Cell($widths[$i], $rowH, pdf_txt(strtoupper((string)$h)), 0, 0, $i === 0 ? 'L' : 'C', true);
+                $this->Cell($widths[$i], $headH, pdf_txt(strtoupper((string)$h)), 0, 0, $i === 0 ? 'L' : 'C', true);
             }
-            $this->Ln($rowH);
+            $this->Ln($headH);
             $this->SetTextColor(43, 43, 43);
         };
 
-        $this->need($rowH * 3);
+        $this->need($headH * 3);
         $drawHead();
 
         foreach ($rows as $ri => $row) {
+            $isTotal = $totalLast && $ri === count($rows) - 1;
+            $rowH = $this->tableRowHeight($row, $widths);
             if ($this->GetY() + $rowH > $this->GetPageHeight() - 20) {
                 $this->AddPage();
                 $drawHead();
             }
-            $isTotal = $totalLast && $ri === count($rows) - 1;
             $y = $this->GetY();
             $x = self::MARGIN;
             if ($isTotal) {
                 $this->SetFillColor(250, 244, 234);
                 $this->Rect($x, $y, array_sum($widths), $rowH, 'F');
             }
+            // A wrapped skill name must stay on this row, not spill onto the next page.
+            $this->SetAutoPageBreak(false);
             foreach ($row as $ci => $cell) {
                 $w = $widths[$ci] ?? 20.0;
-                $text = (string)($cell['t'] ?? '');
+                $text = pdf_txt((string)($cell['t'] ?? ''));
                 $code = (string)($cell['chip'] ?? '');
-                $this->SetFont('Helvetica', $isTotal || $ci === 0 ? 'B' : '', $ci === 0 ? 8.4 : 8.2);
                 if ($code !== '') {
-                    // Chip (+ optional label) centred in the cell.
-                    $chipW = 6.4;
-                    $labelW = $text !== '' ? $this->GetStringWidth(pdf_txt($text)) + 1.2 : 0.0;
-                    $start = $x + max(1.0, ($w - ($chipW + $labelW)) / 2);
-                    $this->chip($start, $y + 0.8, $code, $chipW, 4.6);
-                    if ($text !== '') {
-                        $this->SetFont('Helvetica', '', 7.8);
-                        $this->SetXY($start + $chipW + 1.0, $y);
-                        $this->Cell($labelW, $rowH, pdf_txt($text), 0, 0, 'L');
-                    }
+                    $this->drawChipCell($x, $y, $w, $rowH, $code, $text);
+                } elseif ($ci === 0) {
+                    $this->SetFont('Helvetica', 'B', 8.4);
+                    $this->SetTextColor(43, 43, 43);
+                    $this->SetXY($x, $y + 0.6);
+                    $this->MultiCell($w, 4.2, $text, 0, 'L');
                 } else {
-                    $this->SetXY($x, $y);
-                    // Truncate long first-column labels rather than breaking the grid.
-                    if ($ci === 0 && $this->GetStringWidth(pdf_txt($text)) > $w - 2) {
-                        while ($text !== '' && $this->GetStringWidth(pdf_txt($text . '...')) > $w - 2) {
-                            $text = mb_substr($text, 0, max(0, mb_strlen($text) - 1));
-                        }
-                        $text .= '...';
-                    }
-                    $this->Cell($w, $rowH, pdf_txt($text), 0, 0, $ci === 0 ? 'L' : 'C');
+                    $this->SetFont('Helvetica', $isTotal ? 'B' : '', 8.2);
+                    $this->SetTextColor(43, 43, 43);
+                    $lines = max(1, $this->lineCount($w - 1, $text));
+                    $block = $lines * 4.0;
+                    $this->SetXY($x, $y + max(0.4, ($rowH - $block) / 2));
+                    $this->MultiCell($w, 4.0, $text, 0, 'C');
                 }
                 $x += $w;
             }
-            $this->SetY($y + $rowH);
+            $this->SetAutoPageBreak(true, 18);
+            $this->SetXY(self::MARGIN, $y + $rowH);
             $this->SetDrawColor(239, 230, 216);
             $this->Line(self::MARGIN, $this->GetY(), self::MARGIN + array_sum($widths), $this->GetY());
         }
         $this->Ln(2);
+    }
+
+    /** Row height that fits the full skill name and any rating word. */
+    private function tableRowHeight(array $row, array $widths): float
+    {
+        $h = 6.4;
+        $first = pdf_txt((string)($row[0]['t'] ?? ''));
+        $this->SetFont('Helvetica', 'B', 8.4);
+        $h = max($h, $this->lineCount($widths[0] ?? 20.0, $first) * 4.2 + 1.4);
+        foreach ($row as $ci => $cell) {
+            if ($ci === 0) continue;
+            $w = $widths[$ci] ?? 20.0;
+            $text = pdf_txt((string)($cell['t'] ?? ''));
+            $code = (string)($cell['chip'] ?? '');
+            if ($text === '') continue;
+            if ($code !== '') {
+                $this->SetFont('Helvetica', '', 7.8);
+                $beside = 6.4 + 2.2 + $this->GetStringWidth($text);
+                if ($beside > $w - 1) {
+                    $this->SetFont('Helvetica', '', 7);
+                    $h = max($h, 6.2 + $this->lineCount(max(4.0, $w - 0.8), $text) * 3.4 + 0.8);
+                }
+            } else {
+                $this->SetFont('Helvetica', '', 8.2);
+                $h = max($h, $this->lineCount(max(4.0, $w - 1), $text) * 4.0 + 1.2);
+            }
+        }
+        return $h;
+    }
+
+    /** Coloured rating letter, with the word beside it or underneath when the column is narrow. */
+    private function drawChipCell(float $x, float $y, float $w, float $rowH, string $code, string $text): void
+    {
+        $chipW = 6.4;
+        $chipH = 4.6;
+        $this->SetFont('Helvetica', '', 7.8);
+        $labelW = $text !== '' ? $this->GetStringWidth($text) : 0.0;
+        $beside = $chipW + ($text !== '' ? $labelW + 2.2 : 0.0);
+        if ($text === '' || $beside <= $w - 1) {
+            $start = $x + max(0.6, ($w - $beside) / 2);
+            $chipY = $y + max(0.6, ($rowH - $chipH) / 2);
+            $this->chip($start, $chipY, $code, $chipW, $chipH);
+            if ($text !== '') {
+                $this->SetFont('Helvetica', '', 7.8);
+                $this->SetTextColor(43, 43, 43);
+                $this->SetXY($start + $chipW + 1.2, $chipY - 0.4);
+                $this->Cell($labelW + 0.4, $chipH + 0.8, $text, 0, 0, 'L');
+            }
+            return;
+        }
+        $chipY = $y + 0.8;
+        $this->chip($x + ($w - $chipW) / 2, $chipY, $code, $chipW, $chipH);
+        $this->SetFont('Helvetica', '', 7);
+        $this->SetTextColor(43, 43, 43);
+        $this->SetXY($x + 0.4, $chipY + $chipH + 0.6);
+        $this->MultiCell(max(4.0, $w - 0.8), 3.4, $text, 0, 'C');
     }
 
     /** Line chart of category averages, axis labelled with rating codes. */
@@ -325,11 +444,9 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
     $ratings  = $d['ratings'];
     $fullName = trim((string)$s['first_name'] . ' ' . (string)$s['last_name']);
     $first    = (string)$s['first_name'];
-
-    // Keep the month grid readable — the widest tables get unusable past ~8.
-    $allMonths = $d['months'];
-    $months    = count($allMonths) > 8 ? array_slice($allMonths, -8) : $allMonths;
-    $trimmed   = count($allMonths) - count($months);
+    // Every assessed month. The on-screen report shows them all; the download used
+    // to keep only the latest eight and cut skill names short to fit the grid.
+    $months   = $d['months'];
 
     $pdf = new ChildReportPdf('P', 'mm', 'A4');
     $pdf->schoolName = $schoolName !== '' ? $schoolName : 'Progress report';
@@ -368,10 +485,6 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
     }
     $pdf->SetTextColor(43, 43, 43);
     $pdf->Ln(2);
-    if ($trimmed > 0) {
-        $pdf->muted("Showing the most recent " . count($months) . " months; $trimmed earlier month"
-            . ($trimmed === 1 ? ' is' : 's are') . ' not shown in the month-by-month grids.');
-    }
 
     // ---- Child details ---------------------------------------------------
     $facts = [];
@@ -435,45 +548,65 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
     if ($d['categories'] && $months) {
         $pdf->sectionTitle('Summary by area');
 
-        $head = array_merge(['Area'], array_map('month_year_label', $months), ['Change']);
-        $areaW = 34.0; $changeW = 22.0;
-        $monthW = max(16.0, ($pdf->contentWidth() - $areaW - $changeW) / count($months));
-        $widths = array_merge([$areaW], array_fill(0, count($months), $monthW), [$changeW]);
-
-        $rows = [];
-        foreach ($d['categories'] as $cat) {
-            $levels = [];
-            foreach ($months as $m) $levels[$m] = child_report_level($d, $cat, $m);
-            $seen = array_values(array_filter($levels, fn($c) => $c !== null));
-            $moved = null;
-            if (count($seen) > 1) {
-                $moved = (int)($ratings[$seen[count($seen) - 1]]['numeric_value'] ?? 0)
-                       <=> (int)($ratings[$seen[0]]['numeric_value'] ?? 0);
-            }
-            $row = [['t' => $cat]];
-            foreach ($months as $m) {
-                $c = $levels[$m];
-                $row[] = $c === null ? ['t' => ''] : ['chip' => $c];
-            }
-            $row[] = ['t' => $moved === 1 ? 'Moved up' : ($moved === -1 ? 'Slipped' : ($moved === 0 ? 'Steady' : ''))];
-            $rows[] = $row;
+        $pdf->SetFont('Helvetica', '', 7.8);
+        $labelW = 0.0;
+        foreach ($ratings as $cfg) {
+            $labelW = max($labelW, $pdf->GetStringWidth(pdf_txt((string)($cfg['label'] ?? ''))));
         }
+        $areaW = 38.0;
+        $changeW = 24.0;
+        // Room for the letter and the word (Developed, Needs Attention, …), same as the page.
+        $monthMin = 6.4 + 2.2 + $labelW + 2.0;
+        $groups = pdf_month_groups($months, pdf_fit_columns($pdf->contentWidth(), $areaW + $changeW, $monthMin, count($months)));
 
-        // Overall = modal rating across every area that month.
-        $overall = [];
-        foreach ($months as $m) {
-            $all = [];
-            foreach ($d['categories'] as $cat) $all = array_merge($all, child_report_codes_for($d, $cat, $m));
-            $overall[$m] = child_report_mode($all, $ratings);
-        }
-        if (array_filter($overall, fn($c) => $c !== null)) {
-            $row = [['t' => 'Overall']];
-            foreach ($months as $m) $row[] = $overall[$m] === null ? ['t' => ''] : ['chip' => $overall[$m]];
-            $row[] = ['t' => ''];
-            $rows[] = $row;
-            $pdf->table($head, $rows, $widths, true);
-        } else {
-            $pdf->table($head, $rows, $widths);
+        foreach ($groups as $group) {
+            if (count($groups) > 1) {
+                $from = month_year_label($group[0]);
+                $to = month_year_label($group[count($group) - 1]);
+                $pdf->muted($from . ' - ' . $to);
+            }
+            $monthW = ($pdf->contentWidth() - $areaW - $changeW) / count($group);
+            $head = array_merge(['Area'], array_map('month_year_label', $group), ['Change']);
+            $widths = array_merge([$areaW], array_fill(0, count($group), $monthW), [$changeW]);
+
+            $rows = [];
+            foreach ($d['categories'] as $cat) {
+                $levels = [];
+                foreach ($months as $m) $levels[$m] = child_report_level($d, $cat, $m);
+                $seen = array_values(array_filter($levels, fn($c) => $c !== null));
+                $moved = null;
+                if (count($seen) > 1) {
+                    $moved = (int)($ratings[$seen[count($seen) - 1]]['numeric_value'] ?? 0)
+                           <=> (int)($ratings[$seen[0]]['numeric_value'] ?? 0);
+                }
+                $row = [['t' => $cat]];
+                foreach ($group as $m) {
+                    $c = $levels[$m];
+                    $row[] = $c === null ? ['t' => ''] : ['chip' => $c, 't' => (string)($ratings[$c]['label'] ?? $c)];
+                }
+                $change = $moved === 1 ? 'Moved up' : ($moved === -1 ? 'Slipped' : ($moved === 0 ? 'Steady' : ''));
+                $row[] = ['t' => $change];
+                $rows[] = $row;
+            }
+
+            // Overall = modal rating across every area that month.
+            $overall = [];
+            foreach ($group as $m) {
+                $all = [];
+                foreach ($d['categories'] as $cat) $all = array_merge($all, child_report_codes_for($d, $cat, $m));
+                $overall[$m] = child_report_mode($all, $ratings);
+            }
+            $showOverall = (bool)array_filter($overall, fn($c) => $c !== null);
+            if ($showOverall) {
+                $row = [['t' => 'Overall']];
+                foreach ($group as $m) {
+                    $c = $overall[$m];
+                    $row[] = $c === null ? ['t' => ''] : ['chip' => $c, 't' => (string)($ratings[$c]['label'] ?? $c)];
+                }
+                $row[] = ['t' => ''];
+                $rows[] = $row;
+            }
+            $pdf->table($head, $rows, $widths, $showOverall);
         }
         $pdf->muted('Each area shows the level ' . $first . ' worked at most often that month - see the key at the end.');
     }
@@ -500,21 +633,33 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
             $pdf->need(26);
             $pdf->subTitle((string)$cat);
 
-            $skillW = 62.0;
-            $mW     = max(14.0, ($pdf->contentWidth() - $skillW) / count($catMonths));
-            $head   = array_merge(['Skill'], array_map('month_year_label', $catMonths));
-            $widths = array_merge([$skillW], array_fill(0, count($catMonths), $mW));
-
-            $rows = [];
-            foreach ($list as $ind) {
-                $row = [['t' => $ind['text'] . (!empty($ind['custom']) ? ' *' : '')]];
-                foreach ($catMonths as $m) {
-                    $c = (string)($ind['ratings'][$m] ?? '');
-                    $row[] = $c === '' ? ['t' => ''] : ['chip' => $c];
+            $skillLead = 96.0;
+            $groups = pdf_month_groups($catMonths, pdf_fit_columns($pdf->contentWidth(), $skillLead, 20.0, count($catMonths)));
+            foreach ($groups as $group) {
+                if (count($groups) > 1) {
+                    $pdf->muted(month_year_label($group[0]) . ' - ' . month_year_label($group[count($group) - 1]));
                 }
-                $rows[] = $row;
+                if (count($groups) === 1) {
+                    $mW = min(24.0, ($pdf->contentWidth() - $skillLead) / count($group));
+                    $skillW = $pdf->contentWidth() - $mW * count($group);
+                } else {
+                    $skillW = $skillLead;
+                    $mW = ($pdf->contentWidth() - $skillW) / count($group);
+                }
+                $head   = array_merge(['Skill'], array_map('month_year_label', $group));
+                $widths = array_merge([$skillW], array_fill(0, count($group), $mW));
+
+                $rows = [];
+                foreach ($list as $ind) {
+                    $row = [['t' => $ind['text'] . (!empty($ind['custom']) ? ' *' : '')]];
+                    foreach ($group as $m) {
+                        $c = (string)($ind['ratings'][$m] ?? '');
+                        $row[] = $c === '' ? ['t' => ''] : ['chip' => $c];
+                    }
+                    $rows[] = $row;
+                }
+                $pdf->table($head, $rows, $widths);
             }
-            $pdf->table($head, $rows, $widths);
 
             $catComments = [];
             foreach ($d['comments'] as $m => $byCat) {
