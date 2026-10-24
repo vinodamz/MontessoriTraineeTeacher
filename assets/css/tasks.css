@@ -4,32 +4,30 @@
    Mobile-first, 44px+ tap targets, tablet-friendly.
    ========================================================= */
 
-@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
-
 :root {
-    --cream:        #FFF8F0;
-    --cream-2:      #FCEFE0;
-    --sage:         #E8F1E5;
-    --sage-deep:    #C8DEC2;
-    --sky:          #E5F0F6;
-    --blush:        #F8C8D8;
-    --magenta:      #EC407A;
-    --magenta-deep: #C2185B;
-    --green:        #5BA547;
-    --green-deep:   #3F7A30;
-    --sun:          #FCD34D;
-    --sun-deep:     #F5B342;
-    --ink:          #2A2316;
-    --ink-soft:     #5A4F40;
-    --line:         #E9DDC9;
+    --cream:        #FFFAF0;
+    --cream-2:      #FDF6EE;
+    --sage:         #E5F8EE;
+    --sage-deep:    #B7E8CC;
+    --sky:          #D9F3F5;
+    --blush:        #FBE5EE;
+    --magenta:      #E5447D;
+    --magenta-deep: #B81F56;
+    --green:        #1FBF6B;
+    --green-deep:   #11854A;
+    --sun:          #FFC84A;
+    --sun-deep:     #F7A23B;
+    --ink:          #38384a;
+    --ink-soft:     #5d5d78;
+    --line:         #E8D9C8;
 
-    --display: "Fredoka", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --body:    "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --display: "Baloo 2", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --body:    "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
 
     --r-sm: 12px;
     --r-md: 18px;
     --r-lg: 28px;
-    --shadow-card: 0 1px 0 rgba(42,35,22,.04), 0 10px 24px -16px rgba(42,35,22,.18);
+    --shadow-card: 0 1px 0 rgba(43,47,119,.04), 0 10px 24px -16px rgba(43,47,119,.18);
 }
 
 * { box-sizing: border-box; }
