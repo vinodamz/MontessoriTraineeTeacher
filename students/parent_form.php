@@ -381,21 +381,24 @@ function parent_form_render_shell(string $title, callable $body): void
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= e($title) ?> · <?= e($appName) ?></title>
+<link rel="icon" href="/assets/img/logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap">
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         background: #fff5fa; color: #2b2b2b; }
-  header.pf-top { background: #fff; border-bottom: 3px solid #e91e63;
+  body { margin: 0; padding: 0; font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #FFFAF0; color: #38384a; }
+  header.pf-top { background: #fff; border-bottom: 3px solid #E5447D;
                   padding: 1rem 1.2rem;
                   display: grid; grid-template-columns: 48px 1fr; gap: .8rem; align-items: center; }
   header.pf-top img.pf-logo { width: 48px; height: auto; }
-  header.pf-top h1 { margin: 0; font-size: 1.05rem; color: #ad1457; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
-  header.pf-top p  { margin: .15rem 0 0; font-size: .8rem; color: #66bb6a; font-weight: 600; }
+  header.pf-top h1 { margin: 0; font-size: 1.15rem; color: #B81F56; font-weight: 700;
+                     font-family: "Baloo 2", "Nunito", system-ui, sans-serif; letter-spacing: .2px; }
+  header.pf-top p  { margin: .15rem 0 0; font-size: .8rem; color: #11854A; font-weight: 600; }
   main { max-width: 760px; margin: 0 auto; padding: 1.2rem; }
   .card { background: #fff; border: 1px solid #e8d8c1; border-radius: 10px;
           padding: 1.1rem 1.2rem; margin-bottom: 1rem; }
-  .card h2 { margin: 0 0 .8rem; font-size: 1.05rem; color: #ad1457; border-bottom: 1px dashed #f3c1d5; padding-bottom: .4rem; }
+  .card h2 { margin: 0 0 .8rem; font-size: 1.05rem; color: #B81F56; border-bottom: 1px dashed #f3c1d5; padding-bottom: .4rem; }
   .field { margin-bottom: .9rem; }
   .field label { display: block; font-size: .85rem; color: #5a4a35; margin-bottom: .3rem; font-weight: 600; }
   .field input[type="text"], .field input[type="email"], .field input[type="tel"],
@@ -412,8 +415,8 @@ function parent_form_render_shell(string $title, callable $body): void
   .pill { display: inline-block; padding: .15rem .55rem; border-radius: 999px; background: #f4ece0; }
   .btn { display: inline-block; padding: .6rem 1.1rem; border: 0; border-radius: 6px;
          font-size: 1rem; font-weight: 600; cursor: pointer; }
-  .btn-primary { background: #e91e63; color: #fff; }
-  .btn-primary:hover { background: #ad1457; }
+  .btn-primary { background: #E5447D; color: #fff; }
+  .btn-primary:hover { background: #B81F56; }
   .submit-row { position: sticky; bottom: 0; background: linear-gradient(to top, #fff8f0 70%, transparent);
                 padding: 1rem 0 1.5rem; text-align: center; }
   .flash-ok  { background: #d8efd8; color: #2c5f2c; border: 1px solid #9ccf9c; padding: .7rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
@@ -424,8 +427,8 @@ function parent_form_render_shell(string $title, callable $body): void
   label.consent { display: grid; grid-template-columns: 22px 1fr; gap: .6rem; align-items: start;
                   margin-top: .8rem; padding: .7rem .8rem; border: 1px solid #f3c1d5;
                   border-radius: 8px; background: #fff8fb; cursor: pointer; }
-  label.consent input[type="checkbox"] { width: 20px; height: 20px; margin-top: .1rem; accent-color: #e91e63; }
-  label.consent strong { display: block; color: #ad1457; font-size: .92rem; margin-bottom: .15rem; }
+  label.consent input[type="checkbox"] { width: 20px; height: 20px; margin-top: .1rem; accent-color: #E5447D; }
+  label.consent strong { display: block; color: #B81F56; font-size: .92rem; margin-bottom: .15rem; }
   label.consent .small { display: block; }
 </style>
 </head>
@@ -659,7 +662,7 @@ parent_form_render_shell('Admission form for ' . $full, function () use ($s, $fa
 
         <div class="submit-row">
             <button class="btn btn-primary" type="submit">Save</button>
-            <a class="btn" style="background:transparent; color:#e91e63; border:1px solid #e91e63; margin-left:.5rem;"
+            <a class="btn" style="background:transparent; color:#E5447D; border:1px solid #E5447D; margin-left:.5rem;"
                href="/students/admission_pdf.php?token=<?= e($token) ?>" target="_blank" rel="noopener">
                 View / download as PDF
             </a>

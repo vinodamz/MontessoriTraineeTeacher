@@ -137,17 +137,19 @@ if (!$survey || !$spec) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title><?= e($pageTitle) ?> · <?= e($appName) ?></title>
+<link rel="icon" href="/assets/img/logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap">
 <style>
-  :root { color-scheme: light; --pink: #e91e63; --deep: #ad1457; --ink: #2b2b2b; }
+  :root { color-scheme: light; --pink: #E5447D; --deep: #B81F56; --ink: #38384a; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         background: #fff5fa; color: var(--ink); line-height: 1.5; }
+  body { margin: 0; font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #FFFAF0; color: var(--ink); line-height: 1.5; }
   header.sv-top { background: #fff; border-bottom: 3px solid var(--pink); padding: 1rem 1.2rem;
                   display: grid; grid-template-columns: 48px 1fr; gap: .8rem; align-items: center; }
   header.sv-top img { width: 48px; height: auto; }
-  header.sv-top h1 { margin: 0; font-size: 1.05rem; color: var(--deep); font-weight: 800;
-                     text-transform: uppercase; letter-spacing: .5px; }
-  header.sv-top p { margin: .15rem 0 0; font-size: .8rem; color: #66bb6a; font-weight: 600; }
+  header.sv-top h1 { margin: 0; font-size: 1.15rem; color: var(--deep); font-weight: 700;
+                     font-family: "Baloo 2", "Nunito", system-ui, sans-serif; letter-spacing: .2px; }
+  header.sv-top p { margin: .15rem 0 0; font-size: .8rem; color: #11854A; font-weight: 600; }
   main { max-width: 780px; margin: 0 auto; padding: 1.2rem 1.2rem 4rem; }
 
   .sv-card { background: #fff; border: 1px solid #f0dde6; border-radius: 12px;

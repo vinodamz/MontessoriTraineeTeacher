@@ -283,7 +283,7 @@ function child_report_chart(array $d): string
     $x = fn(int $i) => $padL + ($n === 1 ? $plotW / 2 : $i * ($plotW / ($n - 1)));
     $y = fn(float $v) => $padT + $plotH - (max(1.0, min(5.0, $v)) - 1) / 4 * $plotH;
 
-    $palette = ['#2D6BA0', '#5BA547', '#EC407A', '#F5B342', '#7E57C2', '#5DA8A2', '#E07A5F', '#A05C7B'];
+    $palette = ['#2B2F77', '#1FBF6B', '#E5447D', '#F7A23B', '#7E57C2', '#2FB9C4', '#E07A5F', '#A05C7B'];
     $svg  = '<svg class="cr-chart" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="Category averages over time">';
 
     // Gridlines, labelled with the school's rating codes rather than 1–5.
@@ -635,15 +635,16 @@ function child_report_styles(): string
 {
     return <<<'CSS'
 .cr-head { margin-bottom: 1rem; }
-.cr-head h1 { margin: 0 0 .2rem; font-size: 1.7rem; }
+.cr-head h1 { margin: 0 0 .2rem; font-size: 1.7rem; font-family: "Baloo 2", "Nunito", system-ui, sans-serif; color: #2B2F77; }
 .cr-sub { margin: .1rem 0; font-size: .95rem; }
-.cr-muted { color: #6b6b6b; }
+.cr-muted { color: #5d5d78; }
 .cr-small { font-size: .82rem; }
-.cr-card { background: #fff; border: 1px solid #e3d9c8; border-radius: 10px;
+.cr-card { background: #fff; border: 1px solid #F3D6E2; border-radius: 20px;
            padding: 1rem 1.15rem; margin-bottom: 1rem; }
-.cr-card h2 { margin: 0 0 .7rem; font-size: 1.12rem; color: #ad1457;
-              border-bottom: 1px dashed #f0cddc; padding-bottom: .35rem; }
-.cr-cat { margin: 0 0 .6rem; font-size: 1rem; color: #2d6ba0; text-transform: uppercase; letter-spacing: .04em; }
+.cr-card h2 { margin: 0 0 .7rem; font-size: 1.12rem; color: #B81F56;
+              font-family: "Baloo 2", "Nunito", system-ui, sans-serif;
+              border-bottom: 1px dashed #f3c4d4; padding-bottom: .35rem; }
+.cr-cat { margin: 0 0 .6rem; font-size: 1rem; color: #2B2F77; text-transform: uppercase; letter-spacing: .04em; }
 .cr-facts { display: grid; grid-template-columns: auto 1fr; gap: .35rem 1rem; margin: 0; }
 .cr-facts dt { color: #6b6b6b; font-size: .86rem; }
 .cr-facts dd { margin: 0; font-size: .93rem; }
@@ -671,7 +672,7 @@ function child_report_styles(): string
 .cr-legend-item i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
 .cr-comments { margin-top: .8rem; padding-top: .6rem; border-top: 1px solid #f0e6d6; }
 .cr-comment { margin: .3rem 0; white-space: pre-wrap; font-size: .92rem; }
-.cr-when { display: inline-block; min-width: 5.2rem; color: #ad1457; font-weight: 600; font-size: .82rem; }
+.cr-when { display: inline-block; min-width: 5.2rem; color: #B81F56; font-weight: 600; font-size: .82rem; }
 .cr-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; }
 .cr-key li { display: inline-flex; align-items: center; gap: .4rem; font-size: .88rem; }
 @media print {

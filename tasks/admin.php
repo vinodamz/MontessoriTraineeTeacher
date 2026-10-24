@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // -------- Column management --------
     if ($op === 'col_create') {
         $name = trim($_POST['name'] ?? '');
-        $color = $_POST['color'] ?? '#EC407A';
+        $color = $_POST['color'] ?? '#E5447D';
         $isDone = !empty($_POST['is_done']) ? 1 : 0;
         if ($name === '') {
             flash_set('error', 'Column name required.');
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $upd->execute([
                         ':n'  => $name,
                         ':p'  => (int)($row['position'] ?? 0),
-                        ':c'  => $row['color'] ?? '#EC407A',
+                        ':c'  => $row['color'] ?? '#E5447D',
                         ':d'  => !empty($row['is_done']) ? 1 : 0,
                         ':id' => (int)$id,
                     ]);
@@ -247,7 +247,7 @@ $cols = task_columns();
             </div>
             <div class="field">
                 <label>Color</label>
-                <input type="color" name="color" value="#EC407A">
+                <input type="color" name="color" value="#E5447D">
             </div>
             <div class="field">
                 <label class="checkbox">

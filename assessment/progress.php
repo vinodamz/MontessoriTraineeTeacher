@@ -85,7 +85,7 @@ uksort($comments, fn($a, $b) => compare_month_year($b, $a));
 // ---------- Chart maths ---------------------------------------------------
 $rmap = rating_config_map();
 $catColors = [];
-$palette = ['#2D6BA0', '#5BA547', '#EC407A', '#F5B342', '#7E57C2', '#5DA8A2', '#E07A5F', '#A05C7B'];
+$palette = ['#2B2F77', '#1FBF6B', '#E5447D', '#F7A23B', '#7E57C2', '#2FB9C4', '#E07A5F', '#A05C7B'];
 foreach ($categories as $i => $cat) $catColors[$cat] = $palette[$i % count($palette)];
 
 $fullName  = trim($student['first_name'] . ' ' . $student['last_name']);

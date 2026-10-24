@@ -54,13 +54,13 @@ function lg_friendly_error_page(): void
        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
        . '<title>Something went wrong</title></head>'
        . '<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;'
-       . 'background:#fff5fa;color:#2b2b2b;display:flex;min-height:100vh;align-items:center;justify-content:center;">'
+       . 'background:#FFFAF0;color:#38384a;display:flex;min-height:100vh;align-items:center;justify-content:center;">'
        . '<div style="text-align:center;padding:2rem;max-width:420px;">'
        . '<div style="font-size:3rem;">🐛</div>'
-       . '<h1 style="color:#ad1457;font-size:1.3rem;margin:.5rem 0;">Something went wrong</h1>'
+       . '<h1 style="color:#B81F56;font-size:1.3rem;margin:.5rem 0;">Something went wrong</h1>'
        . '<p style="color:#666;font-size:.95rem;">Sorry — this page hit a snag. It\'s been logged. '
        . 'Please try again in a minute, or contact the school if it keeps happening.</p>'
        . '<a href="javascript:location.reload()" style="display:inline-block;margin-top:.8rem;padding:.6rem 1.2rem;'
-       . 'background:#e91e63;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">Try again</a>'
+       . 'background:#E5447D;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">Try again</a>'
        . '</div></body></html>';
 }
