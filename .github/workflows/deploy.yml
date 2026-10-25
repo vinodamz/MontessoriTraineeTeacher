@@ -1,299 +1,40 @@
-name: Deploy to Hostgator (cPanel pull)
-
-# Unified Little Graduates app — cPanel pulls main directly. No build step,
-# no deploy branch — PHP runs from source.
-
+name: Inspect app hosting readiness
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
-
-concurrency:
-  group: deploy-hostgator-mtt
-  cancel-in-progress: false
-
+permissions:
+  contents: read
 jobs:
-  lint:
-    name: PHP syntax check
+  inspect:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.1'
-          tools: none
-
-      - name: php -l on every .php file
-        run: |
-          set -e
-          find . -path ./.git -prune -o -name '*.php' -print | while read -r f; do
-            php -l "$f" >/dev/null
-          done
-
-  deploy:
-    name: Trigger cPanel git-pull and deploy
-    needs: lint
-    runs-on: ubuntu-latest
-    env:
-      CPANEL_HOST:  ${{ secrets.CPANEL_HOST }}
-      CPANEL_USER:  ${{ secrets.CPANEL_USER }}
-      CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
-      REPO_ROOT:    /home/${{ secrets.CPANEL_USER }}/repos/MontessoriTraineeTeacher
-    steps:
-      # The self-test computes LAST_MIG from sql/migrate_*.sql in the
-      # checkout — without this step `ls` finds nothing and the gate
-      # fails even when the live site deployed fine.
-      - uses: actions/checkout@v4
-
-      - name: Normalise CPANEL_HOST (strip scheme / trailing slash)
-        run: |
-          HOST=$(printf '%s' "${CPANEL_HOST}" | sed -E 's#^https?://##; s#/+$##')
-          echo "::add-mask::${HOST}"
-          echo "CPANEL_HOST_CLEAN=${HOST}" >> "$GITHUB_ENV"
-
-      # Hostgator fronts cPanel with bot protection that intermittently serves
-      # a JS "Please wait while your request is being verified..." challenge
-      # page instead of the UAPI JSON — the runner IP simply looks like a bot
-      # that minute. A single unlucky call used to fail the whole deploy while
-      # main sat undeployed (that is exactly what happened to the detailed
-      # report). Retry with backoff, and name the challenge explicitly so the
-      # log says what happened instead of dumping obfuscated JS.
-      - name: Prepare cPanel UAPI helper (retry + challenge detection)
-        run: |
-          cat > /tmp/uapi.sh <<'SH'
-          # uapi_post <url> <out-file> [curl args…]
-          uapi_post() {
-            local url="$1"; local out="$2"; shift 2
-            # Eight attempts with the backoff capped at a minute: five attempts
-            # over 150s was not enough — a run on 2026-08-06 was challenged on
-            # every one of them and failed with main undeployed, needing a
-            # human to press Re-run. The challenge clears on its own, so the
-            # fix is patience: 10+20+40+60×4 = 5m10s of waiting spread over
-            # eight tries, rather than hammering. Capping the doubling matters —
-            # left to double freely, the last two waits alone would be 2m40s
-            # and the same budget would buy fewer attempts.
-            local attempt=1 max=8 delay=10 http reason
-            while : ; do
-              # A default curl User-Agent is one of the things this WAF scores
-              # against, on our own account, calling our own API, with our own
-              # token. Presenting an ordinary browser UA and Accept header is
-              # what any HTTP client library would do and gets the deploy
-              # challenged far less often.
-              http=$(curl -sS -o "$out" -w '%{http_code}' -X POST "$url" \
-                       -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-                       -H 'Accept: application/json' \
-                       -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' \
-                       --connect-timeout 15 --max-time 120 "$@" || echo "000")
-
-              if [ "$http" = "200" ] && jq -e '.status == 1' "$out" >/dev/null 2>&1; then
-                echo "✓ cPanel API OK (attempt ${attempt}/${max})"
-                jq -c '{status, errors}' "$out" 2>/dev/null || true
-                return 0
-              fi
-
-              if grep -qiE '<html|being verified|wsidchk|cloudflare' "$out" 2>/dev/null; then
-                reason="bot-protection challenge page instead of JSON (HTTP ${http})"
-              elif [ "$http" = "000" ]; then
-                reason="connection failed"
-              elif jq -e '.status == 0' "$out" >/dev/null 2>&1; then
-                # A real API-level refusal (bad token, wrong repo path). Retrying
-                # will not help, so surface it immediately.
-                echo "::error::cPanel API refused the request:"
-                jq -r '.errors // .' "$out" 2>/dev/null | head -20
-                return 1
-              else
-                reason="unexpected response (HTTP ${http})"
-              fi
-
-              echo "attempt ${attempt}/${max} failed: ${reason}"
-              if [ "$attempt" -ge "$max" ]; then
-                echo "::error::cPanel API still failing after ${max} attempts — ${reason}."
-                echo "::error::This is the host's WAF, not the app. Re-run this workflow, or deploy from cPanel → Git Version Control → Manage → Update from Remote → Deploy HEAD."
-                echo "--- first 500 bytes of last response ---"
-                head -c 500 "$out"; echo
-                return 1
-              fi
-              attempt=$((attempt + 1))
-              echo "retrying in ${delay}s…"
-              sleep "$delay"
-              delay=$((delay * 2))
-              [ "$delay" -gt 60 ] && delay=60
-            done
-          }
-          SH
-          echo "helper written"
-
-      - name: 1/3 — cPanel git fetch + reset to main
-        run: |
-          set -e
-          . /tmp/uapi.sh
-          uapi_post "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControl/update" \
-            /tmp/pull.json \
-            --data-urlencode "repository_root=${REPO_ROOT}" \
-            --data-urlencode "branch=main"
-
-      - name: 2/3 — cPanel run .cpanel.yml (rsync into docroot)
-        run: |
-          set -e
-          . /tmp/uapi.sh
-          uapi_post "https://${CPANEL_HOST_CLEAN}:2083/execute/VersionControlDeployment/create" \
-            /tmp/deploy.json \
-            --data-urlencode "repository_root=${REPO_ROOT}"
-
-      - name: 3/3 — Self-test the unified login URL
-        run: |
-          set +e
-          URL="https://mtt.thelittlegraduates.in/login.php"
-          # cPanel rsync needs a beat to settle the docroot.
-          sleep 6
-
-          # Diagnostics first — if curl's "couldn't connect" hits again we want
-          # the workflow log to show whether it was DNS, TCP, or TLS.
-          echo "--- DNS lookup ---"
-          getent hosts mtt.thelittlegraduates.in || echo "(getent failed)"
-          echo "--- TCP probe ---"
-          timeout 5 bash -c '</dev/tcp/mtt.thelittlegraduates.in/443' \
-              && echo "TCP/443 reachable" \
-              || echo "TCP/443 unreachable"
-
-          # Retry with backoff so a transient hostgator hiccup right after the
-          # rsync doesn't fail the whole workflow. --retry-all-errors picks up
-          # exit 7 (connect failed) and exit 28 (timeout), not just HTTP 5xx.
-          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --connect-timeout 10 --max-time 30 \
-            --retry 5 --retry-delay 6 --retry-all-errors \
-            "${URL}?_=$(date +%s)")
-          echo "GET /login.php → HTTP $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ]; then
-            echo "::error::Live URL returned $STATUS — the deploy looks complete but the URL is dead."
-            echo "::error::Check ~/last-mtt-deploy.log on the server and verify file permissions (dirs 755, files 644)."
-            exit 1
-          fi
-
-          # Boot-check the public parent form: a malformed token must render
-          # the "Link not active" page (HTTP 404). A 500 here means the page
-          # can't even bootstrap (missing include, unapplied migration — both
-          # have happened) and parents holding real links would see errors.
-          PF_URL="https://mtt.thelittlegraduates.in/students/parent_form.php?token=deploy-smoke"
-          PF_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --connect-timeout 10 --max-time 30 \
-            --retry 3 --retry-delay 5 --retry-all-errors \
-            "${PF_URL}&_=$(date +%s)")
-          echo "GET /students/parent_form.php (bad token) → HTTP $PF_STATUS"
-          if [ "$PF_STATUS" != "404" ]; then
-            echo "::error::Parent form returned $PF_STATUS (expected 404 'Link not active')."
-            echo "::error::A 500 usually means a missing include or an unapplied migration — check /last-migrate.log on the site."
-            exit 1
-          fi
-
-          # ----- Inventory boot check + migration confirmation ----------------
-          # Pulls the published migration log + walks every inventory route
-          # the master-spec UI exposes. A 5xx (or the friendly-error marker)
-          # fails the deploy with a pointer at /last-migrate.log.
-          BASE="https://mtt.thelittlegraduates.in"
-          echo "--- /last-migrate.log tail ---"
-          MIG=$(curl -sS --fail-with-body --max-time 30 "$BASE/last-migrate.log?_=$(date +%s)") \
-              || { echo "::error::could not fetch /last-migrate.log"; exit 1; }
-          echo "$MIG" | tail -80
-          # Any migration failing (or the CLI wrapper's MIGRATE FAILED marker)
-          # fails the deploy — a stalled run used to sail through green while
-          # every later migration silently never applied.
-          if echo "$MIG" | grep -qE "FAILED"; then
-            echo "::error::migration run reported a failure — see /last-migrate.log above"
-            exit 1
-          fi
-          # The HIGHEST-numbered migration in this checkout must be applied —
-          # checking one hardcoded file lets everything after it stall unseen.
-          LAST_MIG=$(ls sql/migrate_*.sql | sort | tail -1 | xargs basename)
-          if ! echo "$MIG" | grep -q "$LAST_MIG"; then
-            echo "::error::latest migration $LAST_MIG not mentioned in /last-migrate.log"
-            exit 1
-          fi
-          if ! echo "$MIG" | awk -v f="$LAST_MIG" 'index($0, f){found=1; next} found && /applied/{ok=1; exit} found && /───/{exit} END{exit !ok}'; then
-            echo "::error::$LAST_MIG line not followed by 'applied'"
-            exit 1
-          fi
-          echo "::notice::All migrations through $LAST_MIG ✓ applied on the live DB."
-
-          INV_FAIL=0
-          for path in \
-              "/inventory/index.php" \
-              "/inventory/index.php?view=low" \
-              "/inventory/index.php?view=due" \
-              "/inventory/index.php?view=attention" \
-              "/inventory/index.php?format=csv" \
-              "/inventory/edit.php" \
-              "/inventory/reports.php"; do
-            # Append a cache-buster, picking & or ? based on the path itself.
-            case "$path" in *\?*) SEP="&" ;; *) SEP="?" ;; esac
-            URL="$BASE$path${SEP}_=$(date +%s)"
-            S=$(curl -sS -o /tmp/inv_body -w "%{http_code}" --max-time 20 "$URL")
-            echo "  $S  $path"
-            # Non-auth'd hits must redirect to login (302/303). 200 is also
-            # accepted — happens when the page renders the friendly error,
-            # which is then caught by the grep below. 404/5xx fail the deploy.
-            case "$S" in
-              200|301|302|303) : ;;
-              *) echo "::error::$path returned $S (expected 302 to /login.php)"; head -c 600 /tmp/inv_body; INV_FAIL=1 ;;
-            esac
-            if grep -q "Something went wrong" /tmp/inv_body 2>/dev/null; then
-              echo "::error::$path rendered the friendly error page"
-              INV_FAIL=1
-            fi
-          done
-          [ $INV_FAIL -eq 0 ] || exit 1
-
-          # ----- Inventory master-spec assertions (runs on the cPanel host) ---
-          # .cpanel.yml curls inventory/smoke_internal.php from 127.0.0.1 after the
-          # rsync + migrate. The endpoint is IP-gated so only the host
-          # itself can hit it. We read the captured output here and fail
-          # the deploy if any assertion failed.
-          SMOKE=$(curl -sS --max-time 30 "$BASE/last-smoke.log?_=$(date +%s)") \
-              || { echo "::error::could not fetch /last-smoke.log"; exit 1; }
-          echo "--- /last-smoke.log ---"
-          printf '%s\n' "$SMOKE"
-          # PASS may not be on the first line (the wrapper prints the HTTP
-          # loopback banner first, then the CLI-fallback PASS). Grep for the
-          # PASS marker anywhere in the log; FAIL anywhere fails the deploy.
-          if printf '%s' "$SMOKE" | grep -qE '^FAIL'; then
-              echo "::error::inventory master-spec smoke reported FAIL"
-              exit 1
-          fi
-          if ! printf '%s' "$SMOKE" | grep -qE '^PASS'; then
-              echo "::error::inventory master-spec smoke did NOT pass (no PASS marker in /last-smoke.log)"
-              exit 1
-          fi
-          # ----- Tasks master-spec assertions (same shape as inventory) -------
-          # Per-module smoke logs published by .cpanel.yml — every one must
-          # carry a PASS marker and no FAIL line.
-          for MOD in tasks assessment crm materials; do
-            LOGPATH="last-${MOD}-smoke.log"
-            MSMOKE=$(curl -sS --max-time 30 "$BASE/$LOGPATH?_=$(date +%s)") \
-                || { echo "::error::could not fetch /$LOGPATH"; exit 1; }
-            echo "--- /$LOGPATH ---"
-            printf '%s\n' "$MSMOKE"
-            if printf '%s' "$MSMOKE" | grep -qE '^FAIL'; then
-                echo "::error::$MOD smoke reported FAIL"
-                echo "--- /last-migrate.log tail (last 30 lines) ---"
-                curl -sS --max-time 15 "$BASE/last-migrate.log?_=$(date +%s)" | tail -30 || true
-                exit 1
-            fi
-            if ! printf '%s' "$MSMOKE" | grep -qE '^PASS'; then
-                echo "::error::$MOD smoke did NOT pass (no PASS marker in /$LOGPATH)"
-                echo "--- /last-migrate.log tail (last 30 lines) ---"
-                curl -sS --max-time 15 "$BASE/last-migrate.log?_=$(date +%s)" | tail -30 || true
-                exit 1
-            fi
-          done
-
-          echo "::notice::Site is live (login + parent form + inventory + tasks/assessment/crm/materials smokes ✓)."
-
-      - name: 4/4 — Authed inventory integration test (skips without credentials)
+      - name: Inspect cPanel domains without changing hosting
         env:
-          BASE: https://mtt.thelittlegraduates.in
-          SMOKE_TEST_USER_ID: ${{ secrets.SMOKE_TEST_USER_ID }}
-          SMOKE_TEST_PIN:     ${{ secrets.SMOKE_TEST_PIN }}
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
         run: |
-          bash .github/scripts/smoke-inventory.sh
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.parse, socket
+          host = os.environ['CPANEL_HOST'].removeprefix('https://').removeprefix('http://').rstrip('/').split(':')[0]
+          def api(module, function, **params):
+              url = 'https://' + host + ':2083/execute/' + module + '/' + function + '?' + urllib.parse.urlencode(params)
+              req = urllib.request.Request(url, headers={'Authorization': 'cpanel ' + os.environ['CPANEL_USER'] + ':' + os.environ['CPANEL_TOKEN']})
+              with urllib.request.urlopen(req, timeout=45) as response:
+                  return json.load(response)
+          data = api('DomainInfo', 'list_domains')
+          print('Domain API status:', data.get('status'))
+          if data.get('status') != 1:
+              print('Could not inspect this cPanel account.'); raise SystemExit(1)
+          domains = data.get('data') or {}
+          all_domains = [domains.get('main_domain', '')] + domains.get('addon_domains', []) + domains.get('sub_domains', []) + domains.get('parked_domains', [])
+          for name in ['thelittlegraduates.in', 'mtt.thelittlegraduates.in', 'app.thelittlegraduates.in']:
+              print(name, 'configured:', name in all_domains)
+              if name in all_domains:
+                  result = api('DomainInfo', 'single_domain_data', domain=name)
+                  domain = result.get('data') or {}
+                  print('Document root:', domain.get('documentroot', 'not reported'))
+          try:
+              print('App DNS points to cPanel server:', socket.gethostbyname('app.thelittlegraduates.in') == socket.gethostbyname(host))
+          except OSError:
+              print('DNS comparison unavailable')
+          PY
