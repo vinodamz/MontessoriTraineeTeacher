@@ -36,7 +36,10 @@ Options -Indexes
 
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
-    Header set X-Frame-Options "SAMEORIGIN"
+    # Only the exact school app origin may embed authenticated tools.
+    Header unset X-Frame-Options
+    Header always unset X-Frame-Options
+    Header always set Content-Security-Policy "frame-ancestors 'self' https://app.thelittlegraduates.in"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 

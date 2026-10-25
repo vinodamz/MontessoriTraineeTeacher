@@ -25,3 +25,7 @@ jobs:
           find . -path ./.git -prune -o -name '*.php' -print | while read -r f; do
             php -l "$f" >/dev/null
           done
+      - name: Workspace security and CORS regression tests
+        run: |
+          php tests/api_cors_test.php
+          php tests/app_workspace_test.php

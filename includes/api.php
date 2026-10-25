@@ -67,12 +67,20 @@ function api_require_user(): array
 {
     $token = api_bearer_token();
     if ($token === '') api_error('Sign in again.', 401, 'unauthenticated');
+    $user = api_user_for_token($token);
+    if (!$user) api_error('Sign in again.', 401, 'unauthenticated');
+    return $user;
+}
+
+/** Shared by JSON auth and the POST-only app workspace bridge. */
+function api_user_for_token(string $token): ?array
+{
     $st = db()->prepare('SELECT t.id AS token_id, u.id, u.name, u.role, u.modules, u.active
                            FROM api_tokens t JOIN users u ON u.id = t.user_id
                           WHERE t.token_hash = :h AND t.revoked_at IS NULL');
     $st->execute([':h' => hash('sha256', $token)]);
     $row = $st->fetch();
-    if (!$row || !(int)$row['active']) api_error('Sign in again.', 401, 'unauthenticated');
+    if (!$row || !(int)$row['active']) return null;
     db()->prepare('UPDATE api_tokens SET last_used_at = NOW() WHERE id = :id AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL 1 MINUTE)')
         ->execute([':id' => (int)$row['token_id']]);
     return [
