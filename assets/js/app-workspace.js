@@ -1,5 +1,8 @@
 (() => {
   'use strict';
+  // The same session may also be open in a normal MTT browser tab.
+  if (window.parent === window && !window.LGWorkspace) return;
+  document.documentElement.classList.add('lg-workspace');
   const userId = Number(document.currentScript.dataset.user);
   const send = (event, data = {}) => {
     const message = {type: 'lg-workspace', event, userId, ...data};
