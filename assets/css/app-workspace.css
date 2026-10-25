@@ -1,10 +1,22 @@
 /* Scope app chrome to embedded pages; ordinary MTT tabs keep their own shell. */
-html.lg-workspace body { background: #f7f7fa; color: #282638; font-family: Inter, system-ui, sans-serif; }
+@font-face { font-family: 'LG Nunito'; font-style: normal; font-weight: 200 1000; font-display: swap; src: url('/assets/fonts/nunito.woff2') format('woff2'); }
+@font-face { font-family: 'LG Baloo 2'; font-style: normal; font-weight: 400 800; font-display: swap; src: url('/assets/fonts/baloo2.woff2') format('woff2'); }
+html.lg-workspace {
+  --bg: #fffaf0; --bg-card: #fff; --bg-soft: #fbe5ee; --bg-tint: #fdf6ee;
+  --ink: #38384a; --ink-soft: #5d5d78; --muted: #5d5d78;
+  --line: #dcdde9; --line-soft: #fbe5ee;
+  --accent: #b81f56; --accent-dark: #2b2f77; --accent-2: #11854a;
+  --accent-2-dk: #11854a; --warn-bg: #fdecd4; --info: #136169;
+  --font-body: 'LG Nunito', system-ui, sans-serif;
+  --font-display: 'LG Baloo 2', system-ui, sans-serif;
+}
+html.lg-workspace body { background: var(--bg); color: var(--ink); font-family: var(--font-body); }
+html.lg-workspace :is(h1, h2, h3) { color: #2b2f77; font-family: var(--font-display); }
 html.lg-workspace .topbar, html.lg-workspace body > .footer { display: none; }
 html.lg-workspace main.container { margin-top: 0; padding-top: 16px; padding-bottom: 32px; }
 html.lg-workspace :is(input, select, textarea, button, .btn) { font-family: inherit; }
 html.lg-workspace :is(button, .btn, input:not([type=checkbox]):not([type=radio]), select) { min-height: 44px; }
-html.lg-workspace :focus-visible { outline: 3px solid #9d2453; outline-offset: 3px; }
+html.lg-workspace :focus-visible { outline: 3px solid #b81f56; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   html.lg-workspace *, html.lg-workspace *::before, html.lg-workspace *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
