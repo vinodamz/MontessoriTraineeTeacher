@@ -1,10 +1,10 @@
-/* Preserve module navigation and forms inside the app shell. */
-body { background: #f7f7fa; color: #282638; font-family: Inter, system-ui, sans-serif; }
-.topbar, body > .footer { display: none; }
-main.container { margin-top: 0; padding-top: 16px; padding-bottom: 32px; }
-input, select, textarea, button, .btn { font-family: inherit; }
-button, .btn, input:not([type=checkbox]):not([type=radio]), select { min-height: 44px; }
-:focus-visible { outline: 3px solid #9d2453; outline-offset: 3px; }
+/* Scope app chrome to embedded pages; ordinary MTT tabs keep their own shell. */
+html.lg-workspace body { background: #f7f7fa; color: #282638; font-family: Inter, system-ui, sans-serif; }
+html.lg-workspace .topbar, html.lg-workspace body > .footer { display: none; }
+html.lg-workspace main.container { margin-top: 0; padding-top: 16px; padding-bottom: 32px; }
+html.lg-workspace :is(input, select, textarea, button, .btn) { font-family: inherit; }
+html.lg-workspace :is(button, .btn, input:not([type=checkbox]):not([type=radio]), select) { min-height: 44px; }
+html.lg-workspace :focus-visible { outline: 3px solid #9d2453; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  html.lg-workspace *, html.lg-workspace *::before, html.lg-workspace *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
