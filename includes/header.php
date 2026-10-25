@@ -21,6 +21,10 @@ $unreadCount = $user ? unread_count((int)$user['id']) : 0;
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap">
     <link rel="stylesheet" href="/assets/css/tasks.css?v=<?= e($v) ?>">
     <link rel="stylesheet" href="/assets/css/style.css?v=<?= e($v) ?>">
+    <?php if (!empty($_SESSION['_app_workspace'])): ?>
+    <link rel="stylesheet" href="/assets/css/app-workspace.css?v=<?= e($v) ?>">
+    <script src="/assets/js/app-workspace.js?v=<?= e($v) ?>" defer data-user="<?= (int)($user['id'] ?? 0) ?>"></script>
+    <?php endif; ?>
 </head>
 <body<?= isset($bodyClass) ? ' class="' . e($bodyClass) . '"' : '' ?>>
 <header class="topbar">

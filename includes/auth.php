@@ -65,6 +65,7 @@ function login_by_pin(string $pin, ?string $module = null): ?array
             return ['error' => 'no_module_access'];
         }
 
+        unset($_SESSION['_app_workspace'], $_SESSION['_app_token_id']);
         $_SESSION['user_id']      = (int)$row['id'];
         $_SESSION['user_name']    = $row['name'];
         $_SESSION['user_role']    = $row['role'];
@@ -263,6 +264,14 @@ function logout(): void
 function current_user(): ?array
 {
     start_session_once();
+    if (!empty($_SESSION['_app_workspace'])) {
+        require_once __DIR__ . '/app_workspace.php';
+        if (!app_workspace_token_valid(db(), (int)($_SESSION['_app_token_id'] ?? 0), (int)($_SESSION['user_id'] ?? 0))) {
+            // Keep the marker: remember-login must not revive a revoked app login.
+            $_SESSION = ['_app_workspace' => true];
+            return null;
+        }
+    }
     if (empty($_SESSION['user_id'])) {
         // Session expired or the phone browser dropped it — the remember
         // cookie re-establishes it without bothering the teacher.
@@ -315,6 +324,10 @@ function require_login(): array
 {
     $u = current_user();
     if (!$u) {
+        if (!empty($_SESSION['_app_workspace'])) {
+            require_once __DIR__ . '/app_workspace.php';
+            app_workspace_error('Your session ended. Close this tool and sign in again.', 401);
+        }
         header('Location: /login.php');
         exit;
     }
