@@ -8,6 +8,7 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/api_cors.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/functions.php';
 
@@ -16,6 +17,7 @@ const API_LOCK_MINUTES = 5;
 
 function api_boot(): void
 {
+    api_handle_cors();
     $cfg = app_config();
     date_default_timezone_set($cfg['app']['timezone'] ?? 'UTC');
     header('Content-Type: application/json; charset=utf-8');
