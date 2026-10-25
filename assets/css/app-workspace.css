@@ -6,7 +6,7 @@ html.lg-workspace {
   --ink: #38384a; --ink-soft: #5d5d78; --muted: #5d5d78;
   --line: #dcdde9; --line-soft: #fbe5ee;
   --accent: #b81f56; --accent-dark: #2b2f77; --accent-2: #11854a;
-  --accent-2-dk: #11854a; --warn-bg: #fdecd4; --info: #136169;
+  --accent-2-dk: #2e7d32; --warn-bg: #fdecd4; --info: #136169;
   --font-body: 'LG Nunito', system-ui, sans-serif;
   --font-display: 'LG Baloo 2', system-ui, sans-serif;
 }
