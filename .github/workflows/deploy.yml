@@ -1,38 +1,30 @@
-name: Configure app subdomain
+name: Configure app deployment credentials
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inspect:
+  configure:
     runs-on: ubuntu-latest
     steps:
-      - name: Create app subdomain and request its HTTPS certificate
+      - run: python3 -m pip install pynacl
+      - name: Seal cPanel credentials to the app repository public key
         env:
           CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
           CPANEL_USER: ${{ secrets.CPANEL_USER }}
           CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
         run: |
-          python3 - <<'PY'
-          import json, os, urllib.request, urllib.parse, socket
-          host = os.environ['CPANEL_HOST'].removeprefix('https://').removeprefix('http://').rstrip('/').split(':')[0]
-          def api(module, function, **params):
-              url = 'https://' + host + ':2083/execute/' + module + '/' + function + '?' + urllib.parse.urlencode(params)
-              req = urllib.request.Request(url, headers={'Authorization': 'cpanel ' + os.environ['CPANEL_USER'] + ':' + os.environ['CPANEL_TOKEN']})
-              with urllib.request.urlopen(req, timeout=45) as response:
-                  return json.load(response)
-          name = 'app.thelittlegraduates.in'
-          domains = api('DomainInfo', 'list_domains')
-          if domains.get('status') != 1: raise SystemExit('Cannot inspect domains')
-          if name not in (domains.get('data') or {}).get('sub_domains', []):
-              result = api('SubDomain', 'addsubdomain', domain='app', rootdomain='thelittlegraduates.in', dir='/home/' + os.environ['CPANEL_USER'] + '/thelittlegraduates.in/app', disallowdot=1)
-              print('Create app subdomain:', result.get('status'))
-              if result.get('status') != 1:
-                  print('Errors:', result.get('errors')); raise SystemExit(1)
-          result = api('DomainInfo', 'single_domain_data', domain=name)
-          print('Domain details status:', result.get('status'))
-          print('App document root:', (result.get('data') or {}).get('documentroot'))
-          result = api('SSL', 'start_autossl_check')
-          print('AutoSSL request status:', result.get('status'))
-          if result.get('status') != 1: print('AutoSSL:', result.get('errors'))
-          PY
+          python3 - <<'PYCODE'
+          import os, json, base64
+          from nacl.public import PublicKey, SealedBox
+          key = {'key_id': '3380204578043523366', 'key': 'x7VCkUL7jOK3qHkwvSut0BC3vAcBLhfth2cFaPvl0lw='}
+          box = SealedBox(PublicKey(base64.b64decode(key['key'])))
+          output = {name: {'key_id': key['key_id'], 'encrypted_value': base64.b64encode(box.encrypt(os.environ[name].encode())).decode()} for name in ['CPANEL_HOST', 'CPANEL_USER', 'CPANEL_TOKEN']}
+          with open('sealed-deployment.json', 'w') as file: json.dump(output, file)
+          print('Deployment credentials sealed for LittleGraduatesApp; no plaintext exported.')
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sealed-app-deployment
+          path: sealed-deployment.json
+          retention-days: 1
