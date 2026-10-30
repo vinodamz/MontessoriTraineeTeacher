@@ -2,8 +2,6 @@
 /**
  * progress.php — historical view of one student.
  * Baseline + per-month per-category scores + inline SVG trend chart + comments.
- * The "Print" button uses the browser's print dialog; the @media print rules
- * in style.css hide the topbar and form chrome so the page prints cleanly.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -32,6 +30,19 @@ if ($user['role'] !== 'admin' && (int)$student['teacher_id'] !== (int)$user['id'
     echo 'You can only view your own students.';
     exit;
 }
+
+// Each student can opt into dated observation recording independently.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'observation_preference') {
+    csrf_check();
+    $enabled = ($_POST['enabled'] ?? '') === '1' ? 1 : 0;
+    $q = db()->prepare('INSERT INTO student_observation_preferences (student_id, enabled) VALUES (?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)');
+    $q->execute([$studentId, $enabled]);
+    flash_set('ok', $enabled ? 'Observations enabled for this student.' : 'Observations disabled. Existing history is retained.');
+    redirect('progress.php?student_id='.$studentId);
+}
+$q = db()->prepare('SELECT enabled FROM student_observation_preferences WHERE student_id = ?');
+$q->execute([$studentId]);
+$observationEnabled = (bool)$q->fetchColumn();
 
 // Baseline (one per student).
 $stmt = db()->prepare("SELECT * FROM student_baselines WHERE student_id = :s");
@@ -104,15 +115,14 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="head-actions">
-        <a class="btn btn-primary" href="observe.php?student_id=<?= $studentId ?>">Record observation</a>
+        <?php if ($observationEnabled): ?><a class="btn" href="observe.php?student_id=<?= $studentId ?>">Record observation</a><?php endif; ?>
         <a class="btn" href="assess.php?student_id=<?= $studentId ?>&month=<?= e(current_month_year()) ?>">Monthly assessment</a>
         <a class="btn btn-ghost" href="baseline.php?student_id=<?= $studentId ?>"><?= $baseline ? 'Edit baseline' : 'Add baseline' ?></a>
         <a class="btn btn-ghost" href="custom_indicators.php?student_id=<?= $studentId ?>">Custom indicators</a>
         <?php if ($editUrl = student_edit_url($user, $studentId)): ?>
             <a class="btn btn-ghost" href="<?= e($editUrl) ?>" title="Correct name, grade or other details">Edit details</a>
         <?php endif; ?>
-        <a class="btn btn-primary" href="report.php?student_id=<?= $studentId ?>">Detailed report</a>
-        <button type="button" class="btn btn-ghost" onclick="window.print()">Print</button>
+        <a class="btn btn-primary" href="report.php?student_id=<?= $studentId ?>">Parent summary</a>
     </div>
 </div>
 
@@ -121,6 +131,17 @@ require __DIR__ . '/../includes/header.php';
     <p class="muted">Generated <?= e(date('j M Y')) ?> · <?= count($months) ?> month<?= count($months)===1?'':'s' ?> of data</p>
 </section>
 
+<section class="card no-print">
+    <h3>Observations <span class="muted small">(optional for this student)</span></h3>
+    <p class="muted small">Turning this off keeps any observations already recorded.</p>
+    <form method="post">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="student_id" value="<?= $studentId ?>">
+        <input type="hidden" name="action" value="observation_preference">
+        <input type="hidden" name="enabled" value="<?= $observationEnabled ? '0' : '1' ?>">
+        <button class="btn" type="submit"><?= $observationEnabled ? 'Disable observations' : 'Enable observations' ?></button>
+    </form>
+</section>
 <?php observation_history_render(observation_history(db(), $studentId)); ?>
 
 <?php if ($baseline): ?>
