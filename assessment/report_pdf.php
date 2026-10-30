@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/child_report.php';
+require_once __DIR__ . '/../includes/parent_summary.php';
 require_once __DIR__ . '/../includes/child_report_pdf.php';
 
 $user = require_module('montessori');
@@ -25,4 +25,4 @@ if (($user['role'] ?? '') !== 'admin' && (int)$d['student']['teacher_id'] !== (i
     http_response_code(403); exit('You can only view your own students.');
 }
 
-child_report_pdf_stream($d, function_exists('app_name') ? app_name() : '');
+parent_summary_pdf_stream($d, function_exists('app_name') ? app_name() : '');

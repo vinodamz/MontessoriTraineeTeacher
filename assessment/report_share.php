@@ -2,7 +2,7 @@
 /**
  * assessment/report_share.php — PUBLIC, NO LOGIN.
  *
- * Token-gated, read-only view of one child's detailed progress report. A
+ * Token-gated, read-only view of one child's parent summary. A
  * teacher or admin generates the link on assessment/report.php and shares it
  * with the family. The token in the URL is the sole credential.
  *
@@ -16,7 +16,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';       // db + app_config; no require_login
 require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/child_report.php';
+require_once __DIR__ . '/../includes/parent_summary.php';
 
 $token = (string)($_GET['token'] ?? '');
 $row   = child_report_by_token($token);
@@ -27,7 +27,7 @@ $appName = function_exists('app_name') ? app_name() : 'Little Graduates';
 // ?format=pdf → the same report as a real PDF download. Still read-only.
 if ($d && ($_GET['format'] ?? '') === 'pdf') {
     require_once __DIR__ . '/../includes/child_report_pdf.php';
-    child_report_pdf_stream($d, $appName);
+    parent_summary_pdf_stream($d, $appName);
 }
 
 if (!$d) {
@@ -82,7 +82,7 @@ if (!$d) {
            Please contact the school to request a fresh link.</p>
     </div>
 <?php else: ?>
-    <?php child_report_render($d); ?>
+    <?php parent_summary_render($d); ?>
 <?php endif; ?>
 </main>
 </body>

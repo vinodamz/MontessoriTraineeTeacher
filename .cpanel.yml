@@ -25,8 +25,8 @@
 # deploys.
 deployment:
   tasks:
-    - git rev-parse HEAD > $HOME/thelittlegraduates.in/mtt/build-id.txt
     - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='CLAUDE.md' --exclude='.mcp.json' --exclude='docs/' --exclude='install.php' --exclude='sql/odoo_dump/' --exclude='includes/config.php' --exclude='last-deploy.log' --exclude='last-migrate.log' --exclude='last-smoke.log' --exclude='last-tasks-smoke.log' --exclude='last-assessment-smoke.log' --exclude='last-crm-smoke.log' --exclude='last-materials-smoke.log' ./ $HOME/thelittlegraduates.in/mtt/ > $HOME/last-mtt-deploy.log 2>&1
+    - git rev-parse HEAD > $HOME/thelittlegraduates.in/mtt/build-id.txt
     - /bin/rm -rf $HOME/thelittlegraduates.in/mtt/docs $HOME/thelittlegraduates.in/mtt/sql/odoo_dump $HOME/thelittlegraduates.in/mtt/CLAUDE.md $HOME/thelittlegraduates.in/mtt/.mcp.json $HOME/thelittlegraduates.in/mtt/install.php
     - /bin/chmod 755 $HOME/thelittlegraduates.in $HOME/thelittlegraduates.in/mtt
     - /usr/bin/find $HOME/thelittlegraduates.in/mtt -type d -exec /bin/chmod 755 {} +

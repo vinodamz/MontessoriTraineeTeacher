@@ -50,20 +50,6 @@ if ($students) {
     }
 }
 
-// Observations are dated independently of monthly assessments.
-$lastObservation = [];
-if ($students) {
-    try {
-        $ids = array_column($students, 'id');
-        $place = implode(',', array_fill(0, count($ids), '?'));
-        $q = db()->prepare("SELECT student_id, MAX(observed_on) AS latest FROM child_observations WHERE student_id IN ($place) GROUP BY student_id");
-        $q->execute($ids);
-        foreach ($q as $row) $lastObservation[(int)$row['student_id']] = $row['latest'];
-    } catch (PDOException $e) {
-        if ($e->getCode() !== '42S02') throw $e;
-    }
-}
-
 // Which students already have a baseline?
 $hasBaseline = [];
 if ($students) {
@@ -97,6 +83,7 @@ require __DIR__ . '/../includes/header.php';
             · <?= count($students) ?> student<?= count($students) === 1 ? '' : 's' ?></p>
     </div>
     <div class="head-actions">
+        <a class="btn" href="bulk_parent_summaries.php">Export parent summaries (ZIP)</a>
         <?php if ($showAll): ?>
             <a class="btn btn-ghost" href="index.php">← Current students only</a>
         <?php elseif ($formerCount > 0): ?>
@@ -123,11 +110,6 @@ require __DIR__ . '/../includes/header.php';
             $statusTxt = $last
                 ? ($isCurrent ? 'Assessed this month' : 'Last: ' . month_year_label($last))
                 : 'Not yet assessed';
-            if (isset($lastObservation[$sid])) {
-                $statusCls = 'ok';
-                $statusTxt = 'Observed: ' . date('j M Y', strtotime($lastObservation[$sid]));
-                if ($last) $statusTxt .= ' · Monthly: ' . month_year_label($last);
-            }
             $hasBl     = !empty($hasBaseline[$sid]);
             $fullName  = trim($s['first_name'] . ' ' . $s['last_name']);
         ?>
@@ -151,8 +133,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($hasBl): ?><span class="pill">First assessment ✓</span><?php endif; ?>
             </div>
             <div class="student-actions">
-                <a class="btn btn-primary" href="observe.php?student_id=<?= $sid ?>">Record observation</a>
-                <a class="btn" href="assess.php?student_id=<?= $sid ?>&amp;month=<?= e(urlencode($currentMonth)) ?>">Monthly assessment</a>
+                <a class="btn btn-primary" href="assess.php?student_id=<?= $sid ?>&amp;month=<?= e(urlencode($currentMonth)) ?>">Monthly assessment</a>
                 <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress/history</a>
                 <?php if (!$hasBl): ?>
                     <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>">Add first assessment</a>

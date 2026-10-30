@@ -9,6 +9,9 @@ $s->execute([$studentId]);
 $student = $s->fetch();
 if (!$student) { http_response_code(404); exit('Student not found.'); }
 if (!observation_can_access($user,$student)) { http_response_code(403); exit('You can only observe your own students.'); }
+$q = db()->prepare('SELECT enabled FROM student_observation_preferences WHERE student_id = ?');
+$q->execute([$studentId]);
+if (!$q->fetchColumn()) { http_response_code(403); exit('Enable observations for this student on the progress page first.'); }
 $error = '';
 $input = ['observed_on'=>date('Y-m-d'),'submission_token'=>bin2hex(random_bytes(32))];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

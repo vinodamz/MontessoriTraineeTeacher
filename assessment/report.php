@@ -1,22 +1,10 @@
 <?php
-/**
- * assessment/report.php — the detailed progress report for one child.
- *
- * Everything the assessment module holds about a child, rendered as one
- * print-friendly document: identity, attendance, entry baseline, per-area
- * averages with trend, a trend chart, skill-by-skill ratings month by month,
- * teacher remarks, and the rating key.
- *
- * Sections with no data are omitted entirely (see includes/child_report.php).
- *
- * Admins can open any child; teachers only their own — same rule as
- * progress.php. Also hosts the "share with parents" link panel.
- */
+/** Parent summary and share-link management for one child. */
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/child_report.php';
+require_once __DIR__ . '/../includes/parent_summary.php';
 
 $user = require_module('montessori');
 
@@ -57,7 +45,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="page-head no-print">
     <div>
-        <h1>Detailed report</h1>
+        <h1>Parent summary</h1>
         <p class="muted"><a href="/assessment/progress.php?student_id=<?= $studentId ?>">← <?= e($fullName) ?></a></p>
     </div>
     <div class="head-actions">
@@ -113,13 +101,13 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </section>
 
-<?php child_report_render($d); ?>
+<?php parent_summary_render($d); ?>
 
 <?php if ($isAdmin): ?>
 <section class="card no-print" id="notes">
     <h3>Edit teacher notes</h3>
     <p class="muted small">
-        Corrections to what appears under <em>Teacher's remarks</em> and against each area.
+        Edit monthly teacher notes. The parent summary shows notes from the latest month that has notes.
         Teachers write these when they assess a month; as an admin you can fix or add one here
         without re-doing that month's assessment. Clearing a note removes it.
     </p>
