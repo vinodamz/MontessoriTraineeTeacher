@@ -4,34 +4,33 @@
    ============================================================================ */
 
 :root {
-    /* Brand palette — pink/green from the school logo (see parent_form
-     * and admission PDF). Bumped --accent from the old #EC407A to align
-     * exactly with the brand pink we use in branded receipts and PDFs. */
-    --bg:          #FFF8F2;
+    /* Brand palette from thelittlegraduates.in: cream paper, pink mark,
+     * caterpillar green, indigo ink. Nunito for text, Baloo 2 for titles. */
+    --bg:          #FFFAF0;     /* cream */
     --bg-card:     #ffffff;
-    --bg-soft:     #FFE9F2;     /* pink wash — pill backgrounds, hovers */
-    --bg-tint:     #FBF1F5;     /* lighter pink wash — striped tables */
-    --ink:         #1F2937;
-    --ink-soft:    #4B5563;
-    --muted:       #8b919a;
-    --line:        #F3DCE6;     /* pink-tinted line */
-    --line-soft:   #FBEEF4;
-    --accent:      #E91E63;     /* brand pink */
-    --accent-dark: #AD1457;     /* hover */
-    --accent-2:    #66BB6A;     /* caterpillar green */
-    --accent-2-dk: #2E7D32;
-    --warn:        #F5B342;
-    --warn-bg:     #FFF4E0;
-    --info:        #42A5F5;
+    --bg-soft:     #FBE5EE;     /* pink-soft — pills, hovers */
+    --bg-tint:     #FDF6EE;     /* paper — striped tables */
+    --ink:         #38384a;
+    --ink-soft:    #5d5d78;
+    --muted:       #5d5d78;
+    --line:        #F3D6E2;
+    --line-soft:   #FBE5EE;
+    --accent:      #E5447D;     /* site pink */
+    --accent-dark: #B81F56;     /* pink-ink, headings and hover */
+    --accent-2:    #1FBF6B;     /* site green */
+    --accent-2-dk: #11854A;
+    --warn:        #F7A23B;
+    --warn-bg:     #FDECD4;
+    --info:        #2FB9C4;
     --danger:      #c53b2c;
-    --shadow:      0 2px 10px rgba(173, 20, 87, .06);
-    --shadow-lg:   0 12px 32px rgba(173, 20, 87, .12);
-    --shadow-tile: 0 4px 14px rgba(31, 41, 55, .05);
-    --radius:      16px;
-    --radius-sm:   10px;
-    --radius-xs:   6px;
-    --font-body:   'Quicksand', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --font-display:'Quicksand', system-ui, sans-serif;
+    --shadow:      0 2px 10px rgba(43, 47, 119, .06);
+    --shadow-lg:   0 12px 32px rgba(43, 47, 119, .12);
+    --shadow-tile: 0 4px 14px rgba(43, 47, 119, .05);
+    --radius:      20px;
+    --radius-sm:   12px;
+    --radius-xs:   8px;
+    --font-body:   'Nunito', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-display:'Baloo 2', 'Nunito', system-ui, sans-serif;
     color-scheme: light;
 }
 
@@ -145,7 +144,7 @@ p { margin: 0 0 1em; }
 }
 .btn:hover { border-color: var(--ink-soft); }
 .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover { background: #d5306a; border-color: #d5306a; }
+.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
 .btn-ghost { background: transparent; }
 .btn.small { padding: .35rem .65rem; font-size: .8rem; }
 .btn.danger { color: #b3261e; }
@@ -1323,7 +1322,7 @@ a.admin-tile:hover {
     cursor: pointer; list-style: none; user-select: none;
     font-weight: 700; font-size: 1rem; color: var(--ink, #2b2b2b);
     padding: .35rem .15rem; margin-bottom: .35rem;
-    border-bottom: 2px solid var(--accent, #EC407A);
+    border-bottom: 2px solid var(--accent, #E5447D);
     display: flex; align-items: center; gap: .4rem;
 }
 .app-group > summary::-webkit-details-marker { display: none; }
@@ -1363,10 +1362,10 @@ a.admin-tile:hover {
     color: var(--ink-soft, #6b5a45); font-weight: 600; font-size: .92rem;
     border-bottom: 3px solid transparent; margin-bottom: -2px;
 }
-.student-tabs a:hover { color: var(--accent, #EC407A); }
+.student-tabs a:hover { color: var(--accent, #E5447D); }
 .student-tabs a.is-active {
-    color: var(--accent, #EC407A);
-    border-bottom-color: var(--accent, #EC407A);
+    color: var(--accent, #E5447D);
+    border-bottom-color: var(--accent, #E5447D);
 }
 
 /* ---------- Phase 3 mobile: CRM pipeline one-handed -------------------------
@@ -1443,9 +1442,9 @@ h3 { font-size: 1.02rem; font-weight: 700; }
 /* ----- Branded topbar ----- */
 .topbar {
     padding: .7rem 1.3rem;
-    background: linear-gradient(180deg, #fff 0%, #FFF6FA 100%);
+    background: linear-gradient(180deg, #fff 0%, var(--bg) 100%);
     border-bottom: 1px solid var(--line);
-    box-shadow: 0 1px 0 rgba(233, 30, 99, .04);
+    box-shadow: 0 1px 0 rgba(43, 47, 119, .06);
     position: relative;
 }
 .topbar::after {
@@ -1504,7 +1503,7 @@ h3 { font-size: 1.02rem; font-weight: 700; }
     transition: transform .08s ease, box-shadow .15s, background .15s, border-color .15s;
 }
 .btn:hover {
-    background: var(--bg-soft); border-color: #f0c4d6;
+    background: var(--bg-soft); border-color: #f3c4d4;
     text-decoration: none; color: var(--ink);
 }
 .btn:active { transform: translateY(1px); }
@@ -1512,11 +1511,11 @@ h3 { font-size: 1.02rem; font-weight: 700; }
 .btn-primary {
     background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: #fff; border-color: var(--accent-dark);
-    box-shadow: 0 4px 10px rgba(233, 30, 99, .25);
+    box-shadow: 0 4px 10px rgba(229, 68, 125, .25);
 }
 .btn-primary:hover {
     background: var(--accent-dark); color: #fff;
-    box-shadow: 0 6px 14px rgba(173, 20, 87, .32);
+    box-shadow: 0 6px 14px rgba(184, 31, 86, .28);
 }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--ink-soft); }
 .btn-ghost:hover { background: var(--bg-soft); color: var(--accent); }
@@ -1538,7 +1537,7 @@ input[type="password"], select, textarea {
 }
 input:focus, select:focus, textarea:focus {
     outline: none; border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(233, 30, 99, .15);
+    box-shadow: 0 0 0 3px rgba(229, 68, 125, .18);
 }
 .field label {
     font-weight: 600; font-size: .85rem;
@@ -1621,7 +1620,7 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
 .app-card:hover, .app-card:focus-visible {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(233, 30, 99, .35);
+    border-color: rgba(229, 68, 125, .35);
     text-decoration: none;
 }
 .app-name { font-family: var(--font-display); font-weight: 700; }
@@ -1630,9 +1629,9 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
     color: var(--accent-dark);
     background: var(--bg-soft);
 }
-.app-icon-students    { color: #ad1457; background: #fce4ec; }
+.app-icon-students    { color: #B81F56; background: #FBE5EE; }
 .app-icon-assessment  { color: #2e7d32; background: #e8f5e9; }
-.app-icon-admissions  { color: #ad1457; background: #fce4ec; }
+.app-icon-admissions  { color: #B81F56; background: #FBE5EE; }
 .app-icon-tasks       { color: #1565c0; background: #e3f2fd; }
 .app-icon-fees        { color: #00695c; background: #e0f2f1; }
 .app-icon-expenses    { color: #6a1b9a; background: #f3e5f5; }
@@ -1764,7 +1763,7 @@ table.admin-table tbody tr:hover { background: var(--line-soft); }
               gap: .6rem; align-items: center; padding: .12rem 0; font-size: .9rem; }
 .sv-bar-label { color: #4a4a4a; }
 .sv-bar-track { background: #f3ece0; border-radius: 4px; height: .7rem; overflow: hidden; }
-.sv-bar-fill { display: block; height: 100%; background: #e91e63; border-radius: 4px; min-width: 0; }
+.sv-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 4px; min-width: 0; }
 .sv-bar-n { font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
 .sv-quotes { margin: 0; padding-left: 1.1rem; }
 .sv-quotes li { margin-bottom: .45rem; }

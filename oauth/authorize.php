@@ -45,7 +45,7 @@ function authorize_page_error(string $title, string $detail, string $diagnosis =
        . 'background:#fff5fa;color:#2b2b2b;display:flex;min-height:100vh;align-items:center;justify-content:center;">'
        . '<div style="text-align:center;padding:2rem;max-width:560px;">'
        . '<div style="font-size:2.6rem;">🔒</div>'
-       . '<h1 style="color:#ad1457;font-size:1.25rem;margin:.5rem 0;">' . e($title) . '</h1>'
+       . '<h1 style="color:#B81F56;font-size:1.25rem;margin:.5rem 0;">' . e($title) . '</h1>'
        . '<p style="color:#666;font-size:.95rem;">' . e($detail) . '</p>'
        . $diagnosis
        . '</div></body></html>';

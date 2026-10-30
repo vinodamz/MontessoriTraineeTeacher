@@ -241,8 +241,8 @@ require __DIR__ . '/../includes/header.php';
 <script>
 (() => {
     if (typeof Chart === 'undefined') return;   // CDN failed — leave the page usable
-    const PINK = '#e91e63', GREEN = '#66bb6a',
-          PALETTE = ['#e91e63','#66bb6a','#42a5f5','#f5b342','#ab47bc','#26a69a','#ef5350','#8d6e63'];
+    const PINK = '#E5447D', GREEN = '#1FBF6B',
+          PALETTE = ['#E5447D','#1FBF6B','#2FB9C4','#F7A23B','#ab47bc','#26a69a','#ef5350','#8d6e63'];
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 
     // Children per class — click-through to the filtered roster.
@@ -254,7 +254,7 @@ require __DIR__ . '/../includes/header.php';
             data: {
                 labels: grades,
                 datasets: [{ data: <?= json_encode(array_values($gradeCounts)) ?>,
-                             backgroundColor: ['#f5b342','#66bb6a','#42a5f5','#e91e63'], borderRadius: 6 }]
+                             backgroundColor: ['#F7A23B','#1FBF6B','#2FB9C4','#E5447D'], borderRadius: 6 }]
             },
             options: {
                 maintainAspectRatio: false,

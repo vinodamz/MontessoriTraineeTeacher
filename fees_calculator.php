@@ -124,17 +124,19 @@ $inr = fn(int $v): string => '₹' . number_format($v);
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#FFF8F0">
+    <meta name="theme-color" content="#FFFAF0">
+    <link rel="icon" href="/assets/img/logo.png">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap">
     <title>Fee Calculator — Little Graduates</title>
     <style>
         :root {
-            --bg: #FFF8F0; --bg-card: #fff; --ink: #2b2f33; --ink-soft: #5a6068;
-            --muted: #8b919a; --line: #e6dccb; --accent: #EC407A; --accent2: #5BA547;
+            --bg: #FFFAF0; --bg-card: #fff; --ink: #38384a; --ink-soft: #5d5d78;
+            --muted: #5d5d78; --line: #E8D9C8; --accent: #E5447D; --accent2: #1FBF6B;
             --radius: 14px; --radius-sm: 8px;
         }
         * { box-sizing: border-box; }
         body {
-            margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; font: 15px/1.5 "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: var(--ink); background: var(--bg); min-height: 100vh;
         }
         .wrap { max-width: 640px; margin: 0 auto; padding: 1.2rem 1rem 4rem; }
