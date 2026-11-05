@@ -12,6 +12,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/assessment.php';
 
 $user = require_module('montessori');
 
@@ -76,21 +77,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ALL configured codes (active + retired): an old month may carry a
     // legacy code; the save must keep it, not silently drop it.
     $rmap        = rating_config_map_all();
-    $ratings     = $_POST['rating'] ?? [];          // key = "std:NN" or "cust:NN", value = D|P|N
+    $ratings     = $_POST['rating'] ?? [];          // key = "std:NN" or "cust:NN"
     $catComments = $_POST['cat_comment'] ?? [];     // key = category name
     $overall     = trim($_POST['overall_comment'] ?? '');
 
     if (!is_array($ratings))     $ratings = [];
     if (!is_array($catComments)) $catComments = [];
 
+    // Blank skills are simply not stored. A code the scheme does not know
+    // aborts the save — it must not be written as '' and it must not be
+    // dropped while the rest of the month is replaced.
+    $split = assessment_ratings_for_save($ratings, $rmap);
+    if ($split['invalid'] !== []) {
+        flash_set('error', 'A rating on this form is not one of the configured codes, so nothing was saved.');
+        redirect("assess.php?student_id=$studentId&month=" . urlencode($month));
+    }
+    $ratings = $split['ok'];
+
     // Group ratings by category (we need to know each indicator's category).
     $stdIds  = [];
     $custIds = [];
     foreach ($ratings as $key => $val) {
-        if (!preg_match('/^(std|cust):(\d+)$/', $key, $m)) continue;
-        if (!isset($rmap[$val])) continue;
-        if ($m[1] === 'std')  $stdIds[]  = (int)$m[2];
-        else                  $custIds[] = (int)$m[2];
+        [$kind, $idStr] = explode(':', $key, 2);
+        if ($kind === 'std')  $stdIds[]  = (int)$idStr;
+        else                  $custIds[] = (int)$idStr;
     }
 
     $indicatorCat = [];   // ["std:123" => "MATHEMATICS", ...]
@@ -116,6 +126,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $pdo = db();
+    // The live server is non-strict, which is how an unknown ENUM value used
+    // to be stored as ''. Strict mode makes that insert fail; the read-back
+    // inside assessment_store_rating covers a server that still won't.
+    $previousMode = null;
+    try {
+        $previousMode = (string)$pdo->query('SELECT @@SESSION.sql_mode')->fetchColumn();
+        $pdo->exec("SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',STRICT_TRANS_TABLES,STRICT_ALL_TABLES')");
+    } catch (Throwable $e) {
+        $previousMode = null;
+    }
     $pdo->beginTransaction();
     try {
         // Month-scoped (not teacher-scoped): the previous assessor's rows are
@@ -128,25 +148,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $del->execute([':s' => $studentId, ':m' => $month]);
 
         // Insert eval cards + tally per-category averages.
-        $ins = $pdo->prepare("
-            INSERT INTO evaluation_cards
-                (student_id, teacher_id, month_year, indicator_id, rating, is_custom_indicator)
-            VALUES (:s, :t, :m, :i, :r, :c)
-        ");
         $catTotals = []; // [cat => [sum, count]]
         foreach ($ratings as $key => $val) {
             if (!isset($indicatorCat[$key]))  continue;
             if (!isset($rmap[$val]))          continue;
             [$kind, $idStr] = explode(':', $key, 2);
             $isCustom = $kind === 'cust' ? 1 : 0;
-            $ins->execute([
-                ':s' => $studentId,
-                ':t' => $assessingTeacherId,
-                ':m' => $month,
-                ':i' => (int)$idStr,
-                ':r' => $val,
-                ':c' => $isCustom,
-            ]);
+            assessment_store_rating(
+                $pdo,
+                $studentId,
+                $assessingTeacherId,
+                $month,
+                (int)$idStr,
+                $val,
+                $isCustom
+            );
             $cat = $indicatorCat[$key];
             $catTotals[$cat] ??= [0, 0];
             $catTotals[$cat][0] += (int)$rmap[$val]['numeric_value'];
@@ -194,14 +210,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $pdo->commit();
+        assessment_restore_sql_mode($pdo, $previousMode);
         flash_set('ok', 'Assessment saved.');
         redirect('progress.php?student_id=' . $studentId);
     } catch (Throwable $e) {
-        $pdo->rollBack();
-        $msg = ($e instanceof PDOException && $e->getCode() == 23000)
-            ? 'Someone else saved this month at the same moment — reload the page and check their entries before saving again.'
-            : 'Save failed: ' . $e->getMessage();
-        flash_set('error', $msg);
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        assessment_restore_sql_mode($pdo, $previousMode);
+        flash_set('error', assessment_save_failure_message($e));
         redirect("assess.php?student_id=$studentId&month=" . urlencode($month));
     }
 }
@@ -241,19 +256,10 @@ foreach ($stmt as $r) {
     $existing[$key] = $r['rating'];
 }
 
-// Pre-fill: comments.
-$existingCatComment = [];
-$existingOverall    = '';
-$stmt = db()->prepare("
-    SELECT category, comment
-    FROM assessment_comments
-    WHERE student_id = :s AND month_year = :m
-");
-$stmt->execute([':s' => $studentId, ':m' => $month]);
-foreach ($stmt as $r) {
-    if ($r['category'] === null) $existingOverall = $r['comment'];
-    else                         $existingCatComment[$r['category']] = $r['comment'];
-}
+// Comments already saved for this month. A new month's empty boxes are
+// filled from the previous month further down, after we know which
+// categories the form actually shows.
+$currentComments = assessment_load_month_comments(db(), $studentId, $month);
 
 // Indicators rated this month but since retired (deactivated) must still
 // render — otherwise the delete-then-insert save would silently drop their
@@ -282,50 +288,6 @@ if ($retiredCust) {
     foreach ($rows as $r) { $r['_retired'] = true; $customIndicators[] = $r; }
 }
 
-// ---- Carry forward last month's ratings ----------------------------------
-// Most of a child's ratings don't move month to month, so starting from a
-// blank grid meant re-entering ~30 near-identical decisions every month. When
-// this month has nothing recorded yet, pre-select the most recent earlier
-// month's ratings as a starting point. They are shown as "carried" until the
-// teacher touches them, and nothing reaches the database until Save — so this
-// speeds up the work without silently inventing an assessment.
-//
-// ?blank=1 opts out and starts from an empty grid.
-$carried     = [];
-$carriedFrom = null;
-if (!$existing && empty($_GET['blank'])) {
-    try {
-        $stmt = db()->prepare("SELECT DISTINCT month_year FROM evaluation_cards WHERE student_id = :s");
-        $stmt->execute([':s' => $studentId]);
-        // month_year is 'M-y' text, which doesn't sort chronologically in SQL.
-        $prior = array_filter(
-            array_column($stmt->fetchAll(), 'month_year'),
-            fn($m) => compare_month_year((string)$m, $month) < 0
-        );
-        usort($prior, 'compare_month_year');
-        if ($prior) {
-            $activeCodes = rating_config_map();   // active codes only
-            $carriedFrom = (string)end($prior);
-            $stmt = db()->prepare("
-                SELECT indicator_id, rating, is_custom_indicator
-                FROM evaluation_cards WHERE student_id = :s AND month_year = :m
-            ");
-            $stmt->execute([':s' => $studentId, ':m' => $carriedFrom]);
-            foreach ($stmt as $r) {
-                $key = ($r['is_custom_indicator'] ? 'cust' : 'std') . ':' . $r['indicator_id'];
-                // Don't resurrect indicators that have since been retired, and
-                // don't carry a rating code that's no longer configured.
-                if (!isset($activeKeys[$key]))            continue;
-                if (!isset($activeCodes[$r['rating']]))   continue;
-                $carried[$key] = $r['rating'];
-            }
-            if (!$carried) $carriedFrom = null;
-        }
-    } catch (Throwable $e) {
-        $carried = []; $carriedFrom = null;   // never block the form on this
-    }
-}
-
 // Group indicators by category (preserve insertion order — already sorted).
 $byCategory = [];
 foreach ($indicators as $i) {
@@ -333,6 +295,38 @@ foreach ($indicators as $i) {
 }
 foreach ($customIndicators as $i) {
     $byCategory[$i['category']]['cust'][] = $i;
+}
+
+// Carry forward last month's ratings and comments.
+// Most of a child's ratings don't move month to month, and the same is true
+// of the notes. When this month has nothing recorded yet, start from the
+// most recent earlier month. Carried values are marked until the teacher
+// touches them, and nothing reaches the database until Save.
+// ?blank=1 opts out and starts from an empty grid.
+$prefill = [
+    'ratings' => [],
+    'from' => null,
+    'overall' => $currentComments['overall'],
+    'categories' => $currentComments['categories'],
+    'carried_overall' => false,
+    'carried_categories' => [],
+];
+try {
+    $prefill = assessment_prefill_from_previous(
+        db(),
+        $studentId,
+        $month,
+        !empty($_GET['blank']),
+        $existing !== [],
+        $currentComments['overall'],
+        $currentComments['categories'],
+        array_keys($byCategory),
+        rating_config_map(),
+        $activeKeys
+    );
+} catch (Throwable $e) {
+    // A carry-forward problem must not block the form. The month can still
+    // be entered from scratch.
 }
 
 $rmap        = rating_config_map();
@@ -419,11 +413,17 @@ usort($monthsOrdered, fn($a, $b) => compare_month_year($b, $a));
         <?php endforeach; ?>
     </div>
 
-    <?php if ($carriedFrom !== null): ?>
+    <?php if ($prefill['from'] !== null): ?>
+        <?php
+            $carriedParts = [];
+            if ($prefill['ratings'] !== []) $carriedParts[] = 'ratings';
+            if ($prefill['carried_overall'] || $prefill['carried_categories'] !== []) $carriedParts[] = 'comments';
+            $carriedWhat = implode(' and ', $carriedParts);
+        ?>
         <div class="flash flash-info carry-note">
-            Started from <strong><?= e(month_year_label($carriedFrom)) ?></strong>'s ratings —
-            change what has moved and leave the rest. Rows still marked
-            <span class="carry-tag">carried</span> haven't been reviewed yet.
+            Started from <strong><?= e(month_year_label($prefill['from'])) ?></strong>'s <?= e($carriedWhat) ?> —
+            change what has moved and leave the rest. Anything still marked
+            <span class="carry-tag">carried</span> hasn't been reviewed yet.
             Nothing is saved until you press <strong>Save assessment</strong>.
             <a href="assess.php?student_id=<?= $studentId ?>&amp;month=<?= e(urlencode($month)) ?>&amp;blank=1">Start from blank instead</a>
         </div>
@@ -454,8 +454,8 @@ usort($monthsOrdered, fn($a, $b) => compare_month_year($b, $a));
                         // whatever was carried forward (flagged, not confirmed).
                         $sel        = $existing[$key] ?? '';
                         $isCarried  = false;
-                        if ($sel === '' && isset($carried[$key])) {
-                            $sel       = $carried[$key];
+                        if ($sel === '' && isset($prefill['ratings'][$key])) {
+                            $sel       = $prefill['ratings'][$key];
                             $isCarried = true;
                         }
                 ?>
@@ -491,16 +491,17 @@ usort($monthsOrdered, fn($a, $b) => compare_month_year($b, $a));
                 <?php endforeach; ?>
                 </tbody>
             </table>
-            <label class="cat-comment">
-                <span>Comment on <?= e($cat) ?> <span class="muted small">(optional)</span></span>
-                <textarea name="cat_comment[<?= e($cat) ?>]" rows="2"><?= e($existingCatComment[$cat] ?? '') ?></textarea>
+            <?php $catCarried = !empty($prefill['carried_categories'][$cat]); ?>
+            <label class="cat-comment<?= $catCarried ? ' is-carried' : '' ?>">
+                <span>Comment on <?= e($cat) ?> <span class="muted small">(optional)</span><?php if ($catCarried): ?><span class="carry-tag">carried</span><?php endif; ?></span>
+                <textarea name="cat_comment[<?= e($cat) ?>]" rows="2"><?= e($prefill['categories'][$cat] ?? '') ?></textarea>
             </label>
         </section>
     <?php endforeach; ?>
 
-    <section class="cat-block">
-        <h2>Overall comment</h2>
-        <textarea name="overall_comment" rows="3" placeholder="A short note for the parents and the file."><?= e($existingOverall) ?></textarea>
+    <section class="cat-block overall-comment<?= !empty($prefill['carried_overall']) ? ' is-carried' : '' ?>">
+        <h2>Overall comment<?php if (!empty($prefill['carried_overall'])): ?> <span class="carry-tag">carried</span><?php endif; ?></h2>
+        <textarea name="overall_comment" rows="3" placeholder="A short note for the parents and the file."><?= e($prefill['overall']) ?></textarea>
     </section>
 
     <div class="form-actions">

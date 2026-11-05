@@ -508,6 +508,11 @@ body.landing { background: var(--bg); }
 }
 .rating-table tr.ind-carried { background: #fffdf5; }
 .rating-table tr.ind-carried .ind-text { box-shadow: inset 3px 0 0 #e8c46a; }
+.cat-comment.is-carried textarea,
+.overall-comment.is-carried textarea {
+    background: #fffdf5;
+    box-shadow: inset 3px 0 0 #e8c46a;
+}
 
 .rating-table { width: 100%; border-collapse: collapse; }
 .rating-table tr { border-bottom: 1px solid var(--line-soft); }

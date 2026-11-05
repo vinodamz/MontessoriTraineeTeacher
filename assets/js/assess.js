@@ -34,6 +34,16 @@
         }
     });
 
+    // Editing a carried comment is the teacher reviewing it, same as a rating.
+    form.addEventListener('input', (ev) => {
+        const t = ev.target;
+        if (!t.matches('textarea')) return;
+        const box = t.closest('.is-carried');
+        if (!box) return;
+        box.classList.remove('is-carried');
+        box.querySelectorAll('.carry-tag').forEach(el => el.remove());
+    });
+
     // ---- Per-area bulk fill ------------------------------------------------
     form.addEventListener('click', (ev) => {
         const setBtn   = ev.target.closest('.bulk-set');

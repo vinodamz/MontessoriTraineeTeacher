@@ -13,11 +13,25 @@ jobs:
   lint:
     name: php -l on every .php file
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: test
+          MARIADB_DATABASE: mtt_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
+          extensions: pdo_mysql
           tools: none
       - name: php -l
         run: |
@@ -29,3 +43,9 @@ jobs:
         run: |
           php tests/api_cors_test.php
           php tests/app_workspace_test.php
+      - name: Assessment rating round-trip and comment carry-forward
+        env:
+          ASSESSMENT_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=mtt_test
+          ASSESSMENT_TEST_USER: root
+          ASSESSMENT_TEST_PASSWORD: test
+        run: php tests/assessment_rating_test.php
