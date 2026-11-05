@@ -90,6 +90,7 @@ require __DIR__ . '/../includes/header.php';
             <a class="btn btn-ghost" href="index.php?show=all" title="Include withdrawn/graduated children so their past assessments stay reachable">Former students (<?= $formerCount ?>)</a>
         <?php endif; ?>
         <?php if ($user['role'] === 'admin'): ?>
+            <a class="btn" href="admin.php?tab=indicators">Assessment settings · Indicators</a>
             <a class="btn btn-primary" href="admin.php?tab=students">Manage students</a>
         <?php endif; ?>
     </div>
