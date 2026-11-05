@@ -338,6 +338,9 @@ CREATE TABLE evaluation_cards (
     teacher_id          INT UNSIGNED NOT NULL,
     month_year          VARCHAR(8)   NOT NULL,
     indicator_id        INT UNSIGNED NOT NULL,
+    -- Fresh installs start as CHAR(1). migrate_078 replaces this with an
+    -- ENUM of every rating_config code (plus any non-blank code already
+    -- saved). The old ENUM('D','P','N') stored the other codes as ''.
     rating              CHAR(1)      NOT NULL,
     is_custom_indicator TINYINT(1)   NOT NULL DEFAULT 0,
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
