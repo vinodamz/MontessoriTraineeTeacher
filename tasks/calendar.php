@@ -112,7 +112,7 @@ include __DIR__ . '/../includes/header.php';
         <div class="empty">Nothing scheduled for <?= e($anchor->format('l, j F')) ?>.</div>
     <?php else: ?>
         <ul class="task-list">
-            <?php foreach ($list as $t): $cc = $t['column_color'] ?? '#EC407A'; ?>
+            <?php foreach ($list as $t): $cc = $t['column_color'] ?? '#E5447D'; ?>
                 <li class="task" style="border-left-color: <?= e($cc) ?>;">
                     <div class="task-head">
                         <?php if (!empty($t['column_name'])): ?>
@@ -154,7 +154,7 @@ elseif ($view === 'week'): ?>
                     <div class="cal-day-empty">—</div>
                 <?php else: ?>
                     <ul class="cal-day-list">
-                        <?php foreach ($list as $t): $cc = $t['column_color'] ?? '#EC407A'; ?>
+                        <?php foreach ($list as $t): $cc = $t['column_color'] ?? '#E5447D'; ?>
                             <li class="cal-mini" style="border-left-color: <?= e($cc) ?>;">
                                 <a href="tasks.php?edit=<?= (int)$t['id'] ?>"><?= e($t['title']) ?></a>
                                 <?php if (!empty($t['assignee_name'])): ?>
@@ -191,7 +191,7 @@ elseif ($view === 'month'): ?>
                 </a>
                 <?php $shown = 0; foreach ($list as $t):
                     if ($shown >= 3) break;
-                    $cc = $t['column_color'] ?? '#EC407A';
+                    $cc = $t['column_color'] ?? '#E5447D';
                 ?>
                     <a class="cal-month-task" style="background: <?= e($cc) ?>22; color: <?= e($cc) ?>;"
                        href="tasks.php?edit=<?= (int)$t['id'] ?>"

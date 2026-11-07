@@ -93,7 +93,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
 <?php else: ?>
     <ul class="task-list">
-        <?php foreach ($mine as $t): $colColor = $t['column_color'] ?? '#EC407A'; ?>
+        <?php foreach ($mine as $t): $colColor = $t['column_color'] ?? '#E5447D'; ?>
             <li class="task" style="border-left-color: <?= e($colColor) ?>;">
                 <div class="task-head">
                     <span class="task-status-pill" style="background: <?= e($colColor) ?>22; color: <?= e($colColor) ?>;">

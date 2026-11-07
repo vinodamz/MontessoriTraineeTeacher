@@ -138,15 +138,17 @@ $inr = 'fee_inr';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Fee Guide <?= $childName ? '— ' . e($childName) : '' ?> — Little Graduates</title>
+    <link rel="icon" href="/assets/img/logo.png">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap">
     <style>
         :root {
-            --bg: #FFF8F0; --bg-card: #fff; --ink: #2b2f33; --ink-soft: #5a6068;
-            --muted: #8b919a; --line: #e6dccb; --accent: #EC407A;
+            --bg: #FFFAF0; --bg-card: #fff; --ink: #38384a; --ink-soft: #5d5d78;
+            --muted: #5d5d78; --line: #E8D9C8; --accent: #E5447D;
             --radius: 14px; --radius-sm: 8px;
         }
         * { box-sizing: border-box; }
         body {
-            margin: 0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; font: 15px/1.6 "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: var(--ink); background: var(--bg);
         }
         .wrap { max-width: 700px; margin: 0 auto; padding: 1.2rem 1rem 4rem; }

@@ -71,28 +71,37 @@ final class ChildReportPdf extends FPDF
 
     public function Header(): void
     {
-        $this->SetFont('Helvetica', 'B', 9);
-        $this->SetTextColor(173, 20, 87);
-        $this->Cell(0, 6, pdf_txt(strtoupper($this->schoolName)), 0, 0, 'L');
+        $logo = 11.0;
+        $top = 8.0;
+        $path = dirname(__DIR__) . '/assets/img/logo.png';
+        if (is_file($path)) {
+            $this->Image($path, self::MARGIN, $top, $logo);
+        }
+        $x = self::MARGIN + $logo + 3.0;
+        $w = $this->GetPageWidth() - self::MARGIN - $x;
+        $this->SetXY($x, $top + 1.2);
+        $this->SetFont('Helvetica', 'B', 11);
+        $this->SetTextColor(184, 31, 86);
+        $this->Cell($w, 5.5, pdf_txt($this->schoolName), 0, 2, 'L');
         $this->SetFont('Helvetica', '', 9);
-        $this->SetTextColor(120, 120, 120);
-        $this->Cell(0, 6, pdf_txt($this->childName . ' - progress report'), 0, 1, 'R');
-        $this->SetDrawColor(233, 30, 99);
-        $this->SetLineWidth(0.6);
-        $this->Line(self::MARGIN, $this->GetY() + 1, $this->GetPageWidth() - self::MARGIN, $this->GetY() + 1);
+        $this->SetTextColor(93, 93, 120);
+        $this->Cell($w, 4.5, pdf_txt($this->childName . ' - progress report'), 0, 1, 'L');
+        $rule = $top + $logo + 2.2;
+        $this->SetDrawColor(229, 68, 125);
+        $this->SetLineWidth(0.5);
+        $this->Line(self::MARGIN, $rule, $this->GetPageWidth() - self::MARGIN, $rule);
         $this->SetLineWidth(0.2);
-        $this->Ln(5);
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
     }
 
     public function Footer(): void
     {
         $this->SetY(-13);
         $this->SetFont('Helvetica', '', 8);
-        $this->SetTextColor(140, 140, 140);
+        $this->SetTextColor(93, 93, 120);
         $this->Cell(0, 6, pdf_txt('Generated ' . date('j M Y')), 0, 0, 'L');
         $this->Cell(0, 6, pdf_txt('Page ' . $this->PageNo() . ' of {nb}'), 0, 0, 'R');
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
     }
 
     /** Usable width between margins. */
@@ -112,11 +121,11 @@ final class ChildReportPdf extends FPDF
         $this->need(14);
         $this->Ln(2);
         $this->SetFont('Helvetica', 'B', 12);
-        $this->SetTextColor(173, 20, 87);
+        $this->SetTextColor(184, 31, 86);
         $this->Cell(0, 7, pdf_txt($t), 0, 1, 'L');
-        $this->SetDrawColor(240, 205, 220);
+        $this->SetDrawColor(243, 197, 214);
         $this->Line(self::MARGIN, $this->GetY(), $this->GetPageWidth() - self::MARGIN, $this->GetY());
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
         $this->Ln(2);
     }
 
@@ -124,9 +133,9 @@ final class ChildReportPdf extends FPDF
     {
         $this->need(10);
         $this->SetFont('Helvetica', 'B', 10);
-        $this->SetTextColor(45, 107, 160);
+        $this->SetTextColor(43, 47, 119);
         $this->Cell(0, 6, pdf_txt($t), 0, 1, 'L');
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
     }
 
     /** Label/value rows. Values wrap. */
@@ -141,10 +150,10 @@ final class ChildReportPdf extends FPDF
             $this->need(5.2 * $lines + 1);
             $y = $this->GetY();
             $this->SetFont('Helvetica', '', 9);
-            $this->SetTextColor(110, 110, 110);
+            $this->SetTextColor(93, 93, 120);
             $this->SetXY(self::MARGIN, $y);
             $this->Cell($labelW, 5.2, pdf_txt((string)$label), 0, 0, 'L');
-            $this->SetTextColor(43, 43, 43);
+            $this->SetTextColor(56, 56, 74);
             $this->SetFont('Helvetica', '', 10);
             $this->SetXY(self::MARGIN + $labelW, $y);
             $this->MultiCell($valueW, 5.2, pdf_txt($value), 0, 'L');
@@ -172,7 +181,7 @@ final class ChildReportPdf extends FPDF
         $this->SetTextColor(120, 120, 120);
         $this->SetX(self::MARGIN);
         $this->MultiCell($this->contentWidth(), 4.4, pdf_txt($text), 0, 'L');
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
     }
 
     /** A filled rating pill with the code letter, drawn at ($x,$y). */
@@ -186,7 +195,7 @@ final class ChildReportPdf extends FPDF
         $this->SetTextColor(255, 255, 255);
         $this->SetXY($x, $y - 0.2);
         $this->Cell($w, $h + 0.4, pdf_txt($code), 0, 0, 'C');
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
     }
 
     /** How many lines MultiCell will use for $txt in a cell of width $w. */
@@ -252,7 +261,7 @@ final class ChildReportPdf extends FPDF
                 $this->Cell($widths[$i], $headH, pdf_txt(strtoupper((string)$h)), 0, 0, $i === 0 ? 'L' : 'C', true);
             }
             $this->Ln($headH);
-            $this->SetTextColor(43, 43, 43);
+            $this->SetTextColor(56, 56, 74);
         };
 
         $this->need($headH * 3);
@@ -281,12 +290,12 @@ final class ChildReportPdf extends FPDF
                     $this->drawChipCell($x, $y, $w, $rowH, $code, $text);
                 } elseif ($ci === 0) {
                     $this->SetFont('Helvetica', 'B', 8.4);
-                    $this->SetTextColor(43, 43, 43);
+                    $this->SetTextColor(56, 56, 74);
                     $this->SetXY($x, $y + 0.6);
                     $this->MultiCell($w, 4.2, $text, 0, 'L');
                 } else {
                     $this->SetFont('Helvetica', $isTotal ? 'B' : '', 8.2);
-                    $this->SetTextColor(43, 43, 43);
+                    $this->SetTextColor(56, 56, 74);
                     $lines = max(1, $this->lineCount($w - 1, $text));
                     $block = $lines * 4.0;
                     $this->SetXY($x, $y + max(0.4, ($rowH - $block) / 2));
@@ -344,7 +353,7 @@ final class ChildReportPdf extends FPDF
             $this->chip($start, $chipY, $code, $chipW, $chipH);
             if ($text !== '') {
                 $this->SetFont('Helvetica', '', 7.8);
-                $this->SetTextColor(43, 43, 43);
+                $this->SetTextColor(56, 56, 74);
                 $this->SetXY($start + $chipW + 1.2, $chipY - 0.4);
                 $this->Cell($labelW + 0.4, $chipH + 0.8, $text, 0, 0, 'L');
             }
@@ -353,7 +362,7 @@ final class ChildReportPdf extends FPDF
         $chipY = $y + 0.8;
         $this->chip($x + ($w - $chipW) / 2, $chipY, $code, $chipW, $chipH);
         $this->SetFont('Helvetica', '', 7);
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
         $this->SetXY($x + 0.4, $chipY + $chipH + 0.6);
         $this->MultiCell(max(4.0, $w - 0.8), 3.4, $text, 0, 'C');
     }
@@ -395,7 +404,7 @@ final class ChildReportPdf extends FPDF
             $this->SetXY($px($i) - 9, $y0 + $h + 1);
             $this->Cell(18, 4, pdf_txt(month_year_label($m)), 0, 0, 'C');
         }
-        $this->SetTextColor(43, 43, 43);
+        $this->SetTextColor(56, 56, 74);
 
         $palette = [[45,107,160],[91,165,71],[236,64,122],[245,179,66],[126,87,194],[93,168,162],[224,122,95],[160,92,123]];
         $this->SetLineWidth(0.7);
@@ -455,7 +464,7 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
     $pdf->SetTitle($fullName . ' - progress report');
     $pdf->SetAuthor($schoolName);
     $pdf->SetCreator('Little Graduates');
-    $pdf->SetMargins(14, 12, 14);
+    $pdf->SetMargins(14, 26, 14);
     $pdf->SetAutoPageBreak(true, 18);
     $pdf->AliasNbPages();
     $pdf->AddPage();
@@ -483,7 +492,7 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
             . '  |  ' . count($months) . ' month' . (count($months) === 1 ? '' : 's') . ' assessed'
         ), 0, 1, 'L');
     }
-    $pdf->SetTextColor(43, 43, 43);
+    $pdf->SetTextColor(56, 56, 74);
     $pdf->Ln(2);
 
     // ---- Child details ---------------------------------------------------
@@ -686,9 +695,9 @@ function child_report_pdf_bytes(array $d, string $schoolName = ''): string
         foreach ($overallComments as [$m, $c]) {
             $pdf->need(12);
             $pdf->SetFont('Helvetica', 'B', 9);
-            $pdf->SetTextColor(173, 20, 87);
+            $pdf->SetTextColor(184, 31, 86);
             $pdf->Cell(0, 5, pdf_txt(month_year_label($m)), 0, 1, 'L');
-            $pdf->SetTextColor(43, 43, 43);
+            $pdf->SetTextColor(56, 56, 74);
             $pdf->para($c);
         }
     }

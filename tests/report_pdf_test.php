@@ -93,6 +93,7 @@ $d = [
 
 $bytes = child_report_pdf_bytes($d, 'Little Graduates');
 expect_same(str_starts_with($bytes, '%PDF-'), true, 'download is a PDF');
+expect_contains($bytes, '/Subtype /Image', 'school logo is drawn on the report');
 $text = pdf_plain($bytes);
 
 expect_contains($text, 'smaller case', 'full skill name is in the download');
