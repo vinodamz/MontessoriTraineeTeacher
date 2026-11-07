@@ -341,7 +341,9 @@ CREATE TABLE evaluation_cards (
     -- Fresh installs start as CHAR(1). migrate_078 replaces this with an
     -- ENUM of every rating_config code (plus any non-blank code already
     -- saved). The old ENUM('D','P','N') stored the other codes as ''.
-    rating              CHAR(1)      NOT NULL,
+    -- NULL means the indicator was on the assessment and no developmental
+    -- level was chosen. It is not a rating code.
+    rating              CHAR(1)      NULL,
     is_custom_indicator TINYINT(1)   NOT NULL DEFAULT 0,
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

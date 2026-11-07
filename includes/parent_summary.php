@@ -12,10 +12,24 @@ function parent_summary_data(array $d): array
     if ($month !== null) {
         foreach ($d['indicators'] ?? [] as $category => $items) {
             foreach ($items as $item) {
-                $code = $item['ratings'][$month] ?? null;
-                if ($code === null || $code === '') continue;
+                $ratings = $item['ratings'] ?? [];
+                // Not on this month's assessment at all (rated in some other month only).
+                if (!array_key_exists($month, $ratings)) continue;
+                $code = $ratings[$month];
+                // NULL: the teacher left this indicator with no level. The
+                // report says "Yet to start". That phrase is display text
+                // only: the code stays empty, so it is not an area level
+                // and it is not carried onto next month's form.
+                // '': a historical blank from a code the old column could not
+                // store. Those rows stay off the report, as they were.
+                if ($code === null) {
+                    $skills[$category][] = ['text' => $item['text'], 'code' => '', 'label' => 'Yet to start'];
+                    continue;
+                }
+                $code = (string)$code;
+                if ($code === '') continue;
                 $skills[$category][] = ['text' => $item['text'], 'code' => $code,
-                    'label' => $d['ratings'][$code]['label'] ?? $code];
+                    'label' => (string)($d['ratings'][$code]['label'] ?? $code)];
             }
         }
     }
