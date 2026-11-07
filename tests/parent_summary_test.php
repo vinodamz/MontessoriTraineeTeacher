@@ -31,7 +31,8 @@ verify_summary(!isset($byText['Old skill']) && !isset($byText['Lost code']),'an 
 verify_summary(($s['areas']['Motor'] ?? '')==='Progressing' && !isset($s['areas']['Language']),'area summary still uses selected levels only');
 verify_summary($s['notes_month']==='Jan-26' && $s['notes'][''][0]==='Latest <note>','latest notes selected');
 ob_start(); parent_summary_render($d); $html=ob_get_clean();
-verify_summary(str_contains($html,'Baseline detail') && str_contains($html,'Latest &lt;note&gt;'),'baseline and escaped latest note appear');
+verify_summary(str_contains($html,'Latest &lt;note&gt;'),'escaped latest note appears');
+verify_summary(!str_contains($html,'First assessment') && !str_contains($html,'Learning areas') && !str_contains($html,'Baseline detail'),'first assessment and learning areas are not on the page');
 verify_summary(!str_contains($html,'Old note') && !str_contains($html,'Old skill') && !str_contains($html,'Lost code') && !str_contains($html,'Private observation'),'prior history, historical blanks and observations excluded');
 verify_summary(str_contains($html,'<span>Pour water</span><span class="skill-level">Progressing</span>'),'selected indicator still shows its level');
 verify_summary(str_contains($html,'<span>Leaves the beads</span><span class="skill-level">Yet to start</span>'),'unselected indicator is on the page as Yet to start');
@@ -48,6 +49,7 @@ if (preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $pdfStreams)) {
     }
 }
 verify_summary(str_contains($pdfText,'Pour water') && str_contains($pdfText,'Progressing'),'downloaded report still prints the selected level');
+verify_summary(!str_contains($pdfText,'First assessment') && !str_contains($pdfText,'Learning at a glance') && !str_contains($pdfText,'Baseline detail'),'first assessment and learning at a glance are not in the download');
 verify_summary(str_contains($pdfText,'Leaves the beads') && str_contains($pdfText,'Names the letters') && str_contains($pdfText,'Yet to start'),'downloaded report shows Yet to start for indicators with no level');
 verify_summary(!str_contains($pdfText,'Lost code') && !str_contains($pdfText,'Old skill'),'historical blanks and earlier-only skills stay out of the download');
 $beadsAt = strpos($pdfText, 'Leaves the beads');
