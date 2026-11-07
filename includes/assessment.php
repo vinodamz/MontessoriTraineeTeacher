@@ -15,19 +15,20 @@ require_once __DIR__ . '/functions.php';
  * Split a posted rating list into codes that can be stored and codes that
  * are not in the rating scheme.
  *
- * Blank values are dropped. They are not an error and they are not inserted:
- * an unrated skill simply has no row. A non-blank code that the scheme does
- * not know is returned in `invalid` so the save can stop instead of quietly
- * losing it.
+ * A blank is not a rating code and it is not an error. It is returned in
+ * `blank` so the save can keep that indicator on the assessment with no
+ * developmental level. A non-blank code that the scheme does not know is
+ * returned in `invalid` so the save can stop instead of quietly losing it.
  *
  * @param array<mixed,mixed> $posted
  * @param array<string,mixed> $knownCodes code => anything, active and retired
- * @return array{ok: array<string,string>, invalid: list<string>}
+ * @return array{ok: array<string,string>, invalid: list<string>, blank: list<string>}
  */
 function assessment_ratings_for_save(array $posted, array $knownCodes): array
 {
     $ok = [];
     $invalid = [];
+    $blank = [];
     foreach ($posted as $key => $val) {
         if (!is_string($key) && !is_int($key)) {
             continue;
@@ -37,6 +38,7 @@ function assessment_ratings_for_save(array $posted, array $knownCodes): array
         }
         $val = trim((string)$val);
         if ($val === '') {
+            $blank[] = (string)$key;
             continue;
         }
         if (!isset($knownCodes[$val])) {
@@ -45,7 +47,7 @@ function assessment_ratings_for_save(array $posted, array $knownCodes): array
         }
         $ok[(string)$key] = $val;
     }
-    return ['ok' => $ok, 'invalid' => $invalid];
+    return ['ok' => $ok, 'invalid' => $invalid, 'blank' => $blank];
 }
 
 /**
@@ -93,6 +95,47 @@ function assessment_store_rating(PDO $pdo, int $studentId, int $teacherId, strin
     }
 }
 
+/**
+ * Keep an indicator the teacher left with no level selected.
+ *
+ * The rating column is nullable for this case. NULL is not a code, so it
+ * is not carried forward and it is not part of a category average. The
+ * report lists the indicator and leaves the developmental level empty.
+ */
+function assessment_store_unrated(PDO $pdo, int $studentId, int $teacherId, string $month, int $indicatorId, int $isCustom): void
+{
+    $ins = $pdo->prepare("
+        INSERT INTO evaluation_cards
+            (student_id, teacher_id, month_year, indicator_id, rating, is_custom_indicator)
+        VALUES (:s, :t, :m, :i, NULL, :c)
+    ");
+    $ins->execute([
+        ':s' => $studentId,
+        ':t' => $teacherId,
+        ':m' => $month,
+        ':i' => $indicatorId,
+        ':c' => $isCustom,
+    ]);
+    $check = $pdo->prepare("
+        SELECT rating FROM evaluation_cards
+        WHERE student_id = :s AND teacher_id = :t AND month_year = :m
+          AND indicator_id = :i AND is_custom_indicator = :c
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $check->execute([
+        ':s' => $studentId,
+        ':t' => $teacherId,
+        ':m' => $month,
+        ':i' => $indicatorId,
+        ':c' => $isCustom,
+    ]);
+    $stored = $check->fetch(PDO::FETCH_NUM);
+    if ($stored === false || $stored[0] !== null) {
+        throw new RuntimeException('An indicator left without a level could not be stored, so nothing was saved.');
+    }
+}
+
 /** Teacher-facing save error. A truncated rating must not look like a success. */
 function assessment_save_failure_message(Throwable $e): string
 {
@@ -102,6 +145,9 @@ function assessment_save_failure_message(Throwable $e): string
     $detail = $e->getMessage();
     if ($e instanceof PDOException && (str_contains($detail, 'Data truncated') || str_contains($detail, '1265'))) {
         return 'A rating could not be stored, so nothing was saved.';
+    }
+    if ($e instanceof PDOException && (str_contains($detail, 'cannot be null') || str_contains($detail, '1048'))) {
+        return 'An indicator left without a level could not be stored, so nothing was saved.';
     }
     if ($e instanceof RuntimeException) {
         return $detail;
@@ -278,10 +324,13 @@ function assessment_prefill_from_previous(
         if (!isset($activeIndicatorKeys[$key])) {
             continue;
         }
-        if (!isset($activeCodes[$row['rating']])) {
+        // No level selected, or a historical blank from a code the old column
+        // could not store. Neither is a rating to copy onto the next month.
+        $rating = $row['rating'];
+        if ($rating === null || $rating === '' || !isset($activeCodes[$rating])) {
             continue;
         }
-        $ratings[$key] = (string)$row['rating'];
+        $ratings[$key] = (string)$rating;
     }
 
     $prior = assessment_load_month_comments($pdo, $studentId, $from);

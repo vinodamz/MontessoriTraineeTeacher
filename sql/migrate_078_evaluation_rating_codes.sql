@@ -16,6 +16,10 @@
 -- A CHAR/VARCHAR column (a database built from schema.sql) is switched to
 -- that same ENUM once rating_config or the saved rows have a code.
 --
+-- The column is left nullable. NULL means the teacher saved the indicator
+-- with no developmental level. Forcing NOT NULL would turn those rows into
+-- blanks in non-strict mode. NULL is not added to the ENUM.
+--
 -- Idempotent. The loose sql_mode is only for this ALTER: strict mode can
 -- refuse the change while those historical blanks are still in the column.
 -- It is put back at the end of this file.
@@ -99,14 +103,14 @@ BEGIN
 
         IF dtype = 'enum' AND updated <> coltype THEN
             SET @lg_eval_rating_sql = CONCAT(
-                'ALTER TABLE evaluation_cards MODIFY COLUMN rating ', updated, ' NOT NULL'
+                'ALTER TABLE evaluation_cards MODIFY COLUMN rating ', updated, ' NULL'
             );
             PREPARE lg_eval_rating_stmt FROM @lg_eval_rating_sql;
             EXECUTE lg_eval_rating_stmt;
             DEALLOCATE PREPARE lg_eval_rating_stmt;
         ELSEIF dtype IN ('char', 'varchar') AND list <> '' THEN
             SET @lg_eval_rating_sql = CONCAT(
-                'ALTER TABLE evaluation_cards MODIFY COLUMN rating ENUM(', list, ') NOT NULL'
+                'ALTER TABLE evaluation_cards MODIFY COLUMN rating ENUM(', list, ') NULL'
             );
             PREPARE lg_eval_rating_stmt FROM @lg_eval_rating_sql;
             EXECUTE lg_eval_rating_stmt;

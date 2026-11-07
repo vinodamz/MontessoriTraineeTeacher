@@ -117,7 +117,11 @@ function child_report_data(int $studentId): ?array
                     'ratings'  => [],
                 ];
             }
-            $byKey[$key]['ratings'][$r['month_year']] = (string)$r['rating'];
+            // NULL is an indicator the teacher saved with no level chosen.
+            // '' is the older "column could not store this code" blank, and
+            // stays distinguishable so the report does not start listing it.
+            $rating = $r['rating'];
+            $byKey[$key]['ratings'][$r['month_year']] = $rating === null ? null : (string)$rating;
         }
         foreach ($byKey as $row) $d['indicators'][$row['category']][] = $row;
         foreach ($d['indicators'] as $cat => $list) {
@@ -125,6 +129,19 @@ function child_report_data(int $studentId): ?array
             $d['indicators'][$cat] = $list;
         }
         ksort($d['indicators']);
+        // A month where every indicator was left unselected has rows here
+        // and no category average. It still belongs on the report. A month
+        // that only has historical '' ratings does not, matching the
+        // previous report.
+        foreach ($d['indicators'] as $list) {
+            foreach ($list as $ind) {
+                foreach ($ind['ratings'] as $month => $code) {
+                    if ($code === '') continue;
+                    if (!in_array($month, $d['months'], true)) $d['months'][] = $month;
+                }
+            }
+        }
+        usort($d['months'], 'compare_month_year');
     } catch (Throwable $e) {}
 
     // Teacher comments, per month → per category ('' = overall).

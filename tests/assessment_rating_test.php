@@ -55,7 +55,8 @@ expect_same($split['ok'], [
     'cust:9' => 'D',
 ], 'configured ratings are kept, including M, E and I');
 expect_same($split['invalid'], ['Z'], 'a code outside the rating scheme is rejected');
-expect_same(isset($split['ok']['std:5']) || isset($split['ok']['std:6']), false, 'blank ratings are not written');
+expect_same(isset($split['ok']['std:5']) || isset($split['ok']['std:6']), false, 'blank ratings are not written as codes');
+expect_same($split['blank'], ['std:5', 'std:6'], 'an indicator with no level is kept on the assessment');
 
 expect_same(assessment_previous_month(['Jun-25', 'Mar-26'], 'Oct-26'), 'Mar-26', 'previous month is chronological, not alphabetical');
 expect_same(assessment_previous_month(['Oct-26'], 'Mar-26'), null, 'a later month is not carried backwards');
@@ -285,6 +286,29 @@ expect_same($stored, ['M', 'E', 'I'], 'saving M, E and I in non-strict mode read
 $blankAfter = (string)$pdo->query("SELECT rating FROM evaluation_cards WHERE id = $blankId")->fetchColumn();
 expect_same($blankAfter, '', 'the historical blank row is still blank after a successful M/E/I save');
 
+assessment_store_unrated($pdo, 1, 1, 'Nov-26', 7, 0);
+$unratedRow = $pdo->query("SELECT rating FROM evaluation_cards WHERE student_id = 1 AND month_year = 'Nov-26' AND indicator_id = 7")->fetch(PDO::FETCH_NUM);
+expect_same($unratedRow[0], null, 'an indicator with no level selected is stored with an empty level');
+$stillSelected = $pdo->query("
+    SELECT rating FROM evaluation_cards
+    WHERE student_id = 1 AND month_year = 'Nov-26' AND indicator_id IN (4, 5, 6)
+    ORDER BY indicator_id
+")->fetchAll(PDO::FETCH_COLUMN);
+expect_same($stillSelected, ['M', 'E', 'I'], 'storing an unselected indicator does not change the selected ones');
+$carriedOn = assessment_prefill_from_previous(
+    $pdo,
+    1,
+    'Dec-26',
+    false,
+    false,
+    '',
+    [],
+    ['MOTOR'],
+    $known,
+    ['std:4' => true, 'std:7' => true]
+);
+expect_same($carriedOn['ratings'], ['std:4' => 'M'], 'a selected level is carried and an unselected indicator is not');
+
 run_migration($pdo, __DIR__ . '/../sql/migrate_078_evaluation_rating_codes.sql');
 $typeAgain = (string)$pdo->query("
     SELECT COLUMN_TYPE FROM information_schema.columns
@@ -333,6 +357,40 @@ expect_same(
     ['X', ''],
     'converting the column keeps the retired code and the blank'
 );
+
+// A database where migrate_078 already widened the column is not altered
+// again. migrate_079 still has to allow an unselected indicator.
+$pdo->exec('DROP TABLE evaluation_cards');
+$pdo->exec("
+    CREATE TABLE evaluation_cards (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        student_id INT UNSIGNED NOT NULL,
+        teacher_id INT UNSIGNED NOT NULL,
+        month_year VARCHAR(8) NOT NULL,
+        indicator_id INT UNSIGNED NOT NULL,
+        rating ENUM('D','P','N','M','E','I') NOT NULL,
+        is_custom_indicator TINYINT(1) NOT NULL DEFAULT 0
+    )
+");
+run_migration($pdo, __DIR__ . '/../sql/migrate_078_evaluation_rating_codes.sql');
+$unchanged = $pdo->query("
+    SELECT COLUMN_TYPE, IS_NULLABLE FROM information_schema.columns
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'evaluation_cards' AND COLUMN_NAME = 'rating'
+")->fetch();
+expect_same($unchanged['COLUMN_TYPE'], "enum('D','P','N','M','E','I')", 'an already-complete rating column is not rewritten');
+expect_same($unchanged['IS_NULLABLE'], 'NO', 'migrate_078 leaves an already-complete column NOT NULL');
+run_migration($pdo, __DIR__ . '/../sql/migrate_079_evaluation_unrated.sql');
+run_migration($pdo, __DIR__ . '/../sql/migrate_079_evaluation_unrated.sql');
+$opened = $pdo->query("
+    SELECT COLUMN_TYPE, IS_NULLABLE FROM information_schema.columns
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'evaluation_cards' AND COLUMN_NAME = 'rating'
+")->fetch();
+expect_same($opened['COLUMN_TYPE'], "enum('D','P','N','M','E','I')", 'allowing an empty level does not change the rating codes');
+expect_same($opened['IS_NULLABLE'], 'YES', 'an unselected indicator can be stored on an existing rating column');
+assessment_store_rating($pdo, 1, 1, 'Nov-26', 1, 'P', 0);
+assessment_store_unrated($pdo, 1, 1, 'Nov-26', 2, 0);
+$levels = $pdo->query("SELECT indicator_id, rating FROM evaluation_cards ORDER BY indicator_id")->fetchAll(PDO::FETCH_NUM);
+expect_same($levels, [[1, 'P'], [2, null]], 'the selected level is kept and the unselected indicator has no level');
 
 echo "\n$passed passed, $failed failed\n";
 exit($failed > 0 ? 1 : 0);

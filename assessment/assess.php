@@ -84,20 +84,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($ratings))     $ratings = [];
     if (!is_array($catComments)) $catComments = [];
 
-    // Blank skills are simply not stored. A code the scheme does not know
-    // aborts the save — it must not be written as '' and it must not be
-    // dropped while the rest of the month is replaced.
+    // A blank is not a rating code. The indicator still belongs on this
+    // assessment, with no developmental level, so the report can list it.
+    // A code the scheme does not know aborts the save — it must not be
+    // written as '' and it must not be dropped while the rest of the month
+    // is replaced.
     $split = assessment_ratings_for_save($ratings, $rmap);
     if ($split['invalid'] !== []) {
         flash_set('error', 'A rating on this form is not one of the configured codes, so nothing was saved.');
         redirect("assess.php?student_id=$studentId&month=" . urlencode($month));
     }
     $ratings = $split['ok'];
+    $unrated = $split['blank'];
 
-    // Group ratings by category (we need to know each indicator's category).
+    // Group every indicator on the form by category, rated or not.
     $stdIds  = [];
     $custIds = [];
-    foreach ($ratings as $key => $val) {
+    foreach (array_merge(array_keys($ratings), $unrated) as $key) {
         [$kind, $idStr] = explode(':', $key, 2);
         if ($kind === 'std')  $stdIds[]  = (int)$idStr;
         else                  $custIds[] = (int)$idStr;
@@ -167,6 +170,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $catTotals[$cat] ??= [0, 0];
             $catTotals[$cat][0] += (int)$rmap[$val]['numeric_value'];
             $catTotals[$cat][1] += 1;
+        }
+
+        // Unselected indicators are kept, with no level. They do not move
+        // the category average.
+        foreach ($unrated as $key) {
+            if (!isset($indicatorCat[$key])) continue;
+            [$kind, $idStr] = explode(':', $key, 2);
+            assessment_store_unrated(
+                $pdo,
+                $studentId,
+                $assessingTeacherId,
+                $month,
+                (int)$idStr,
+                $kind === 'cust' ? 1 : 0
+            );
         }
 
         $insA = $pdo->prepare("
@@ -475,6 +493,8 @@ usort($monthsOrdered, fn($a, $b) => compare_month_year($b, $a));
                                 </span>
                                 <input type="hidden" name="rating[<?= e($key) ?>]" value="<?= e($sel) ?>">
                             <?php else: ?>
+                            <?php // An unchecked radio is not submitted. The empty value keeps the indicator on the assessment. ?>
+                            <input type="hidden" name="rating[<?= e($key) ?>]" value="">
                             <?php foreach ($ratingCodes as $code): ?>
                                 <label class="rating-pick rating-<?= e($code) ?> <?= $sel === $code ? 'is-on' : '' ?>"
                                        style="--ring: <?= e($rmap[$code]['color']) ?>">
