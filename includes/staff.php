@@ -305,32 +305,151 @@ function staff_leave_statuses(): array
     ];
 }
 
-// ---- Leave balance: accrual model ---------------------------------------
+// ---- Leave balance: monthly credit --------------------------------------
 //
-// Leave accrues — one day per completed month by default — carries forward,
-// and is drawn down by approved paid leave. Nothing about the balance is
-// stored except the events an admin creates:
+// On the 1st of each month every active staff member receives one paid leave
+// day (the rate in app settings). Days that are not used stay in the balance
+// and add to the next month's credit. Approved paid leave draws the balance
+// down; anything beyond it is loss of pay.
 //
-//     balance(as_of) = opening + accrual + adjustments − paid leave taken
+//     balance(as_of) = opening
+//                    + monthly credits dated after that opening and on or
+//                      before as_of
+//                    + adjustments after the opening
+//                    − paid leave taken after the opening
 //
-// Accrual is computed, never written. A monthly row would need a scheduler
-// this host cannot be relied on to run, and a month it missed would quietly
-// underpay somebody. Counting completed months at read time cannot drift.
+// The credit is a row in staff_leave_credits, one per person per month.
+// The primary key makes a second write for the same month a no-op, so the
+// catch-up below can run on every page view and from scripts/leave_monthly_credit.php
+// without ever crediting a month twice or, while the person is still active,
+// skipping one because the 1st was missed.
 //
-// The "opening" entry is the important one: it lets an admin say "as of
-// today, this person has 7 days" without reconstructing history. The latest
-// opening on or before the date being asked about wins, and everything
-// before it is ignored.
+// Inactive staff are skipped by the catch-up. A credit already written while
+// they were active stays — deactivating someone does not wipe leave they
+// have already earned.
+//
+// The opening entry is how a starting figure is recorded. The latest opening
+// on or before the date being asked about wins, and everything on or before
+// it is ignored: the number is the balance at the end of that day.
+//
+// The first time this runs, each person who was already on the roster is
+// given an opening equal to the balance the previous "completed month"
+// calculation showed on the day before the rule started. That keeps the
+// figure the school was already looking at, and the new credit begins on
+// top of it. Someone who joins later starts at zero and receives a day on
+// the first 1st that falls on or after the day they joined.
 
 const STAFF_LEAVE_ACCRUAL_DEFAULT = 1.0;
+const STAFF_LEAVE_SEED_NOTE = 'Starting balance carried in when monthly leave credit began';
 
-/** Days earned per completed month. Clamped to something sane. */
+/** Days credited on the 1st of each month. Clamped to something sane. */
 function staff_leave_accrual_rate(): float
 {
     $v = (float)app_setting('staff_leave_accrual_per_month', (string)STAFF_LEAVE_ACCRUAL_DEFAULT);
     if ($v < 0) $v = 0.0;
     if ($v > 31) $v = 31.0;
     return $v;
+}
+
+/**
+ * Firsts of the month to credit.
+ *
+ * A credit is included when its 1st is on or after $floor (the month the
+ * rule started), strictly after $after (an opening balance already speaks
+ * for that day), and on or before $through.
+ *
+ * @return list<string> Y-m-d, always the 1st
+ */
+function staff_leave_credit_months(string $floor, string $after, string $through): array
+{
+    $floorTs = strtotime($floor);
+    $afterTs = strtotime($after);
+    $throughTs = strtotime($through);
+    if ($floorTs === false || $afterTs === false || $throughTs === false) return [];
+
+    $cursor = new DateTimeImmutable(date('Y-m-01', $floorTs));
+    $end    = new DateTimeImmutable(date('Y-m-01', $throughTs));
+    $afterD = new DateTimeImmutable(date('Y-m-d', $afterTs));
+    if ($cursor > $end) return [];
+
+    $out = [];
+    for ($i = 0; $i < 600 && $cursor <= $end; $i++) {
+        if ($cursor > $afterD) $out[] = $cursor->format('Y-m-d');
+        $cursor = $cursor->modify('first day of next month');
+    }
+    return $out;
+}
+
+/**
+ * Draw approved leave against a balance, oldest request first.
+ *
+ * $lines are ['id','type','from','to','days','draws']. 'draws' is false for
+ * unpaid leave, which is loss of pay and does not consume the balance.
+ * $available may be negative: a shortfall has to be filled by this month's
+ * credit before any further day is paid.
+ *
+ * @param list<array{id?:int,type?:string,from?:string,to?:string,days:float,draws?:bool}> $lines
+ */
+function staff_leave_allocate(float $available, array $lines): array
+{
+    $avail = round($available, 2);
+    $paid = 0.0; $lop = 0.0; $unpaid = 0.0; $out = [];
+    foreach ($lines as $r) {
+        $days = round((float)$r['days'], 2);
+        if (empty($r['draws'])) {
+            $thisPaid = 0.0;
+            $thisLop  = $days;
+            $unpaid  += $days;
+            $lop     += $days;
+        } else {
+            $pot      = max(0.0, $avail);
+            $thisPaid = min($days, $pot);
+            $thisLop  = round($days - $thisPaid, 2);
+            $avail    = round($avail - $thisPaid, 2);
+            $paid    += $thisPaid;
+            $lop     += $thisLop;
+        }
+        $out[] = [
+            'id'   => (int)($r['id'] ?? 0),
+            'type' => (string)($r['type'] ?? ''),
+            'from' => (string)($r['from'] ?? ''),
+            'to'   => (string)($r['to'] ?? ''),
+            'days' => $days,
+            'paid' => round($thisPaid, 2),
+            'lop'  => round($thisLop, 2),
+        ];
+    }
+    return [
+        'available'       => round($available, 2),
+        'paid_days'       => round($paid, 2),
+        'lop_days'        => round($lop, 2),
+        'unpaid_days'     => round($unpaid, 2),
+        'closing_balance' => round($avail, 2),
+        'lines'           => $out,
+    ];
+}
+
+/** One sentence for the leave page and the staff profile. */
+function staff_leave_balance_explanation(array $balance): string
+{
+    $rate = rtrim(rtrim(number_format((float)($balance['rate'] ?? 1), 1), '0'), '.');
+    return 'Active staff receive ' . $rate . ' paid leave day on the 1st of each month. '
+        . 'Days not used carry forward and are added to the next month\'s credit. '
+        . 'Leave beyond the balance, and all unpaid leave, is loss of pay on the payslip.';
+}
+
+/** How this person's starting figure was arrived at. */
+function staff_leave_starting_balance_note(array $balance): string
+{
+    if (!empty($balance['opening_seed'])) {
+        return 'The starting balance is the leave already on record the day before monthly credit began. '
+            . 'It is not an extra grant. Use Set balance if the figure should be different.';
+    }
+    if (!empty($balance['from_open'])) {
+        return 'An admin set this starting balance. A new day is added on each 1st after that date.';
+    }
+    return 'No starting balance has been set, so this person starts at zero and receives a day '
+        . 'on the first 1st that falls on or after the day they joined.';
 }
 
 /** Leave types that draw on the balance. 'unpaid' deliberately does not. */
@@ -368,9 +487,9 @@ function staff_leave_opening(int $userId, string $asOf): ?array
 /**
  * Completed calendar months between two dates.
  *
- * "Completed" means the day-of-month has come round again: 15 Jan → 14 Feb is
- * zero months, 15 Jan → 15 Feb is one. Accrual is credited at the end of a
- * month of service, not the start, so nobody is paid for time not yet served.
+ * Used only to freeze the balance people already had when monthly credit
+ * on the 1st replaced this rule. "Completed" means the day-of-month has
+ * come round again: 15 Jan → 14 Feb is zero months, 15 Jan → 15 Feb is one.
  */
 function staff_leave_months_completed(string $from, string $to): int
 {
@@ -380,12 +499,17 @@ function staff_leave_months_completed(string $from, string $to): int
     return (int)$a->diff($b)->m + ((int)$a->diff($b)->y * 12);
 }
 
-/** Approved paid leave taken in a window (excludes unpaid, which never draws). */
-function staff_leave_taken(int $userId, string $from, string $to): float
+/**
+ * Approved paid leave taken after $after and on or before $to.
+ *
+ * $after is exclusive so an opening dated that day is not reduced by leave
+ * that the opening already accounts for. Unpaid leave never draws.
+ */
+function staff_leave_taken(int $userId, string $after, string $to): float
 {
     $types = staff_leave_paid_types();
     $in    = implode(',', array_map(fn($i) => ':t' . $i, array_keys($types)));
-    $p     = [':u' => $userId, ':f' => $from, ':e' => $to];
+    $p     = [':u' => $userId, ':f' => $after, ':e' => $to];
     foreach ($types as $i => $t) $p[':t' . $i] = $t;
 
     $s = db()->prepare(
@@ -393,81 +517,310 @@ function staff_leave_taken(int $userId, string $from, string $to): float
            FROM staff_leave_requests
           WHERE user_id = :u AND status = 'approved'
             AND leave_type IN ($in)
-            AND start_date >= :f AND start_date <= :e"
+            AND start_date > :f AND start_date <= :e"
     );
     $s->execute($p);
     return (float)$s->fetchColumn();
 }
 
-/** Manual adjustments in a window. */
-function staff_leave_adjustments(int $userId, string $from, string $to): float
+/** Manual adjustments after $after and on or before $to. $after is exclusive. */
+function staff_leave_adjustments(int $userId, string $after, string $to): float
 {
     $s = db()->prepare(
         "SELECT COALESCE(SUM(days), 0) FROM staff_leave_ledger
-          WHERE user_id = :u AND kind = 'adjust' AND entry_date >= :f AND entry_date <= :e"
+          WHERE user_id = :u AND kind = 'adjust' AND entry_date > :f AND entry_date <= :e"
     );
-    $s->execute([':u' => $userId, ':f' => $from, ':e' => $to]);
+    $s->execute([':u' => $userId, ':f' => $after, ':e' => $to]);
     return (float)$s->fetchColumn();
 }
 
-/**
- * The balance as at a date, with the working shown — the page needs to be
- * able to explain the number, not just print it.
- */
-function staff_leave_balance_at(int $userId, ?string $asOf = null): array
+function staff_leave_setting_put(string $key, string $value): void
 {
-    $asOf = $asOf ?: date('Y-m-d');
-    $open = staff_leave_opening($userId, $asOf);
+    db()->prepare(
+        "INSERT INTO app_settings (setting_key, setting_value) VALUES (:k, :v)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+    )->execute([':k' => $key, ':v' => $value]);
+    app_setting_clear_cache();
+}
 
-    // With no opening entry, accrual has to start somewhere. The schema has
-    // no staff joining date — only students have one — so the account's
-    // creation date is the closest thing we know, falling back to the start
-    // of the current year. Never the epoch, which would hand somebody a
-    // decade of leave on their first day.
-    //
-    // This is a guess, and the page says so. Setting an opening balance
-    // replaces it with a real figure, which is the intended path.
+/** Y-m-01 of the month monthly credit began. Stable once written. */
+function staff_leave_credit_start(): string
+{
+    $v = (string)app_setting('staff_leave_credit_start', '');
+    if (preg_match('/^\d{4}-\d{2}-01$/', $v)) return $v;
+    $start = date('Y-m-01');
+    try {
+        staff_leave_setting_put('staff_leave_credit_start', $start);
+    } catch (Throwable $e) { /* settings table not migrated yet */ }
+    return $start;
+}
+
+function staff_leave_credits_ready(): bool
+{
+    static $ok = null;
+    if ($ok !== null) return $ok;
+    try {
+        db()->query('SELECT 1 FROM staff_leave_credits LIMIT 1');
+        $ok = true;
+    } catch (Throwable $e) {
+        $ok = false;
+    }
+    return $ok;
+}
+
+/** Allow a test to run the catch-up again after changing who is active. */
+function staff_leave_sync_reset(): void
+{
+    $GLOBALS['_staff_leave_synced'] = false;
+}
+
+function staff_leave_joined_on(int $userId): string
+{
+    try {
+        $s = db()->prepare('SELECT DATE(created_at) FROM users WHERE id = :i');
+        $s->execute([':i' => $userId]);
+        $d = (string)($s->fetchColumn() ?: '');
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? $d : '';
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+/** @return array{days:float,n:int} */
+function staff_leave_credit_sum(int $userId, string $after, string $through): array
+{
+    try {
+        $s = db()->prepare(
+            "SELECT COALESCE(SUM(days), 0) AS days, COUNT(*) AS n
+               FROM staff_leave_credits
+              WHERE user_id = :u AND credit_month > :a AND credit_month <= :t"
+        );
+        $s->execute([':u' => $userId, ':a' => $after, ':t' => $through]);
+        $r = $s->fetch() ?: [];
+        return ['days' => (float)($r['days'] ?? 0), 'n' => (int)($r['n'] ?? 0)];
+    } catch (Throwable $e) {
+        return ['days' => 0.0, 'n' => 0];
+    }
+}
+
+function staff_leave_credit_on(int $userId, string $monthFirst): float
+{
+    try {
+        $s = db()->prepare(
+            'SELECT days FROM staff_leave_credits WHERE user_id = :u AND credit_month = :m'
+        );
+        $s->execute([':u' => $userId, ':m' => $monthFirst]);
+        $v = $s->fetchColumn();
+        return $v === false ? 0.0 : (float)$v;
+    } catch (Throwable $e) {
+        return 0.0;
+    }
+}
+
+/**
+ * Balance under the old "one day per completed month" rule.
+ *
+ * Only the one-time starting-balance snapshot calls this. It must not read
+ * staff_leave_credits, or the snapshot would count the new credit twice.
+ */
+function staff_leave_legacy_balance_at(int $userId, string $asOf): array
+{
+    $open = staff_leave_opening($userId, $asOf);
     if ($open) {
         $since   = (string)$open['entry_date'];
         $opening = (float)$open['days'];
     } else {
-        $s = db()->prepare("SELECT DATE(created_at) AS d FROM users WHERE id = :i");
-        $s->execute([':i' => $userId]);
-        $created = (string)($s->fetchColumn() ?: '');
-        $since   = ($created !== '' && $created > '2000-01-01') ? $created : date('Y-01-01');
+        $created = staff_leave_joined_on($userId);
+        $since   = ($created !== '' && $created > '2000-01-01') ? $created : date('Y-01-01', strtotime($asOf));
         $opening = 0.0;
     }
-    if ($since > $asOf) { $since = $asOf; }
+    if ($since > $asOf) $since = $asOf;
+    $after = date('Y-m-d', strtotime($since . ' -1 day'));
 
     $rate    = staff_leave_accrual_rate();
     $months  = staff_leave_months_completed($since, $asOf);
     $accrued = round($months * $rate, 2);
-    $adjust  = staff_leave_adjustments($userId, $since, $asOf);
-    $taken   = staff_leave_taken($userId, $since, $asOf);
-
+    $adjust  = staff_leave_adjustments($userId, $after, $asOf);
+    $taken   = staff_leave_taken($userId, $after, $asOf);
     return [
         'as_of'     => $asOf,
         'since'     => $since,
         'from_open' => $open !== null,
         'opening'   => round($opening, 2),
+        'opening_note' => $open ? (string)($open['note'] ?? '') : '',
+        'opening_seed' => false,
         'rate'      => $rate,
         'months'    => $months,
         'accrued'   => $accrued,
         'adjust'    => round($adjust, 2),
         'taken'     => round($taken, 2),
         'balance'   => round($opening + $accrued + $adjust - $taken, 2),
+        'this_month_credit' => 0.0,
+        'credit_start' => '',
     ];
 }
 
 /**
- * Split a month's approved leave into paid days and LOP days.
+ * Write any monthly credits that are due, once per request.
  *
- * Requests are walked oldest-first and drawn against the balance as it stood
- * at the start of the month; once it runs out the rest is LOP. Chronological
- * order matters — whoever booked first should be the one who is covered.
+ * Active staff receive a row for every 1st from the rule's start (or from
+ * the day after their opening / joining date) through today. Inactive staff
+ * receive nothing. Running it again inserts nothing new.
  *
- * Accrual for the month itself is not credited mid-month, so a person cannot
- * spend a day they have not finished earning.
+ * @return int rows newly inserted
+ */
+function staff_leave_sync_credits(): int
+{
+    if (!empty($GLOBALS['_staff_leave_synced'])) return 0;
+    $GLOBALS['_staff_leave_synced'] = true;
+    if (!staff_leave_credits_ready()) return 0;
+
+    try {
+        staff_leave_seed_openings();
+        $today = date('Y-m-d');
+        $floor = staff_leave_credit_start();
+        $rate  = round(staff_leave_accrual_rate(), 2);
+        $ins   = db()->prepare(
+            'INSERT IGNORE INTO staff_leave_credits (user_id, credit_month, days) VALUES (:u, :m, :d)'
+        );
+        $have = db()->prepare(
+            'SELECT credit_month FROM staff_leave_credits WHERE user_id = :u AND credit_month > :a'
+        );
+        $n = 0;
+        foreach (staff_roster(true) as $person) {
+            $uid = (int)$person['id'];
+            $open = staff_leave_opening($uid, $today);
+            if ($open) {
+                $after = (string)$open['entry_date'];
+            } else {
+                $joined = staff_leave_joined_on($uid);
+                $anchor = ($joined !== '' && $joined > '2000-01-01') ? $joined : $floor;
+                $after  = date('Y-m-d', strtotime($anchor . ' -1 day'));
+            }
+            $have->execute([':u' => $uid, ':a' => $after]);
+            $got = [];
+            foreach ($have->fetchAll() as $row) {
+                $got[(string)$row['credit_month']] = true;
+            }
+            foreach (staff_leave_credit_months($floor, $after, $today) as $month) {
+                if (isset($got[$month])) continue;
+                $ins->execute([':u' => $uid, ':m' => $month, ':d' => $rate]);
+                if ($ins->rowCount() > 0) $n++;
+            }
+        }
+        // Keep this month's paid / loss-of-pay split on each request in step
+        // with the balance, including for people who did not get a credit.
+        $year = (int)date('Y');
+        $month = (int)date('n');
+        foreach (staff_roster(false) as $person) {
+            staff_leave_resync_month((int)$person['id'], $year, $month);
+        }
+        return $n;
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/**
+ * Freeze the balance the old rule was already showing, once.
+ *
+ * The snapshot is dated the day before monthly credit begins, so the first
+ * credit on the 1st sits on top of it and is not counted twice. People who
+ * joined after that day are left alone — they start at zero.
+ */
+function staff_leave_seed_openings(): void
+{
+    if (app_setting('staff_leave_openings_seeded', '') === '1') return;
+    if (!staff_leave_credits_ready()) return;
+
+    $start = staff_leave_credit_start();
+    $asOf  = date('Y-m-d', strtotime($start . ' -1 day'));
+    $chk = db()->prepare(
+        "SELECT id FROM staff_leave_ledger
+          WHERE user_id = :u AND kind = 'opening' AND entry_date = :d AND note = :n
+          LIMIT 1"
+    );
+    foreach (staff_roster(false) as $person) {
+        $uid = (int)$person['id'];
+        $joined = staff_leave_joined_on($uid);
+        if ($joined !== '' && $joined > $asOf) continue;
+        $chk->execute([':u' => $uid, ':d' => $asOf, ':n' => STAFF_LEAVE_SEED_NOTE]);
+        if ($chk->fetch()) continue;
+        $existing = staff_leave_opening($uid, $asOf);
+        if ($existing && (string)$existing['entry_date'] === $asOf) continue;
+        $legacy = staff_leave_legacy_balance_at($uid, $asOf);
+        staff_leave_ledger_add(
+            $uid, $asOf, 'opening', (float)$legacy['balance'], STAFF_LEAVE_SEED_NOTE, null
+        );
+    }
+    staff_leave_setting_put('staff_leave_openings_seeded', '1');
+}
+
+/**
+ * The balance as at a date, with the working shown — the page needs to be
+ * able to explain the number, not just print it.
+ *
+ * Before the credits table exists (the moment between deploying the code and
+ * running the migration) this still answers with the old completed-month
+ * figure, so the page does not drop everyone's balance to zero.
+ */
+function staff_leave_balance_at(int $userId, ?string $asOf = null): array
+{
+    $asOf = $asOf ?: date('Y-m-d');
+    if (!staff_leave_credits_ready()) {
+        return staff_leave_legacy_balance_at($userId, $asOf);
+    }
+    staff_leave_sync_credits();
+
+    $open = staff_leave_opening($userId, $asOf);
+    if ($open) {
+        $since   = (string)$open['entry_date'];
+        $opening = (float)$open['days'];
+        $after   = $since; // the opening already is the balance at the end of that day
+        $note    = (string)($open['note'] ?? '');
+    } else {
+        $joined  = staff_leave_joined_on($userId);
+        $since   = ($joined !== '' && $joined > '2000-01-01') ? $joined : staff_leave_credit_start();
+        if ($since > $asOf) $since = $asOf;
+        $opening = 0.0;
+        $after   = date('Y-m-d', strtotime($since . ' -1 day'));
+        $note    = '';
+    }
+
+    $rate   = staff_leave_accrual_rate();
+    $sum    = staff_leave_credit_sum($userId, $after, $asOf);
+    $adjust = staff_leave_adjustments($userId, $after, $asOf);
+    $taken  = staff_leave_taken($userId, $after, $asOf);
+    $monthFirst = date('Y-m-01', strtotime($asOf));
+    $thisCredit = ($monthFirst > $after && $monthFirst <= $asOf)
+        ? staff_leave_credit_on($userId, $monthFirst)
+        : 0.0;
+
+    return [
+        'as_of'     => $asOf,
+        'since'     => $since,
+        'from_open' => $open !== null,
+        'opening'   => round($opening, 2),
+        'opening_note' => $note,
+        'opening_seed' => $note === STAFF_LEAVE_SEED_NOTE,
+        'rate'      => $rate,
+        'months'    => (int)$sum['n'],
+        'accrued'   => round((float)$sum['days'], 2),
+        'adjust'    => round($adjust, 2),
+        'taken'     => round($taken, 2),
+        'balance'   => round($opening + (float)$sum['days'] + $adjust - $taken, 2),
+        'this_month_credit' => round($thisCredit, 2),
+        'credit_start' => staff_leave_credit_start(),
+    ];
+}
+
+/**
+ * Split a month's approved leave into paid days and loss-of-pay days.
+ *
+ * The days that can be paid are whatever was left at the end of the previous
+ * month, plus the credit added on the 1st of this month. Requests are walked
+ * oldest-first. Once that balance runs out, the rest is loss of pay and does
+ * not reduce the balance further. Unpaid leave is loss of pay in full.
  */
 function staff_leave_month_split(int $userId, int $year, int $month): array
 {
@@ -476,7 +829,16 @@ function staff_leave_month_split(int $userId, int $year, int $month): array
     $prev  = date('Y-m-d', strtotime($start . ' -1 day'));
 
     $bal   = staff_leave_balance_at($userId, $prev);
-    $avail = max(0.0, (float)$bal['balance']);
+    $carry = round((float)$bal['balance'], 2);
+
+    // A balance an admin set on or after the 1st already includes this
+    // month, so the automatic credit is not added on top of it.
+    $openAtEnd = staff_leave_opening($userId, $end);
+    $credit = 0.0;
+    if (!$openAtEnd || $start > (string)$openAtEnd['entry_date']) {
+        $credit = staff_leave_credit_on($userId, $start);
+    }
+    $available = round($carry + $credit, 2);
 
     $s = db()->prepare(
         "SELECT * FROM staff_leave_requests
@@ -486,38 +848,28 @@ function staff_leave_month_split(int $userId, int $year, int $month): array
     );
     $s->execute([':u' => $userId, ':s' => $start, ':e' => $end]);
 
-    $paid = 0.0; $lop = 0.0; $unpaid = 0.0; $lines = [];
+    $lines = [];
     foreach ($s->fetchAll() as $r) {
-        $days = (float)$r['days_count'];
-        if (!in_array($r['leave_type'], staff_leave_paid_types(), true)) {
-            $unpaid += $days;                      // unpaid leave is LOP by definition
-            $lop    += $days;
-            $thisPaid = 0.0; $thisLop = $days;
-        } else {
-            $thisPaid = min($days, $avail);
-            $thisLop  = round($days - $thisPaid, 2);
-            $avail    = round($avail - $thisPaid, 2);
-            $paid    += $thisPaid;
-            $lop     += $thisLop;
-        }
         $lines[] = [
             'id'    => (int)$r['id'],
             'type'  => (string)$r['leave_type'],
             'from'  => (string)$r['start_date'],
             'to'    => (string)$r['end_date'],
-            'days'  => $days,
-            'paid'  => round($thisPaid, 2),
-            'lop'   => round($thisLop, 2),
+            'days'  => (float)$r['days_count'],
+            'draws' => in_array($r['leave_type'], staff_leave_paid_types(), true),
         ];
     }
+    $alloc = staff_leave_allocate($available, $lines);
 
     return [
-        'opening_balance' => round((float)$bal['balance'], 2),
-        'paid_days'       => round($paid, 2),
-        'lop_days'        => round($lop, 2),
-        'unpaid_days'     => round($unpaid, 2),
-        'closing_balance' => round($avail, 2),
-        'lines'           => $lines,
+        'opening_balance' => $carry,
+        'credit_days'     => round($credit, 2),
+        'available'       => $available,
+        'paid_days'       => $alloc['paid_days'],
+        'lop_days'        => $alloc['lop_days'],
+        'unpaid_days'     => $alloc['unpaid_days'],
+        'closing_balance' => $alloc['closing_balance'],
+        'lines'           => $alloc['lines'],
     ];
 }
 
@@ -620,14 +972,16 @@ function staff_leave_notify_cancelled(array $req, string $applicantName): void
  * in the month against the same allocation payroll uses. Call it after any
  * change to a month's approved leave.
  */
-function staff_leave_resync_month(int $userId, int $year, int $month): void
+function staff_leave_resync_month(int $userId, int $year, int $month): array
 {
     $split = staff_leave_month_split($userId, $year, $month);
-    if (!$split['lines']) return;
-    $upd = db()->prepare("UPDATE staff_leave_requests SET lop_days = :l WHERE id = :i");
-    foreach ($split['lines'] as $line) {
-        $upd->execute([':l' => $line['lop'], ':i' => $line['id']]);
+    if ($split['lines']) {
+        $upd = db()->prepare("UPDATE staff_leave_requests SET lop_days = :l WHERE id = :i");
+        foreach ($split['lines'] as $line) {
+            $upd->execute([':l' => $line['lop'], ':i' => $line['id']]);
+        }
     }
+    return $split;
 }
 
 /**
@@ -1306,7 +1660,7 @@ function staff_payslip_draft(int $userId, int $year, int $month): array
     //
     // Approving leave marks those days 'leave', not 'absent', so the two
     // sources cannot overlap.
-    $split     = staff_leave_month_split($userId, $year, $month);
+    $split     = staff_leave_resync_month($userId, $year, $month);
     $paidLeave = (float)$split['paid_days'];
     $lopLeave  = (float)$split['lop_days'];
     $lopAbsent = (float)($att['absent'] ?? 0);
@@ -1334,6 +1688,9 @@ function staff_payslip_draft(int $userId, int $year, int $month): array
         'lop_days'         => $lopDays,
         'lop_leave_days'   => round($lopLeave, 2),
         'lop_absent_days'  => round($lopAbsent, 2),
+        'leave_taken_days' => round($paidLeave + $lopLeave, 2),
+        'leave_carry_days' => round((float)($split['opening_balance'] ?? 0), 2),
+        'leave_credit_days'=> round((float)($split['credit_days'] ?? 0), 2),
         'leave_split'      => $split,
         'hours_worked'     => $hours['hours'],
         'earnings'         => $earnings,

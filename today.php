@@ -182,6 +182,11 @@ $out = $todayAttendance['check_out'] ?? null;
             <div class="checkin-label">My leave</div>
             <div class="checkin-status">
                 <strong><?= e(staff_leave_days_phrase((float)$myLeave['balance'])) ?></strong> available
+                <div class="muted small"><?php
+                    $lvRate = (float)($myLeave['rate'] ?? 1);
+                    $lvVerb = abs($lvRate - 1.0) < 0.001 ? 'is' : 'are';
+                    echo e(staff_leave_days_phrase($lvRate) . ' ' . $lvVerb . ' added on the 1st of each month while you are active. Unused days carry forward.');
+                ?></div>
                 <?php if ($myLeavePending > 0): ?>
                     · <span class="pill pill-warn"><?= (int)$myLeavePending ?>
                         request<?= $myLeavePending === 1 ? '' : 's' ?> awaiting approval</span>
