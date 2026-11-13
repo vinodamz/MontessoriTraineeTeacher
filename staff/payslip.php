@@ -51,15 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'issue') {
         INSERT INTO staff_payslips
             (user_id, period_year, period_month, working_days, present_days,
              paid_leave_days, lop_days, lop_leave_days, lop_absent_days,
+             leave_carry_days, leave_credit_days,
              hours_worked, earnings_json, deductions_json,
              gross_earnings, lop_amount, total_deductions, net_pay, notes, generated_by)
         VALUES
-            (:u, :y, :m, :wd, :pd, :pl, :lop, :lopl, :lopa, :hrs, :ej, :dj,
+            (:u, :y, :m, :wd, :pd, :pl, :lop, :lopl, :lopa, :carry, :credit, :hrs, :ej, :dj,
              :gross, :lopamt, :totded, :net, :notes, :by)
         ON DUPLICATE KEY UPDATE
             working_days = VALUES(working_days), present_days = VALUES(present_days),
             paid_leave_days = VALUES(paid_leave_days), lop_days = VALUES(lop_days),
             lop_leave_days = VALUES(lop_leave_days), lop_absent_days = VALUES(lop_absent_days),
+            leave_carry_days = VALUES(leave_carry_days), leave_credit_days = VALUES(leave_credit_days),
             hours_worked = VALUES(hours_worked), earnings_json = VALUES(earnings_json),
             deductions_json = VALUES(deductions_json), gross_earnings = VALUES(gross_earnings),
             lop_amount = VALUES(lop_amount), total_deductions = VALUES(total_deductions),
@@ -73,6 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['op'] ?? '') === 'issue') {
         // a slip is issued, and an issued payslip must keep explaining itself.
         ':lopl' => min($lopDays, (float)($draft['lop_leave_days'] ?? 0)),
         ':lopa' => max(0.0, $lopDays - (float)($draft['lop_leave_days'] ?? 0)),
+        ':carry' => $draft['leave_carry_days'] ?? null,
+        ':credit' => $draft['leave_credit_days'] ?? null,
         ':hrs' => $draft['hours_worked'],
         ':ej' => json_encode($draft['earnings'], JSON_UNESCAPED_UNICODE),
         ':dj' => json_encode($draft['deductions'], JSON_UNESCAPED_UNICODE),
@@ -96,6 +100,11 @@ if ($issued) {
         'lop_days'         => (float)$issued['lop_days'],
         'lop_leave_days'   => (float)($issued['lop_leave_days'] ?? 0),
         'lop_absent_days'  => (float)($issued['lop_absent_days'] ?? 0),
+        'leave_taken_days' => round((float)$issued['paid_leave_days'] + (float)($issued['lop_leave_days'] ?? 0), 2),
+        'leave_carry_days' => array_key_exists('leave_carry_days', $issued) && $issued['leave_carry_days'] !== null
+            ? (float)$issued['leave_carry_days'] : null,
+        'leave_credit_days'=> array_key_exists('leave_credit_days', $issued) && $issued['leave_credit_days'] !== null
+            ? (float)$issued['leave_credit_days'] : null,
         'hours_worked'     => (float)$issued['hours_worked'],
         'earnings'         => $earnings,
         'deductions'       => $deductions,
@@ -186,9 +195,64 @@ require __DIR__ . '/../includes/header.php';
         <dt>Role</dt><dd><?= e(ucfirst((string)$staff['role'])) ?></dd>
         <dt>Working days</dt><dd><?= e(rtrim(rtrim(number_format($view['working_days'],1),'0'),'.')) ?></dd>
         <?php $dd = fn($v) => rtrim(rtrim(number_format((float)$v, 1), '0'), '.'); ?>
-        <dt>Present</dt><dd><?= (int)$view['present_days'] ?> · paid leave <?= e($dd($view['paid_leave_days'])) ?> · LOP <?= e($dd($view['lop_days'])) ?></dd>
+        <dt>Present</dt><dd><?= (int)$view['present_days'] ?> day<?= (int)$view['present_days'] === 1 ? '' : 's' ?></dd>
         <dt>Hours worked</dt><dd><?= e(number_format($view['hours_worked'], 1)) ?> h</dd>
     </dl>
+
+    <?php
+    $paidLeave = (float)($view['paid_leave_days'] ?? 0);
+    $lopLeave  = (float)($view['lop_leave_days'] ?? 0);
+    $lopAbsent = (float)($view['lop_absent_days'] ?? 0);
+    $leaveTaken = (float)($view['leave_taken_days'] ?? ($paidLeave + $lopLeave));
+    $carry = $view['leave_carry_days'] ?? null;
+    $credit = $view['leave_credit_days'] ?? null;
+    $perDay = (float)$view['working_days'] > 0 ? (float)$view['gross_earnings'] / (float)$view['working_days'] : 0.0;
+    ?>
+    <div class="payslip-leave">
+        <h3>Leave and loss of pay</h3>
+        <table class="payslip-table">
+            <tbody>
+                <?php if ($carry !== null): ?>
+                    <tr><td>Carried in from last month</td><td><?= e($dd($carry)) ?> day<?= (float)$carry == 1 ? '' : 's' ?></td></tr>
+                <?php endif; ?>
+                <?php if ($credit !== null): ?>
+                    <tr><td>Added on the 1st of this month</td><td><?= e($dd($credit)) ?> day<?= (float)$credit == 1 ? '' : 's' ?></td></tr>
+                <?php endif; ?>
+                <tr><td>Leave taken</td><td><?= e($dd($leaveTaken)) ?> day<?= (float)$leaveTaken == 1 ? '' : 's' ?></td></tr>
+                <tr><td>Paid leave (covered by the balance)</td><td><?= e($dd($paidLeave)) ?> day<?= (float)$paidLeave == 1 ? '' : 's' ?></td></tr>
+                <tr><td>Loss of pay — leave beyond the balance</td><td><?= e($dd($lopLeave)) ?> day<?= (float)$lopLeave == 1 ? '' : 's' ?></td></tr>
+                <tr><td>Loss of pay — absent</td><td><?= e($dd($lopAbsent)) ?> day<?= (float)$lopAbsent == 1 ? '' : 's' ?></td></tr>
+                <tr class="total">
+                    <td>
+                        Loss of pay deduction
+                        <?php if ((float)$view['lop_days'] > 0): ?>
+                            <br><span class="muted small"><?= e($dd($view['lop_days'])) ?> day<?= (float)$view['lop_days'] == 1 ? '' : 's' ?>
+                            × <?= e(staff_money($perDay)) ?> a day</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><?= e(staff_money((float)$view['lop_amount'])) ?></td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="muted small" style="margin:.5rem 0 0;">
+            <?php if ($leaveTaken > 0): ?>
+                <?= e($dd($paidLeave)) ?> of the <?= e($dd($leaveTaken)) ?> leave
+                day<?= $leaveTaken == 1 ? '' : 's' ?>
+                <?= $paidLeave == 1 ? 'is' : 'are' ?> paid.
+                <?php if ($lopLeave > 0): ?>
+                    <?= e($dd($lopLeave)) ?> day<?= (float)$lopLeave == 1 ? '' : 's' ?>
+                    <?= (float)$lopLeave == 1 ? 'is' : 'are' ?> loss of pay and deducted from salary.
+                <?php else: ?>
+                    None of it is loss of pay.
+                <?php endif; ?>
+            <?php else: ?>
+                No leave was taken this month.
+                <?php if ($lopAbsent > 0): ?>
+                    <?= e($dd($lopAbsent)) ?> absent day<?= $lopAbsent == 1 ? '' : 's' ?> <?= $lopAbsent == 1 ? 'is' : 'are' ?> still loss of pay.
+                <?php endif; ?>
+            <?php endif; ?>
+        </p>
+    </div>
 
     <div class="payslip-cols">
         <table class="payslip-table">

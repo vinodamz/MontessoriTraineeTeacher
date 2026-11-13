@@ -1258,6 +1258,8 @@ a.admin-tile:hover {
 .payslip-table th, .payslip-table td { text-align: left; padding: .35rem .4rem; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .payslip-table th:last-child, .payslip-table td:last-child { text-align: right; }
 .payslip-table .total td { font-weight: 700; border-top: 2px solid var(--ink); border-bottom: none; }
+.payslip-leave { margin: 0 0 1rem; padding: .7rem .8rem .8rem; background: var(--bg-tint); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.payslip-leave h3 { margin: 0 0 .35rem; font-size: 1rem; }
 .payslip-netline { margin-top: 1rem; padding-top: .7rem; border-top: 2px solid var(--accent); text-align: right; font-size: 1.05rem; }
 @media print {
     .no-print { display: none !important; }

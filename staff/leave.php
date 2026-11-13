@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($uid > 0 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             staff_leave_ledger_add($uid, $date, 'opening', $days, $note, (int)$user['id']);
             flash_set('ok', 'Balance set to ' . rtrim(rtrim(number_format($days, 1), '0'), '.')
-                          . ' day(s) as at ' . $date . '. Accrual runs forward from there.');
+                          . ' day(s) as at ' . $date . '. The next monthly credit is added on the 1st after that date.');
         } else {
             flash_set('error', 'Pick a staff member and a valid date.');
         }
@@ -231,7 +231,7 @@ $balance    = $focusStaff ? staff_leave_balance_at((int)$focusStaff['id']) : [];
 $ledger     = [];
 if ($focusStaff) {
     $ls = db()->prepare(
-        "SELECT l.*, u.name AS by_name
+        "SELECT l.entry_date, l.kind, l.days, l.note, u.name AS by_name
            FROM staff_leave_ledger l
            LEFT JOIN users u ON u.id = l.created_by
           WHERE l.user_id = :u
@@ -239,6 +239,21 @@ if ($focusStaff) {
     );
     $ls->execute([':u' => (int)$focusStaff['id']]);
     $ledger = $ls->fetchAll();
+    try {
+        $cs = db()->prepare(
+            "SELECT credit_month AS entry_date, 'credit' AS kind, days, 'Added on the 1st' AS note,
+                    NULL AS by_name
+               FROM staff_leave_credits
+              WHERE user_id = :u
+              ORDER BY credit_month DESC LIMIT 24"
+        );
+        $cs->execute([':u' => (int)$focusStaff['id']]);
+        foreach ($cs->fetchAll() as $c) $ledger[] = $c;
+        usort($ledger, static function ($a, $b) {
+            return strcmp((string)$b['entry_date'], (string)$a['entry_date']);
+        });
+        $ledger = array_slice($ledger, 0, 24);
+    } catch (Throwable $e) { /* credits table not migrated yet */ }
 }
 
 $pageTitle  = 'Staff leave';
@@ -309,22 +324,31 @@ require __DIR__ . '/../includes/header.php';
     </p>
 
     <p class="muted small" style="margin-top:0;">
-        <?= e($d($balance['opening'])) ?> carried from <?= e((string)$balance['since']) ?>
-        <?= $balance['from_open'] ? '(balance set by an admin)' : '(no opening balance set — counted from when the account was created)' ?>
-        &nbsp;+&nbsp; <?= e($d($balance['accrued'])) ?> earned
-        (<?= (int)$balance['months'] ?> month<?= $balance['months'] == 1 ? '' : 's' ?>
-        × <?= e($d($balance['rate'])) ?>/month)
+        <?= e($d($balance['opening'])) ?> starting balance
+        <?php if (!empty($balance['opening_seed'])): ?>
+            carried in on <?= e((string)$balance['since']) ?>
+        <?php elseif (!empty($balance['from_open'])): ?>
+            set on <?= e((string)$balance['since']) ?>
+        <?php else: ?>
+            from <?= e((string)$balance['since']) ?>
+        <?php endif; ?>
+        &nbsp;+&nbsp; <?= e($d($balance['accrued'])) ?> added on the 1st
+        (<?= (int)$balance['months'] ?> month<?= $balance['months'] == 1 ? '' : 's' ?>)
         <?php if (abs((float)$balance['adjust']) > 0.001): ?>
             &nbsp;<?= $balance['adjust'] > 0 ? '+' : '−' ?>&nbsp;<?= e($d(abs((float)$balance['adjust']))) ?> adjusted
         <?php endif; ?>
-        &nbsp;−&nbsp; <?= e($d($balance['taken'])) ?> taken
+        &nbsp;−&nbsp; <?= e($d($balance['taken'])) ?> paid leave used
+        <?php if ((float)($balance['this_month_credit'] ?? 0) > 0): ?>
+            <br>Includes <?= e($d($balance['this_month_credit'])) ?> day added on
+            <?= e(date('j M Y', strtotime(date('Y-m-01', strtotime((string)$balance['as_of']))))) ?>.
+        <?php endif; ?>
     </p>
 
-    <p class="muted small">
-        Leave accrues at <?= e($d($balance['rate'])) ?> day per completed month and carries
-        forward. Anything taken beyond the balance — and all Unpaid leave — becomes loss of pay
-        on that month's payslip.
-    </p>
+    <p class="muted small"><?= e(staff_leave_balance_explanation($balance)) ?></p>
+    <p class="muted small"><?= e(staff_leave_starting_balance_note($balance)) ?></p>
+    <?php if ((int)$focusStaff['active'] !== 1): ?>
+        <p class="muted small">This person is inactive, so they do not receive the monthly credit.</p>
+    <?php endif; ?>
 
     <?php if ($isAdmin): ?>
     <div class="row" style="gap:1.5rem; flex-wrap:wrap; margin-top:1rem;">
@@ -363,8 +387,9 @@ require __DIR__ . '/../includes/header.php';
         </form>
     </div>
     <p class="muted small" style="margin-bottom:0;">
-        <strong>Set balance</strong> starts the count again from that date — use it when you
-        know the true figure today. <strong>Adjust</strong> nudges it without discarding history.
+        <strong>Set balance</strong> replaces the figure from that date — use it when you
+        know the true number today. The next credit is added on the 1st after that date.
+        <strong>Adjust</strong> nudges the balance without discarding history.
     </p>
     <?php endif; ?>
 
@@ -376,8 +401,13 @@ require __DIR__ . '/../includes/header.php';
         <?php foreach ($ledger as $l): ?>
             <tr>
                 <td><?= e((string)$l['entry_date']) ?></td>
-                <td><?= $l['kind'] === 'opening' ? 'Balance set' : 'Adjustment' ?></td>
-                <td><?= $l['kind'] === 'adjust' && $l['days'] > 0 ? '+' : '' ?><?= e($d($l['days'])) ?></td>
+                <td><?php
+                    if ($l['kind'] === 'credit') echo 'Monthly credit';
+                    elseif ($l['kind'] === 'opening' && (string)($l['note'] ?? '') === STAFF_LEAVE_SEED_NOTE) echo 'Starting balance';
+                    elseif ($l['kind'] === 'opening') echo 'Balance set';
+                    else echo 'Adjustment';
+                ?></td>
+                <td><?= ($l['kind'] !== 'opening' && (float)$l['days'] > 0) ? '+' : '' ?><?= e($d($l['days'])) ?></td>
                 <td class="small"><?= e((string)($l['note'] ?? '')) ?></td>
                 <td class="small"><?= e((string)($l['by_name'] ?? '—')) ?></td>
             </tr>

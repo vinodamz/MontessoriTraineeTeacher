@@ -297,14 +297,18 @@ $relRelation = $profile['relative_relation'] !== '' ? (staff_relations()[$profil
             <span class="muted" style="font-size:1rem;">day<?= $balance['balance'] == 1 ? '' : 's' ?> available</span>
         </p>
         <p class="muted small">
-            <?= e($d($balance['opening'])) ?> from <?= e((string)$balance['since']) ?>
-            + <?= e($d($balance['accrued'])) ?> earned
-            (<?= (int)$balance['months'] ?> &times; <?= e($d($balance['rate'])) ?>/month)
+            <?= e($d($balance['opening'])) ?> starting
+            + <?= e($d($balance['accrued'])) ?> added on the 1st
+            (<?= (int)$balance['months'] ?> month<?= $balance['months'] == 1 ? '' : 's' ?>)
             <?php if (abs((float)$balance['adjust']) > 0.001): ?>
                 <?= $balance['adjust'] > 0 ? '+' : '−' ?> <?= e($d(abs((float)$balance['adjust']))) ?> adjusted
             <?php endif; ?>
-            − <?= e($d($balance['taken'])) ?> taken
+            − <?= e($d($balance['taken'])) ?> paid leave used
         </p>
+        <p class="muted small"><?= e(staff_leave_balance_explanation($balance)) ?></p>
+        <?php if ((int)$staff['active'] !== 1): ?>
+            <p class="muted small">Inactive — the monthly credit is not added.</p>
+        <?php endif; ?>
         <?php if ($isAdmin): ?>
             <div class="actions section-h-spaced">
                 <a class="btn btn-ghost" href="/staff/leave.php?user_id=<?= $id ?>#balance">Manage leave balance</a>
