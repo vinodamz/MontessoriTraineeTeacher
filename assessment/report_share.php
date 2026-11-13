@@ -43,20 +43,25 @@ if (!$d) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= e($title) ?> · <?= e($appName) ?></title>
+<link rel="icon" href="/assets/img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap">
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         background: #fff5fa; color: #2b2b2b; }
-  header.cr-top { background: #fff; border-bottom: 3px solid #e91e63; padding: 1rem 1.2rem;
+  body { margin: 0; font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #FFFAF0; color: #38384a; }
+  header.cr-top { background: #fff; border-bottom: 3px solid #E5447D; padding: 1rem 1.2rem;
                   display: grid; grid-template-columns: 48px 1fr auto; gap: .8rem; align-items: center; }
   header.cr-top img.cr-logo { width: 48px; height: auto; }
-  header.cr-top h1 { margin: 0; font-size: 1.05rem; color: #ad1457; font-weight: 800;
-                     text-transform: uppercase; letter-spacing: .5px; }
-  header.cr-top p { margin: .15rem 0 0; font-size: .8rem; color: #66bb6a; font-weight: 600; }
+  header.cr-top h1 { margin: 0; font-size: 1.15rem; color: #B81F56; font-weight: 700;
+                     font-family: "Baloo 2", "Nunito", system-ui, sans-serif; letter-spacing: .2px; }
+  header.cr-top p { margin: .15rem 0 0; font-size: .8rem; color: #11854A; font-weight: 700; }
   main { max-width: 880px; margin: 0 auto; padding: 1.2rem; }
-  .cr-print-btn { display: inline-block; padding: .5rem .9rem; border: 0; border-radius: 6px;
-                  background: #e91e63; color: #fff; font-size: .9rem; font-weight: 600;
+  .cr-print-btn { display: inline-block; padding: .5rem .9rem; border: 0; border-radius: 999px;
+                  background: #E5447D; color: #fff; font-size: .9rem; font-weight: 700;
+                  font-family: "Nunito", system-ui, sans-serif;
                   cursor: pointer; text-decoration: none; }
   .cr-dead { background: #fff; border: 1px solid #e3d9c8; border-radius: 10px; padding: 1.2rem; }
 <?= child_report_styles() ?>
