@@ -26,9 +26,17 @@
  * spec that rendered the form — so the grid and the CSV can't fall out of step
  * with the questions.
  *
+ * A `photo` question is still just JSON in `answers` — a small reference
+ * (random filename, mime, size, original name). The bytes live under
+ * uploads/survey_photos/, which the web server is told to refuse, and are
+ * streamed only by surveys/photo.php after the same admin check as the
+ * responses grid. See includes/survey_photos.php.
+ *
  * Schema: sql/migrate_054_parent_surveys.sql
  */
 declare(strict_types=1);
+
+require_once __DIR__ . '/survey_photos.php';
 
 const SURVEY_TEXT_MAX  = 2000;   // per free-text answer
 const SURVEY_NAME_MAX  = 120;
@@ -928,6 +936,14 @@ function survey_questions(array $spec): array
     return $out;
 }
 
+function survey_spec_has_photo(array $spec): bool
+{
+    foreach (survey_questions($spec) as $q) {
+        if (($q['type'] ?? '') === 'photo') return true;
+    }
+    return false;
+}
+
 /**
  * The spreadsheet columns for a spec: one per answerable field, in form order.
  * A matrix becomes one column per statement — that's what makes the grid and
@@ -975,7 +991,7 @@ function survey_raw(array $answers, string $key)
  * a comma-joined list. '' when unanswered — a survey left blank should read as
  * blank, not as a zero or a dash that looks like data.
  */
-function survey_cell(array $col, array $answers): string
+function survey_cell(array $col, array $answers, array $context = []): string
 {
     $v = survey_raw($answers, $col['key']);
     if ($v === null || $v === '' || $v === []) return '';
@@ -995,8 +1011,17 @@ function survey_cell(array $col, array $answers): string
             $out  = [];
             foreach ((array)$v as $code) $out[] = (string)($opts[$code] ?? $code);
             return implode(', ', $out);
+        case 'photo':
+            // A photo is an object, not text. Casting it would throw under
+            // strict types and would put the storage name in a spreadsheet.
+            // The CSV gets a staff link (admin login still required to open
+            // it). Without a response id there is nothing to link to.
+            if (survey_photo_ref($v) === null) return '';
+            $rid = (int)($context['response_id'] ?? 0);
+            if ($rid <= 0) return 'Photo uploaded';
+            return survey_photo_staff_link($rid, (string)$col['key']);
         default:
-            return (string)$v;
+            return is_scalar($v) ? (string)$v : '';
     }
 }
 
@@ -1007,12 +1032,19 @@ function survey_cell(array $col, array $answers): string
  *
  * Whitelist-only: an answer survives just when it matches an option the spec
  * actually offers, so nothing a browser (or anyone else) invents reaches the
- * database. Returns [answers, errors]; errors is keyed by question key.
+ * database. Returns [answers, errors, photoStaged]. errors is keyed by
+ * question key. photoStaged is the session bucket for photos already accepted
+ * on this form (so a later validation error does not make the parent pick
+ * the picture again). Pass it back in as $staged on the next submit.
+ *
+ * $files is $_FILES. Photo bytes are checked here; only a reference is
+ * returned in $answers.
  */
-function survey_collect(array $spec, array $post): array
+function survey_collect(array $spec, array $post, array $files = [], array $staged = []): array
 {
-    $answers = [];
-    $errors  = [];
+    $answers   = [];
+    $errors    = [];
+    $stagedOut = [];
 
     foreach (survey_questions($spec) as $q) {
         $key  = (string)$q['key'];
@@ -1073,10 +1105,59 @@ function survey_collect(array $spec, array $post): array
                 if ($picked) $answers[$key] = $picked;
                 elseif ($req) $errors[$key] = 'Please answer this.';
                 break;
+
+            case 'photo':
+                // A photo cannot be replayed from $_POST the way text can.
+                // Once the bytes have been checked they sit in a staged file,
+                // and the form carries a nonce ($key__keep) so the next submit
+                // — after some other field failed — can claim that file and
+                // no other. A submit that does not present the nonce does not
+                // attach it, which is what a fresh form on a shared phone needs.
+                $prior = is_array($staged[$key] ?? null) ? $staged[$key] : null;
+                $priorRef = is_array($prior) ? survey_photo_ref($prior['ref'] ?? null, true) : null;
+                $keep = (string)($post[$key . '__keep'] ?? '');
+                $keepOk = $priorRef !== null
+                    && $keep !== ''
+                    && isset($prior['nonce'])
+                    && hash_equals((string)$prior['nonce'], $keep);
+
+                $incoming = $files[$key] ?? null;
+                $hasNew = is_array($incoming)
+                    && (int)($incoming['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+                if ($hasNew) {
+                    $result = survey_photo_accept($incoming);
+                    if (!$result['ok']) {
+                        $errors[$key] = (string)$result['error'];
+                        if ($keepOk && $priorRef) {
+                            $answers[$key] = $prior['ref'];
+                            $stagedOut[$key] = $prior;
+                        }
+                        break;
+                    }
+                    if ($priorRef && $priorRef['file'] !== $result['ref']['file']) {
+                        survey_photo_unlink($priorRef['file']);
+                    }
+                    $slot = [
+                        'nonce' => bin2hex(random_bytes(8)),
+                        'ref'   => $result['ref'],
+                    ];
+                    $answers[$key] = $result['ref'];
+                    $stagedOut[$key] = $slot;
+                    break;
+                }
+
+                if ($keepOk && $priorRef) {
+                    $answers[$key] = $prior['ref'];
+                    $stagedOut[$key] = $prior;
+                    break;
+                }
+                if ($req) $errors[$key] = 'Please upload a photo.';
+                break;
         }
     }
 
-    return [$answers, $errors];
+    return [$answers, $errors, $stagedOut];
 }
 
 // ---- Surveys (the live links) -------------------------------------------
@@ -1385,9 +1466,16 @@ function survey_roster_status(int $surveyId, array $spec, ?array $classes = null
  */
 function survey_response_delete(int $responseId): bool
 {
+    $row = survey_response($responseId);
     $s = db()->prepare("DELETE FROM survey_responses WHERE id = :i");
     $s->execute([':i' => $responseId]);
-    return $s->rowCount() > 0;
+    $ok = $s->rowCount() > 0;
+    // The row is gone first. Unlinking before the DELETE would drop the photo
+    // and then, if the DELETE failed, leave a response pointing at nothing.
+    // A crash between the two leaves an unreadable file the web server still
+    // refuses to serve, which is the safer leftover.
+    if ($ok && $row) survey_photos_release_answers($row['_a']);
+    return $ok;
 }
 
 /** Responses for a survey, newest first. Each row gains a decoded `_a`. */
@@ -1506,7 +1594,7 @@ function survey_tally(array $spec, array $rows): array
 // ---- MCP / JSON survey definitions --------------------------------------
 
 const SURVEY_DEF_KEY_MAX = 64;
-const SURVEY_DEF_ALLOWED_TYPES = ['text', 'textarea', 'radio', 'checkbox', 'matrix', 'student_picker', 'select'];
+const SURVEY_DEF_ALLOWED_TYPES = ['text', 'textarea', 'radio', 'checkbox', 'matrix', 'student_picker', 'select', 'photo'];
 const SURVEY_DEF_OPTION_SOURCES = ['classes', 'students', 'parents'];
 const SURVEY_PREFILL_TTL_DEFAULT = 60 * 60 * 24 * 30; // 30 days
 

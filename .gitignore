@@ -29,6 +29,9 @@ uploads/logbook/*
 
 uploads/student_photos/*
 !uploads/student_photos/.gitkeep
+uploads/survey_photos/*
+!uploads/survey_photos/.gitkeep
+!uploads/survey_photos/.htaccess
 uploads/material_media/*
 !uploads/material_media/.gitkeep
 uploads/plan_media/*

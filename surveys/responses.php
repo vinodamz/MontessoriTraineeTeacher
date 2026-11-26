@@ -66,7 +66,9 @@ if (!empty($_GET['csv'])) {
     $n = count($rows);
     foreach ($rows as $r) {
         $line = [$n--, date('Y-m-d H:i', strtotime((string)$r['submitted_at']))];
-        foreach ($cols as $c) $line[] = survey_cell($c, $r['_a']);
+        foreach ($cols as $c) {
+            $line[] = survey_cell($c, $r['_a'], ['response_id' => (int)$r['id']]);
+        }
         fputcsv($out, $line);
     }
     fclose($out);
@@ -269,10 +271,14 @@ $total  = count($roster['consented']) + count($roster['declined']) + count($rost
                             </td>
                             <?php foreach ($cols as $c): ?>
                                 <?php if (in_array($c['key'], ['parent_name', 'child_name', 'class'], true)) continue; ?>
-                                <?php $cell = survey_cell($c, $r['_a']); ?>
-                                <td <?= $cell !== '' ? 'title="' . e($cell) . '"' : '' ?>>
-                                    <?= $cell !== '' ? e(survey_clip($cell)) : '<span class="muted">—</span>' ?>
-                                </td>
+                                <?php if ($c['type'] === 'photo'): ?>
+                                    <td><?php survey_photo_render((int)$r['id'], (string)$c['key'], $r['_a'][$c['key']] ?? null); ?></td>
+                                <?php else: ?>
+                                    <?php $cell = survey_cell($c, $r['_a']); ?>
+                                    <td <?= $cell !== '' ? 'title="' . e($cell) . '"' : '' ?>>
+                                        <?= $cell !== '' ? e(survey_clip($cell)) : '<span class="muted">—</span>' ?>
+                                    </td>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                             <td><a class="btn btn-ghost" href="/surveys/view.php?id=<?= (int)$r['id'] ?>">Open</a></td>
                         </tr>

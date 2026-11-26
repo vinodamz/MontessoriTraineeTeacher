@@ -1,0 +1,24 @@
+# Survey photos are pictures of young children. This tree is deployed inside
+# the docroot (cPanel rsyncs the app into the subdomain root), so the web
+# server must refuse every URL under it. Staff open a photo only through
+# /surveys/photo.php, which requires the same admin login as the responses
+# grid. uploads/.htaccess already denies the parent directory; this file
+# keeps the rule if that one is ever narrowed.
+#
+# LiteSpeed on this host honours Apache 2.4 Require and the 2.2 fallback.
+
+<RequireAll>
+    Require all denied
+</RequireAll>
+
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
+
+<FilesMatch "\.(php|phar|phtml|phps|pl|py|sh|cgi)$">
+    SetHandler default-handler
+    ForceType text/plain
+</FilesMatch>
+
+Options -ExecCGI -Indexes
