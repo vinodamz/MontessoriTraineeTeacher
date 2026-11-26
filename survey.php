@@ -16,7 +16,9 @@
  *   POST        → validate, store, show the thank-you page
  *
  * Answers are whitelisted against the spec in includes/surveys.php, so only
- * options the form actually offered can be stored.
+ * options the form actually offered can be stored. The form is multipart so
+ * a photo question can carry an image; every other answer is still re-rendered
+ * when that image is rejected.
  */
 declare(strict_types=1);
 
@@ -44,6 +46,7 @@ $dupErr  = '';      // "we already have this child" — information, not a fault
 $dupHelp = '';
 $prefill = null;    // signed ?pref= autofill for one student
 $hidePicker = false;
+$photoKept = [];    // staged photo slots, so a failed submit can keep the file
 
 if ($spec && $survey) {
     $prefTok = (string)($_REQUEST['pref'] ?? '');
@@ -59,58 +62,92 @@ if ($spec && $survey) {
     }
 }
 if ($spec && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $posted = $_POST;
-
-    // A hidden field no human ever sees. Bots fill every input they find, so
-    // anything in here is not a parent — accepted silently so the bot doesn't
-    // learn to try again, but nothing is stored.
-    $trap = trim((string)($_POST['website'] ?? ''));
-
-    // Soft CSRF: a form left open long enough for the session to lapse would
-    // fail a hard check and throw away five minutes of a parent's typing.
-    // Re-render with everything they entered instead, and ask for one more tap.
-    $sessionToken = $_SESSION['_csrf'] ?? '';
-    if ($sessionToken === '' || !hash_equals((string)$sessionToken, (string)($_POST['_csrf'] ?? ''))) {
-        $topErr = 'This page had been open for a while, so we could not submit it straight away. '
-                . 'Your answers are still here — please press Submit once more.';
+    // PHP throws the whole body away when it is larger than post_max_size,
+    // so there is nothing to re-render. Say so, instead of looking like a
+    // blank form that forgot the CSRF token.
+    if (survey_post_exceeded_limit()) {
+        $topErr = 'That upload is larger than the server can accept. Please choose a photo under '
+                . survey_photo_limit_label() . ' and try again.';
     } else {
-        [$answers, $errors] = survey_collect($spec, $_POST);
-        if (!$errors) {
-            if ($trap === '') {
-                try {
-                    survey_save_response((int)$survey['id'], $answers, $spec);
-                } catch (SurveyDuplicateError $dup) {
-                    // Not an error the parent caused, and usually not a mistake
-                    // either — the other parent got there first, or they tapped
-                    // Submit twice. So: say what we already have, when it
-                    // arrived, and how to change it. A bare "duplicate" would
-                    // leave somebody wondering whether their child is on the
-                    // trip at all.
-                    // Escaped once, at render — not here.
-                    $when = strtotime((string)($dup->existing['submitted_at'] ?? ''));
-                    $dupErr = 'We already have a consent form for '
-                            . (string)$dup->existing['child_name']
-                            . (($dup->existing['class'] ?? '') !== ''
-                                ? ' (' . (string)$dup->existing['class'] . ')' : '')
-                            . ', filled in by ' . (string)$dup->existing['parent_name']
-                            . ($when ? ' on ' . date('j M', $when) . ' at ' . date('g:ia', $when) : '')
-                            . '. Nothing further is needed — your child is on our list.';
-                    $dupHelp = 'If that was not you, or you would like to change the answers — '
-                             . 'including the photograph and video permission — please contact the '
-                             . 'school office. Consent already on file is only changed by school '
-                             . 'admin, not by submitting the form again, so someone at the office '
-                             . 'will need to clear this one before a new answer can be recorded. If '
-                             . 'you are submitting for a second child, check the spelling of their '
-                             . 'name — a sibling needs their own form under their own name.';
-                } catch (Throwable $e) {
-                    $topErr = 'Something went wrong saving your response. Please try again.';
-                }
-            }
-            // A duplicate must not fall through to the thank-you page — the
-            // parent would leave believing a second form had been recorded.
-            if ($topErr === '' && $dupErr === '') $done = true;
+        $posted = $_POST;
+
+        // A hidden field no human ever sees. Bots fill every input they find, so
+        // anything in here is not a parent — accepted silently so the bot doesn't
+        // learn to try again, but nothing is stored.
+        $trap = trim((string)($_POST['website'] ?? ''));
+
+        $bucket = $_SESSION['survey_photo_staged'][$token] ?? [];
+        if (!is_array($bucket)) $bucket = [];
+        [$answers, $errors, $photoKept] = survey_collect($spec, $_POST, $_FILES, $bucket);
+        $_SESSION['survey_photo_staged'][$token] = $photoKept;
+
+        // Soft CSRF: a form left open long enough for the session to lapse would
+        // fail a hard check and throw away five minutes of a parent's typing.
+        // Re-render with everything they entered instead, and ask for one more tap.
+        // Photos are staged before this check so the re-render can keep the file
+        // they already waited to upload.
+        $sessionToken = $_SESSION['_csrf'] ?? '';
+        if ($sessionToken === '' || !hash_equals((string)$sessionToken, (string)($_POST['_csrf'] ?? ''))) {
+            $topErr = 'This page had been open for a while, so we could not submit it straight away. '
+                    . 'Your answers are still here — please press Submit once more.';
         } else {
-            $topErr = 'Please check the highlighted questions below.';
+            if (!$errors) {
+                if ($trap !== '') {
+                    // Nothing is stored for a bot, including the picture.
+                    survey_photos_discard_pending($answers);
+                    unset($_SESSION['survey_photo_staged'][$token]);
+                } else {
+                    $stored = null;
+                    try {
+                        $stored = survey_photos_commit($answers);
+                        try {
+                            survey_save_response((int)$survey['id'], $stored, $spec);
+                        } catch (Throwable $e) {
+                            survey_photos_rollback_committed($stored);
+                            $stored = null;
+                            throw $e;
+                        }
+                        survey_photos_discard_pending($answers);
+                        unset($_SESSION['survey_photo_staged'][$token]);
+                    } catch (PDOException $e) {
+                        $topErr = 'Something went wrong saving your response. Please try again.';
+                    } catch (SurveyDuplicateError $dup) {
+                        // Not an error the parent caused, and usually not a mistake
+                        // either — the other parent got there first, or they tapped
+                        // Submit twice. So: say what we already have, when it
+                        // arrived, and how to change it. A bare "duplicate" would
+                        // leave somebody wondering whether their child is on the
+                        // trip at all.
+                        // Escaped once, at render — not here.
+                        $when = strtotime((string)($dup->existing['submitted_at'] ?? ''));
+                        $dupErr = 'We already have a consent form for '
+                                . (string)$dup->existing['child_name']
+                                . (($dup->existing['class'] ?? '') !== ''
+                                    ? ' (' . (string)$dup->existing['class'] . ')' : '')
+                                . ', filled in by ' . (string)$dup->existing['parent_name']
+                                . ($when ? ' on ' . date('j M', $when) . ' at ' . date('g:ia', $when) : '')
+                                . '. Nothing further is needed — your child is on our list.';
+                        $dupHelp = 'If that was not you, or you would like to change the answers — '
+                                 . 'including the photograph and video permission — please contact the '
+                                 . 'school office. Consent already on file is only changed by school '
+                                 . 'admin, not by submitting the form again, so someone at the office '
+                                 . 'will need to clear this one before a new answer can be recorded. If '
+                                 . 'you are submitting for a second child, check the spelling of their '
+                                 . 'name — a sibling needs their own form under their own name.';
+                    } catch (RuntimeException $e) {
+                        $topErr = $e->getMessage() !== ''
+                            ? $e->getMessage()
+                            : 'Something went wrong saving your response. Please try again.';
+                    } catch (Throwable $e) {
+                        $topErr = 'Something went wrong saving your response. Please try again.';
+                    }
+                }
+                // A duplicate must not fall through to the thank-you page — the
+                // parent would leave believing a second form had been recorded.
+                if ($topErr === '' && $dupErr === '') $done = true;
+            } else {
+                $topErr = 'Please check the highlighted questions below.';
+            }
         }
     }
 }
@@ -245,6 +282,22 @@ if (!$survey || !$spec) {
                  padding: .7rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-size: .9rem; }
   .sv-restored button { background: none; border: 0; color: #22603c; font: inherit;
                         font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
+
+  /* Photo: a full-width control. No capture= attribute, so a phone offers
+     both the camera and the gallery instead of forcing one of them. */
+  .sv-file { display: block; }
+  .sv-file input[type=file] {
+      display: block; width: 100%; font: inherit; font-size: 1rem;
+      padding: .75rem; border: 1px dashed #dfd3da; border-radius: 10px; background: #fffdfe; }
+  .sv-file input[type=file]::file-selector-button,
+  .sv-file input[type=file]::-webkit-file-upload-button {
+      font: inherit; font-weight: 700; padding: .6rem .95rem; margin-right: .75rem;
+      border: 0; border-radius: 8px; background: var(--pink); color: #fff; cursor: pointer; }
+  .sv-file-hint { display: block; margin-top: .4rem; color: #7a7a7a; font-size: .85rem; }
+  .sv-photo-kept { margin: .55rem 0 0; padding: .55rem .7rem; background: #eef7f0;
+                   border: 1px solid #cfe6d6; border-radius: 8px; color: #22603c; font-size: .9rem; }
+  .sv-photo-remove { background: none; border: 0; color: #22603c; font: inherit; font-weight: 700;
+                     text-decoration: underline; cursor: pointer; padding: 0; }
 </style>
 </head>
 <body>
@@ -303,10 +356,14 @@ if (!$survey || !$spec) {
     <?php // data-restore is set only on a clean GET. After a failed submit the
           // server has already re-rendered what the parent typed, and letting the
           // saved draft overwrite that would undo their most recent edits. ?>
-    <form method="post" action="/survey.php?t=<?= e($token) ?><?= isset($_REQUEST['pref']) && (string)$_REQUEST['pref'] !== '' ? '&amp;pref=' . e(rawurlencode((string)$_REQUEST['pref'])) : '' ?>" novalidate
+    <form method="post" enctype="multipart/form-data"
+          action="/survey.php?t=<?= e($token) ?><?= isset($_REQUEST['pref']) && (string)$_REQUEST['pref'] !== '' ? '&amp;pref=' . e(rawurlencode((string)$_REQUEST['pref'])) : '' ?>" novalidate
           id="sv-form" data-key="<?= e(substr($token, 0, 16)) ?>"
           data-restore="<?= $posted && !$prefill ? '0' : ($prefill ? '0' : '1') ?>">
         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <?php if (survey_spec_has_photo($spec)): ?>
+            <input type="hidden" name="MAX_FILE_SIZE" value="<?= (int)survey_photo_upload_ceiling() ?>">
+        <?php endif; ?>
         <input type="hidden" name="t" value="<?= e($token) ?>">
         <?php if (!empty($_REQUEST['pref'])): ?>
             <input type="hidden" name="pref" value="<?= e((string)$_REQUEST['pref']) ?>">
@@ -497,6 +554,28 @@ if (!$survey || !$spec) {
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+
+                        <?php elseif ($type === 'photo'):
+                            $slot = is_array($photoKept[$key] ?? null) ? $photoKept[$key] : null;
+                            $kept = is_array($slot) ? survey_photo_ref($slot['ref'] ?? null, true) : null;
+                            $limitLabel = survey_photo_limit_label(); ?>
+                            <div class="sv-file">
+                                <input id="file-<?= e($key) ?>" type="file" name="<?= e($key) ?>"
+                                       accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                                       data-max-bytes="<?= (int)survey_photo_upload_ceiling() ?>"
+                                       data-max-label="<?= e($limitLabel) ?>"
+                                       aria-labelledby="lbl-<?= e($key) ?>">
+                                <span class="sv-file-hint">JPG, PNG, WebP or HEIC, up to <?= e($limitLabel) ?>. Take a photo or choose one from your gallery.</span>
+                            </div>
+                            <p class="sv-err-msg sv-file-client-err" hidden></p>
+                            <?php if ($kept && $slot): ?>
+                                <p class="sv-photo-kept" data-sv-photo-kept="<?= e($key) ?>">
+                                    Photo received<?= $kept['name'] !== '' ? ': ' . e($kept['name']) : '' ?>.
+                                    It will be sent when you submit. Choose a different file only if you want to replace it.
+                                    <button type="button" class="sv-photo-remove">Remove</button>
+                                    <input type="hidden" name="<?= e($key) ?>__keep" value="<?= e((string)$slot['nonce']) ?>">
+                                </p>
+                            <?php endif; ?>
                         <?php endif; ?>
 
                         <?php if ($err !== ''): ?>
@@ -561,7 +640,11 @@ if (!$survey || !$spec) {
         var data = {}, fd = new FormData(form), it = fd.entries(), row;
         while (!(row = it.next()).done) {
             var k = row.value[0], v = row.value[1];
-            if (SKIP[k]) continue;
+            if (SKIP[k] || /__keep$/.test(k)) continue;
+            // A File cannot be written to localStorage, and restoring one
+            // would throw when the draft is applied. The server keeps a
+            // staged photo across a failed submit; the draft does not try to.
+            if (typeof File !== 'undefined' && v instanceof File) continue;
             if (k.slice(-2) === '[]') { (data[k] = data[k] || []).push(v); }
             else if (v !== '') { data[k] = v; }
         }
@@ -580,6 +663,7 @@ if (!$survey || !$spec) {
             var nodes = (field.length !== undefined && !field.tagName) ? field : [field];
             for (var i = 0; i < nodes.length; i++) {
                 var el = nodes[i];
+                if (!el || el.type === 'file') continue;
                 if (el.type === 'radio' || el.type === 'checkbox') {
                     for (var j = 0; j < vals.length; j++) {
                         if (el.value === vals[j]) { el.checked = true; restored++; }
@@ -699,6 +783,36 @@ if (!$survey || !$spec) {
 
     // Once it's really submitted the draft has done its job.
     form.addEventListener('submit', function () { drop(); });
+})();
+
+/* Photo: drop a staged file, and warn before a too-large one is uploaded.
+   The server still decides. This only saves a parent the wait. */
+(function () {
+    var form = document.getElementById('sv-form');
+    if (!form) return;
+    form.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('.sv-photo-remove') : null;
+        if (!btn || !form.contains(btn)) return;
+        var box = btn.parentNode;
+        if (box && box.parentNode) box.parentNode.removeChild(box);
+    });
+    form.addEventListener('change', function (ev) {
+        var input = ev.target;
+        if (!input || input.type !== 'file') return;
+        var warn = input.parentNode && input.parentNode.parentNode
+            ? input.parentNode.parentNode.querySelector('.sv-file-client-err') : null;
+        if (!warn) return;
+        var f = input.files && input.files[0];
+        var max = parseInt(input.getAttribute('data-max-bytes') || '0', 10);
+        var label = input.getAttribute('data-max-label') || '10 MB';
+        if (f && max && f.size > max) {
+            warn.hidden = false;
+            warn.textContent = 'That photo is too large. Please choose one under ' + label + '.';
+        } else {
+            warn.hidden = true;
+            warn.textContent = '';
+        }
+    });
 })();
 
 /* Privacy typeahead: 3+ letters → lookup; multiple matches → choose. */

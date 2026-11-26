@@ -104,6 +104,13 @@ require __DIR__ . '/../includes/header.php';
                 $key  = (string)$q['key'];
                 $type = (string)($q['type'] ?? 'text');
 
+                if ($type === 'photo'):
+                    if (survey_photo_ref($a[$key] ?? null) === null) continue; ?>
+                    <dt><?= e((string)$q['label']) ?></dt>
+                    <dd><?php survey_photo_render((int)$row['id'], $key, $a[$key] ?? null, 'full'); ?></dd>
+                    <?php continue;
+                endif;
+
                 if ($type === 'matrix'):
                     $answered = (array)($a[$key] ?? []);
                     if (!$answered) continue;

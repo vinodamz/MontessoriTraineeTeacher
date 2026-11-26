@@ -130,16 +130,26 @@ require __DIR__ . '/../includes/header.php';
         }
         // Free-text questions in this section, with the answers people gave.
         $texts = [];
+        $photos = [];
         foreach ($sec['questions'] as $q) {
-            if (($q['type'] ?? '') !== 'textarea') continue;
-            $vals = [];
-            foreach ($rows as $r) {
-                $v = trim((string)($r['_a'][$q['key']] ?? ''));
-                if ($v !== '') $vals[] = ['who' => (string)$r['parent_name'], 'id' => (int)$r['id'], 'text' => $v];
+            $qType = (string)($q['type'] ?? '');
+            if ($qType === 'textarea') {
+                $vals = [];
+                foreach ($rows as $r) {
+                    $v = trim((string)($r['_a'][$q['key']] ?? ''));
+                    if ($v !== '') $vals[] = ['who' => (string)$r['parent_name'], 'id' => (int)$r['id'], 'text' => $v];
+                }
+                if ($vals) $texts[] = ['q' => $q, 'vals' => $vals];
+            } elseif ($qType === 'photo') {
+                $vals = [];
+                foreach ($rows as $r) {
+                    if (survey_photo_ref($r['_a'][$q['key']] ?? null) === null) continue;
+                    $vals[] = ['who' => (string)$r['parent_name'], 'id' => (int)$r['id'], 'value' => $r['_a'][$q['key']]];
+                }
+                if ($vals) $photos[] = ['q' => $q, 'vals' => $vals];
             }
-            if ($vals) $texts[] = ['q' => $q, 'vals' => $vals];
         }
-        if (!$mine && !$texts) continue;
+        if (!$mine && !$texts && !$photos) continue;
         ?>
         <div class="card">
             <h3><?= e((string)$sec['title']) ?></h3>
@@ -148,6 +158,23 @@ require __DIR__ . '/../includes/header.php';
                 <?php // "Other" free text on a checkbox question isn't a tallied option;
                       // it's shown with the written answers below. ?>
                 <?php survey_bars($t); ?>
+            <?php endforeach; ?>
+
+            <?php foreach ($photos as $ph): ?>
+                <div class="sv-tally">
+                    <p class="sv-tally-q"><?= e((string)$ph['q']['label']) ?>
+                        <span class="muted small">· <?= count($ph['vals']) ?> uploaded</span></p>
+                    <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;">
+                        <?php foreach ($ph['vals'] as $v): ?>
+                            <div>
+                                <?php survey_photo_render((int)$v['id'], (string)$ph['q']['key'], $v['value']); ?>
+                                <a class="muted small" href="/surveys/view.php?id=<?= (int)$v['id'] ?>">
+                                    <?= e($v['who'] !== '' ? $v['who'] : 'response ' . $v['id']) ?>
+                                </a>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             <?php endforeach; ?>
 
             <?php foreach ($texts as $tx): ?>

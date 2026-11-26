@@ -762,7 +762,11 @@ function mcp_tools(): array
                     'spec' => ['type' => 'object',
                                'description' => 'Full survey JSON: key, title, sections[].questions[]. '
                                               . 'Question types: text, textarea, radio, checkbox, matrix, '
-                                              . 'student_picker, select. Dynamic options: classes, students, '
+                                              . 'student_picker, select, photo. photo is one image '
+                                              . '(JPEG, PNG, WebP, HEIC/HEIF, max 10 MB) with the same '
+                                              . 'required flag as other types. Example: '
+                                              . '{"key":"child_photo","type":"photo","label":"Upload your child\'s latest photo","required":true}. '
+                                              . 'Dynamic options: classes, students, '
                                               . 'parents (students/parents are 3-letter typeahead on the '
                                               . 'public form, not a full roster dropdown). Optional '
                                               . 'options_filter and fills on student_picker.'],
