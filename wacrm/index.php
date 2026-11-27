@@ -12,6 +12,13 @@ require_once __DIR__ . '/../includes/functions.php';
 
 $user = require_module('wacrm');
 
+// School-app pages never embed a foreign frame or mint SSO on a GET.
+if (!empty($_SESSION['_app_workspace'])) {
+    $appKey = 'wacrm';
+    require __DIR__ . '/../app/external_view.php';
+    exit;
+}
+
 // ?launch=1 → mint a fresh SSO token and redirect straight into the CRM
 // (used by the "Open in new tab" button so the token is never stale).
 if (($_GET['launch'] ?? '') === '1') {

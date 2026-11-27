@@ -34,6 +34,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($rows)) $rows = [];
 
     $pdo = db();
+    // Apply the same class restriction to writes as the grid below. Validate
+    // the whole batch before saving so a mixed-class request saves nothing.
+    $canMarkAll = $user['role'] === 'admin' || user_has_module($user, 'students');
+    $allowed = $pdo->prepare('SELECT id FROM students WHERE id = :sid AND COALESCE(is_active, 1) = 1'
+        . ($canMarkAll ? '' : ' AND teacher_id = :uid'));
+    foreach ($rows as $sid => $row) {
+        $params = [':sid' => (int)$sid];
+        if (!$canMarkAll) $params[':uid'] = (int)$user['id'];
+        $allowed->execute($params);
+        if (!is_array($row) || !$allowed->fetchColumn()) {
+            http_response_code(403);
+            exit('Forbidden — attendance can only be marked for children in your class.');
+        }
+    }
     $pdo->beginTransaction();
     try {
         $ins = $pdo->prepare("

@@ -8,11 +8,11 @@ function app_workspace_path(string $path): ?string
     $parts = parse_url($path);
     if ($parts === false || isset($parts['host']) || isset($parts['scheme'])) return null;
     $page = $parts['path'] ?? '';
-    if (!preg_match('~^/(?:[a-z_]+/)*[a-z_]+\.php$~D', $page)) return null;
+    if (!preg_match('~^/(?:[a-z_][a-z0-9_]*/)*[a-z_][a-z0-9_]*\.php$~D', $page)) return null;
     $dirs = ['transport', 'students', 'assessment', 'tasks', 'staff', 'crm', 'fees',
         'expenses', 'logbook', 'inventory', 'materials', 'plans', 'daycare',
         'recruitment', 'duties', 'files', 'surveys', 'feedback', 'wacrm', 'n8n'];
-    $root = ['index.php', 'today.php', 'admin.php', 'grades.php', 'notifications.php',
+    $root = ['index.php', 'today.php', 'admin.php', 'mcp_admin.php', 'grades.php', 'notifications.php',
         'notification_preferences.php', 'money.php', 'receipt.php', 'fees_calculator.php'];
     $first = explode('/', ltrim($page, '/'))[0];
     if (!in_array($first, $dirs, true) && !in_array(ltrim($page, '/'), $root, true)) return null;
@@ -38,4 +38,22 @@ function app_workspace_error(string $message, int $status): never
     $data = json_encode(['type' => 'lg-workspace', 'event' => 'error', 'message' => $message], JSON_HEX_TAG | JSON_HEX_AMP);
     echo '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>School tool</title><body><p>' . $safe . '</p><script>const m=' . $data . ';parent.postMessage(m,"https://app.thelittlegraduates.in");if(window.LGWorkspace)LGWorkspace.postMessage(JSON.stringify(m));</script></body></html>';
     exit;
+}
+
+/** HTTPS in deployment; HTTP is allowed only for explicit local test endpoints. */
+function app_workspace_external_url_valid(string $url, bool $baseOnly = false): bool
+{
+    if ($url === '' || preg_match('/[\x00-\x20\x7f\\\\]/', $url)) return false;
+    $parts = parse_url($url);
+    if ($parts === false || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) return false;
+    $scheme = strtolower($parts['scheme'] ?? '');
+    if ($scheme !== 'https' && !($scheme === 'http' && in_array(strtolower($parts['host']), ['localhost', '127.0.0.1', '[::1]'], true))) return false;
+    // WACRM's SSO helper appends a path and its own query to this base URL.
+    return !$baseOnly || (!isset($parts['query']) && !isset($parts['fragment']));
+}
+
+/** These public pages have no authenticated workspace ready/identity bridge. */
+function app_workspace_public_path(string $path): bool
+{
+    return in_array(parse_url($path, PHP_URL_PATH), ['/fees_calculator.php', '/receipt.php'], true);
 }
