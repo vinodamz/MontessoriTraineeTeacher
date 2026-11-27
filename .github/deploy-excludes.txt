@@ -1,0 +1,38 @@
+/.git/
+/.github/
+/.cursor/
+/.codex/
+/.agents/
+/.idea/
+/.vscode/
+/.env*
+/.gitignore
+/.cpanel.yml
+/.mcp.json
+/AGENTS.md
+/CLAUDE.md
+/README.md
+/CICD.md
+/DEPLOY.md
+/docs/
+/tests/
+/test/
+/node_modules/
+/install.php
+/sql/odoo_dump/
+/includes/config.php
+# Preserve all live upload data, permissions and protection files.
+/uploads/
+# Keep the operational leave-credit cron; omit environment tooling.
+/scripts/cloud-agent-*.sh
+smoke_*.php
+run-smoke.sh
+*_test.php
+*_test.py
+__pycache__/
+*.pyc
+.DS_Store
+# These are generated only after successful deployment.
+/build-id.txt
+/deploy-status.json
+/last-*.log

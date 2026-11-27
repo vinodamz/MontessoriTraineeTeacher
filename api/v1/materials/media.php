@@ -15,7 +15,7 @@ $user = api_materials_user();
 
 try {
     $clientKey = api_materials_client_key((string)($_POST['client_key'] ?? ''));
-    $date = api_materials_date((string)($_POST['date'] ?? ''));
+    $date = api_materials_date((string)($_POST['date'] ?? ''), null, $clientKey !== '');
     $materialId = (int)($_POST['material_id'] ?? 0);
     if ($materialId <= 0) throw new InvalidArgumentException('Missing material.');
     $checkId = api_materials_check_id($materialId, $date);

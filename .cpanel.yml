@@ -1,47 +1,5 @@
 ---
-# cPanel deployment recipe.
-#
-# Concerns:
-#   1. Rsync the working copy into the subdomain docroot (with excludes so
-#      agent docs, install bootstrap, PII dumps, and live config never land
-#      in the web root).
-#   2. Purge previously-synced sensitive paths that --exclude alone leaves
-#      behind (rsync does not delete excluded destinations).
-#   3. Set directory/file permissions to what cPanel + LiteSpeed expect (755/644).
-#      rsync runs with --no-perms, so dirs auto-created by rsync inherit the
-#      cPanel git-deploy umask, which can be too restrictive for Apache to
-#      traverse — that exact bug ate our first deploy and surfaced as a
-#      mysterious 404 on every URL.
-#   4. Touch the .php files so the opcode cache picks up the new versions.
-#   5. Run the idempotent migrations (php migrate.php in CLI mode) so schema
-#      changes ship with the code — no more manual /migrate.php browser step,
-#      which twice left the site 500ing between deploy and migration.
-#      Output lands in last-migrate.log next to last-deploy.log.
-#   6. Run per-module smoke wrappers; CI reads the published last-*-smoke.log
-#      files over HTTPS (so those logs stay web-readable on purpose).
-#
-# IMPORTANT: each command stays on ONE PHYSICAL LINE — YAML's folded scalar
-# preserves newlines on more-indented continuations and silently corrupts
-# deploys.
+# Run from the private cPanel checkout. One fail-fast task; no fixture writes.
 deployment:
   tasks:
-    - /usr/bin/rsync -av --checksum --no-perms --omit-dir-times --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='README.md' --exclude='CICD.md' --exclude='DEPLOY.md' --exclude='CLAUDE.md' --exclude='.mcp.json' --exclude='docs/' --exclude='install.php' --exclude='sql/odoo_dump/' --exclude='includes/config.php' --exclude='last-deploy.log' --exclude='last-migrate.log' --exclude='last-smoke.log' --exclude='last-tasks-smoke.log' --exclude='last-assessment-smoke.log' --exclude='last-crm-smoke.log' --exclude='last-materials-smoke.log' ./ $HOME/thelittlegraduates.in/mtt/ > $HOME/last-mtt-deploy.log 2>&1
-    - git rev-parse HEAD > $HOME/thelittlegraduates.in/mtt/build-id.txt
-    - /bin/rm -rf $HOME/thelittlegraduates.in/mtt/docs $HOME/thelittlegraduates.in/mtt/sql/odoo_dump $HOME/thelittlegraduates.in/mtt/CLAUDE.md $HOME/thelittlegraduates.in/mtt/.mcp.json $HOME/thelittlegraduates.in/mtt/install.php
-    - /bin/chmod 755 $HOME/thelittlegraduates.in $HOME/thelittlegraduates.in/mtt
-    - /usr/bin/find $HOME/thelittlegraduates.in/mtt -type d -exec /bin/chmod 755 {} +
-    - /usr/bin/find $HOME/thelittlegraduates.in/mtt -type f -exec /bin/chmod 644 {} +
-    - /usr/bin/find $HOME/thelittlegraduates.in/mtt -name '*.php' -exec /usr/bin/touch {} +
-    - cd $HOME/thelittlegraduates.in/mtt && php migrate.php > $HOME/last-migrate.log 2>&1 || echo "MIGRATE FAILED exit=$?" >> $HOME/last-migrate.log
-    - /bin/cp $HOME/last-migrate.log $HOME/thelittlegraduates.in/mtt/last-migrate.log
-    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash inventory/run-smoke.sh > $HOME/last-smoke.log 2>&1 || echo "SMOKE WRAPPER EXIT $?" >> $HOME/last-smoke.log
-    - /bin/cp $HOME/last-smoke.log $HOME/thelittlegraduates.in/mtt/last-smoke.log
-    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash tasks/run-smoke.sh > $HOME/last-tasks-smoke.log 2>&1 || echo "TASKS SMOKE WRAPPER EXIT $?" >> $HOME/last-tasks-smoke.log
-    - /bin/cp $HOME/last-tasks-smoke.log $HOME/thelittlegraduates.in/mtt/last-tasks-smoke.log
-    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash assessment/run-smoke.sh > $HOME/last-assessment-smoke.log 2>&1 || echo "ASSESSMENT SMOKE WRAPPER EXIT $?" >> $HOME/last-assessment-smoke.log
-    - /bin/cp $HOME/last-assessment-smoke.log $HOME/thelittlegraduates.in/mtt/last-assessment-smoke.log
-    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash crm/run-smoke.sh > $HOME/last-crm-smoke.log 2>&1 || echo "CRM SMOKE WRAPPER EXIT $?" >> $HOME/last-crm-smoke.log
-    - /bin/cp $HOME/last-crm-smoke.log $HOME/thelittlegraduates.in/mtt/last-crm-smoke.log
-    - cd $HOME/thelittlegraduates.in/mtt && /bin/bash materials/run-smoke.sh > $HOME/last-materials-smoke.log 2>&1 || echo "MATERIALS SMOKE WRAPPER EXIT $?" >> $HOME/last-materials-smoke.log
-    - /bin/cp $HOME/last-materials-smoke.log $HOME/thelittlegraduates.in/mtt/last-materials-smoke.log
-    - /bin/cp $HOME/last-mtt-deploy.log $HOME/thelittlegraduates.in/mtt/last-deploy.log
+    - /bin/bash "$HOME/repos/MontessoriTraineeTeacher/.github/scripts/deploy-cpanel.sh"

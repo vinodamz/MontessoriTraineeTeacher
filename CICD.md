@@ -1,172 +1,112 @@
-# CI/CD — auto-deploy to Hostgator (cPanel pull model)
+# MTT backend release and deployment
 
-Single repo, single docroot, single subdomain. cPanel clones the repo and pulls
-`main` on every push — no build step, because PHP runs from source.
+This repository deploys PHP source to `https://mtt.thelittlegraduates.in`.
+The release owner merges the reviewed PR into `main`; that push starts
+`.github/workflows/deploy.yml`. This preparation does not push or deploy.
 
-## How it works
+## Release sequence
 
-```
-   git push                                       cPanel git pull
-GitHub  ──────► GitHub Actions  ──── HTTPS:2083 ───────────────► GitHub
-                      │                       │
-                      │ POST UAPI              ▼
-                      ▼                  cPanel clones / updates
-              cPanel UAPI calls           /home/<user>/repos/MontessoriTraineeTeacher
-                  • update                       │
-                  • deployment/create            ▼
-                                       runs .cpanel.yml
-                                                │
-                                                ▼
-                         rsync → purge sensitive paths → chmod
-                         → php migrate.php → per-module smokes
-                              /home/<user>/thelittlegraduates.in/mtt
-```
+1. Finish the parent app/backend tests and review the PR diff. Run the explicit
+   PHP lint job even when branch protection does not require checks:
+   ```sh
+   find . -path ./.git -prune -o -name '*.php' -print | while IFS= read -r file; do php -l "$file" >/dev/null || exit 1; done
+   python3 .github/scripts/test_deployment.py
+   bash -n .github/scripts/deploy-cpanel.sh .github/scripts/smoke-inventory.sh
+   git diff --check
+   ```
+   Run all write-flow tests only against an isolated local database. The
+   deployment regressions use disposable directories, stub migrations and
+   mocked HTTP; they do not contact production.
+2. Before merging, confirm a recoverable database backup and a private backup
+   of the current code/config/uploads exist. Record the previous live
+   `build-id.txt`. Review migration changes; deploy never imports `schema.sql`
+   or `seeds.sql`, and never supplies the legacy table-drop confirmation flag.
+3. Confirm the cPanel checkout is clean, on `main`, and located at
+   `$HOME/repos/MontessoriTraineeTeacher`. The existing GitHub secrets are
+   `CPANEL_HOST`, `CPANEL_USER`, and `CPANEL_TOKEN`. No new secret is required.
+   Existing live `includes/config.php` and uploads must remain in place.
+4. Merge the PR into `main` and record the resulting **main commit SHA** (not
+   the PR head SHA). The workflow runs deployment regressions and PHP syntax
+   checks, asks cPanel to update `main`, and requests deployment. Manual
+   dispatch is allowed only from `main`.
+5. Monitor the workflow. Its GET-only verifier waits up to 600 seconds for a
+   success marker matching the exact SHA, latest migration and this deployment
+   request time. It then checks the login form, invalid parent token, module
+   redirects, unauthenticated API guards, and exclusion of inert test/log
+   artifacts. It does not log in or execute synthetic create/update/delete
+   flows. It never probes PHP smoke or install endpoints.
+6. Repeat the same read-only verification from the merged checkout if needed:
+   ```sh
+   python3 .github/scripts/verify-deploy.py --sha "$(git rev-parse HEAD)"
+   ```
+   `Verify live deployment (read only)` is also available as a manual GitHub
+   workflow. `smoke-inventory.sh` is a compatibility entry point for these
+   read-only checks; `SMOKE_TEST_*` credentials are no longer used.
 
-No FTP. The only credential traversing the public internet is the cPanel API
-token (sent over HTTPS in the `Authorization` header). cPanel itself fetches
-from GitHub.
+## What cPanel runs
 
-After rsync, `.cpanel.yml`:
-1. Deletes `docs/`, `CLAUDE.md`, `.mcp.json`, `install.php`, `sql/odoo_dump/`
-   from the docroot (rsync `--exclude` alone does not remove previously synced
-   files).
-2. Runs `php migrate.php` and writes `/last-migrate.log`.
-3. Runs inventory / tasks / assessment / crm / materials smoke wrappers and
-   publishes `/last-*-smoke.log` for the Deploy workflow to read.
+`.cpanel.yml` invokes the script by its absolute private-checkout path; it does
+not depend on the task working directory. The script derives its source root
+from its own location. cPanel's documented examples use repository-relative
+sources and require `.cpanel.yml` in the repository root:
+[Set Up Deployment](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-deployment/).
 
-## One-time setup
+`.github/scripts/deploy-cpanel.sh` performs these steps as one fail-fast task:
 
-### 1. Database
+1. Require the existing docroot and live config, then acquire a deployment lock
+   outside the webroot.
+2. Quarantine known previously deployed tests, smoke wrappers, developer
+   tooling, documentation and public deploy logs into the private run folder.
+   This is a fixed list of deployment artifacts, not a broad deletion of
+   untracked files. The previous success marker is quarantined too.
+3. Copy application code using `.github/deploy-excludes.txt`. Tests, editor/
+   agent environments, cloud-agent scripts and smoke entry points are excluded.
+   `includes/config.php` and **all of `uploads/`** are excluded. The operational
+   `scripts/leave_monthly_credit.php` cron remains deployed.
+4. Set ordinary permissions on transferred code only and touch shipped PHP
+   files to refresh timestamp-based opcode caches. No recursive chmod/touch of
+   live config or uploads; no `rsync --delete` or `--delete-excluded`.
+5. Run `php migrate.php`, capturing output privately. Require zero exit,
+   a completion line, and the `applied` marker for **every** migration in this
+   checkout. The runner prints `applied` after each successful idempotent
+   replay. Its `[skip]` branch means an unreadable migration file, not an
+   already-existing table; such a skip correctly fails readiness. Diagnostic
+   errors and incomplete zero-exit runs also fail.
+6. Only after those gates succeed, atomically publish `build-id.txt` and the
+   non-sensitive `deploy-status.json` (revision, migration name and timestamps).
 
-cPanel → **MySQL Databases**:
-- Create DB (e.g. `ideyyfbn_lg`).
-- Create user; grant ALL on the DB.
+## Logs and recovery
 
-cPanel → **phpMyAdmin** → pick the DB:
+Private run files are at
+`$HOME/mtt-deploy-logs/<start-epoch>-<commit>-<pid>/`:
 
-**Fresh install** — apply both files:
-- **Import** → upload `sql/schema.sql` (creates all tables; DROPs existing).
-- **Import** → upload `sql/seeds.sql` (rating_config + PG/Nur/LKG/UKG indicators).
+- `deploy.log`: copy/deployment output.
+- `migrate.log`: database diagnostics and migration results.
+- `quarantine/`: removed public tooling/logs and previous markers, preserved.
 
-**Upgrading the existing MTT database** in-place (preserves all data):
-- Deploy once; `.cpanel.yml` runs `php migrate.php` automatically. Or open
-  `/migrate.php` once as admin. Migrations are idempotent.
+The old public `/last-*.log` endpoints are intentionally retired. Do not publish
+migration diagnostics containing database/schema details. Inspect logs through
+cPanel File Manager or an authorized shell.
 
-### 2. Subdomain
+If a run fails, stop and inspect its private logs before retrying. This is an
+in-place deployment: an interrupted copy or failed migration may leave some
+new code/schema in place. The missing/failing success marker prevents a false
+green result; it is not an automatic rollback. Restore the reviewed previous
+code only after checking schema compatibility; restore database state from a
+verified backup when needed. Never erase the webroot, uploads or live config.
+A process killed before its cleanup trap may leave `.deploy-lock`; remove that
+empty lock only after confirming no deployment is still running.
 
-cPanel → **Domains → Create A New Domain**:
+## Remaining operator checks
 
-| Field           | Value                                                |
-|-----------------|------------------------------------------------------|
-| Domain          | `mtt.thelittlegraduates.in`                          |
-| Document Root   | `/home/ideyyfbn/thelittlegraduates.in/mtt`           |
-
-The wildcard A-record on the parent zone already resolves the subdomain.
-
-### 3. Clone the repo on cPanel
-
-cPanel → **Git Version Control → Create**:
-
-| Field             | Value                                                              |
-|-------------------|--------------------------------------------------------------------|
-| Clone a Repository| **on**                                                             |
-| Clone URL         | `https://github.com/vinodamz/MontessoriTraineeTeacher.git`         |
-| Repository Path   | `/home/ideyyfbn/repos/MontessoriTraineeTeacher`                    |
-| Repository Name   | `MontessoriTraineeTeacher`                                         |
-
-This path is **outside the docroot** so `.git/` is never web-served.
-
-### 4. cPanel API token
-
-cPanel → top-right user menu → **Manage API Tokens** → **Create** → name
-`gha-deploy-mtt`. Copy the token immediately (you cannot view it again).
-Rotate about every 90 days.
-
-### 5. GitHub secrets
-
-GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**.
-
-| Name           | Value                                              |
-|----------------|----------------------------------------------------|
-| `CPANEL_HOST`  | `s3744.bom1.stableserver.net` (the server hostname)|
-| `CPANEL_USER`  | `ideyyfbn`                                         |
-| `CPANEL_TOKEN` | the token from step 4                              |
-| `SMOKE_TEST_USER_ID` | (optional) user id for authed inventory smoke |
-| `SMOKE_TEST_PIN`     | (optional) PIN for that user                  |
-
-> **Why the server hostname?** The cPanel control panel (port 2083) presents
-> an SSL cert for the server hostname — using your domain would fail TLS.
-
-### 6. Configure the app on the server
-
-cPanel → **File Manager** → `/home/ideyyfbn/thelittlegraduates.in/mtt/includes/`:
-
-1. Copy `config.example.php` to `config.php`.
-2. Edit `config.php` and fill in the real DB credentials.
-3. Keep `'session_name' => 'LG_SESSION'` (matches the example). Changing the
-   live value forces every staff browser to re-login once.
-
-`config.php` is excluded from rsync in `.cpanel.yml`, so future deploys won't
-clobber it.
-
-### 7. Bootstrap the first admin
-
-`install.php` is **not** deployed after the first admin exists (excluded +
-purged from the docroot). For a brand-new server only:
-
-1. Temporarily copy `install.php` from the repo clone into the docroot.
-2. Visit `https://mtt.thelittlegraduates.in/install.php`.
-3. Enter your name and a 4–6 digit PIN.
-4. Delete `install.php` again (next deploy also removes it).
-5. Visit `/login.php` → tap your profile card → enter your PIN.
-
-### 8. Add staff, modules, and students
-
-Once logged in as admin:
-- **Admin** (root `/admin.php`) — add users, set their role (`teacher` / `admin`)
-  and the modules they can access.
-- Module admins add students / board columns / CRM stages as needed.
-
-Single-module users get redirected straight into that module after sign-in.
-Users with multiple modules see a picker at `/index.php`.
-
-## Manual trigger
-
-GitHub → **Actions** → **Deploy to Hostgator (cPanel pull)** → **Run workflow** → main → **Run workflow**.
-
-On-demand inventory-only probe: **Actions** → **Verify live inventory module**.
-
-## How to inspect a deploy
-
-| Where                                                                            | What you see                                                  |
-|----------------------------------------------------------------------------------|---------------------------------------------------------------|
-| GitHub → **Actions** tab                                                         | `php -l`, UAPI responses, login/parent-form/migrate/smoke gates |
-| cPanel → **Git Version Control → Manage → Pull or Deploy**                       | Most recent pull/deploy timestamps + log                      |
-| `https://mtt.thelittlegraduates.in/last-deploy.log`                              | Rsync log from the most recent deploy                         |
-| `https://mtt.thelittlegraduates.in/last-migrate.log`                             | `php migrate.php` output (must end with latest mig ✓ applied) |
-| `https://mtt.thelittlegraduates.in/last-smoke.log`                               | Inventory master-spec smoke                                   |
-| `https://mtt.thelittlegraduates.in/last-{tasks,assessment,crm,materials}-smoke.log` | Per-module smoke PASS/FAIL                              |
-| cPanel → **Errors**                                                              | PHP runtime errors after deploy                               |
-
-Deploy logs are intentionally public so GitHub Actions can fetch them without
-extra secrets. Do not put credentials in those logs.
-
-## Forcing a clean slate
-
-If rsync gets confused:
-
-1. cPanel → **File Manager** → delete everything under the docroot *except*
-   `includes/config.php`.
-2. cPanel → **Git Version Control → Manage → Pull or Deploy** → **Deploy HEAD**.
-   Re-runs `.cpanel.yml`, repopulates the docroot.
-
-## Security notes
-
-- Rotate `CPANEL_TOKEN` about every 90 days.
-- `.cpanel.yml` excludes `includes/config.php` from rsync. **Never** commit
-  DB credentials.
-- Docroot must not serve `docs/`, `CLAUDE.md`, `.mcp.json`, `install.php`, or
-  `sql/odoo_dump/` — excludes + post-rsync `rm` + `.htaccess` forbid rules.
-- The repo clone at `/home/ideyyfbn/repos/MontessoriTraineeTeacher` is outside
-  the docroot — `.git/` is never web-served. Verify:
-  `curl -sI https://mtt.thelittlegraduates.in/.git/HEAD` returns 404.
+- Confirm PHP CLI is 8.1+ and the checkout path matches the workflow. cPanel
+  needs Bash, Git, rsync and PHP. Existing uploads protection files/permissions
+  are preserved; any deliberate upload-rule change needs separate review.
+- Compare the completed marker against the merged main SHA. A newer main commit
+  pulled during this run must not be mistaken for the requested revision.
+- Verify the hosting account clock is synchronized; freshness uses UTC epochs.
+- GET-only checks establish revision, migration completion, bootstrap and access
+  guard behavior. Authenticated behavior and writes are covered locally, not
+  exercised against school records during deployment.
+- Android/Play build, signing and release tracks are owned by the parent release
+  task and are outside this backend deployment recipe.

@@ -100,7 +100,8 @@ if (($_GET['format'] ?? '') === 'csv') {
 $pageTitle = 'Inventory';
 require __DIR__ . '/../includes/header.php';
 
-$qsCsv = $_SERVER['QUERY_STRING'] !== '' ? $_SERVER['QUERY_STRING'] . '&format=csv' : 'format=csv';
+$queryString = (string)($_SERVER['QUERY_STRING'] ?? '');
+$qsCsv = $queryString !== '' ? $queryString . '&format=csv' : 'format=csv';
 $viewTitle = ['low' => 'Reorder (low stock)', 'due' => 'Due for stock check', 'attention' => 'Needs attention'][$view] ?? null;
 ?>
 

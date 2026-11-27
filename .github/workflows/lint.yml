@@ -33,6 +33,9 @@ jobs:
           php-version: '8.1'
           extensions: pdo_mysql
           tools: none
+      - name: Deployment safety regressions
+        run: python3 .github/scripts/test_deployment.py
+
       - name: php -l
         run: |
           set -e

@@ -135,6 +135,10 @@ $inr = 'fee_inr';
 <!doctype html>
 <html lang="en">
 <head>
+    <?php if (!empty($_SESSION['_app_workspace'])): ?>
+    <link rel="stylesheet" href="/assets/css/app-workspace.css?v=<?= e(asset_version()) ?>">
+    <script src="/assets/js/app-workspace.js?v=<?= e(asset_version()) ?>" defer data-user="<?= (int)$user['id'] ?>"></script>
+    <?php endif; ?>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Fee Guide <?= $childName ? '— ' . e($childName) : '' ?> — Little Graduates</title>

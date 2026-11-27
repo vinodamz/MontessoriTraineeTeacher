@@ -645,8 +645,7 @@ function transport_trip_ensure(int $routeId, string $date, string $direction): a
     transport_trip_slot_check($routeId, $date, $direction);
     $open = transport_trip_open_id($routeId, $date, $direction);
     if ($open > 0) {
-        $trip = transport_trip_get($open);
-        if ($trip && $trip['status'] === 'scheduled') transport_trip_snapshot($open);
+        // Keep the draft's child list and order, including operator edits.
         return transport_trip_get($open);
     }
     $st = db()->prepare('SELECT id FROM transport_trips WHERE route_id = :r AND trip_date = :d AND direction = :dir
@@ -671,7 +670,7 @@ function transport_trip_begin(int $routeId, string $date, string $direction): ar
     transport_trip_slot_check($routeId, $date, $direction);
     $open = transport_trip_open_id($routeId, $date, $direction);
     if ($open > 0) {
-        if ((transport_trip_get($open)['status'] ?? '') === 'scheduled') transport_trip_snapshot($open);
+        // Keep the draft's child list and order, including operator edits.
         return transport_trip_get($open);
     }
     $st = db()->prepare('SELECT COALESCE(MAX(run_no), 0) + 1 FROM transport_trips
@@ -866,7 +865,8 @@ function transport_trip_start(int $tripId, int $userId): void
     $trip = transport_trip_get($tripId);
     if (!$trip) throw new InvalidArgumentException('Trip not found.');
     if ($trip['status'] !== 'scheduled') throw new InvalidArgumentException('This trip has already started.');
-    transport_trip_snapshot($tripId);
+    // The snapshot was created with the trip (or when its route changed).
+    // Rebuilding here discards children added/removed/reordered before departure.
     $n = db()->prepare('SELECT COUNT(*) FROM transport_trip_stops WHERE trip_id = :t');
     $n->execute([':t' => $tripId]);
     if ((int)$n->fetchColumn() === 0) throw new InvalidArgumentException('Add children to this route before starting.');

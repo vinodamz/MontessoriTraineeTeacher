@@ -10,10 +10,10 @@ $user = api_materials_user();
 $in = api_input();
 
 try {
-    api_materials_client_key((string)($in['client_key'] ?? ''));
+    $clientKey = api_materials_client_key((string)($in['client_key'] ?? ''));
     $saved = api_materials_bulk_good(
         $user,
-        api_materials_date((string)($in['date'] ?? '')),
+        api_materials_date((string)($in['date'] ?? ''), null, $clientKey !== ''),
         (string)($in['scope'] ?? ''),
     );
     $saved['client_key'] = (string)($in['client_key'] ?? '');

@@ -378,7 +378,8 @@ function csrf_check(): void
 {
     start_session_once();
     $sent = $_POST['_csrf'] ?? '';
-    if (!hash_equals($_SESSION['_csrf'] ?? '', $sent)) {
+    $expected = $_SESSION['_csrf'] ?? '';
+    if (!is_string($sent) || !is_string($expected) || $expected === '' || $sent === '' || !hash_equals($expected, $sent)) {
         http_response_code(400);
         exit('Bad CSRF token.');
     }

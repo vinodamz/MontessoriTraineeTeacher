@@ -10,11 +10,11 @@ $user = api_materials_user();
 $in = api_input();
 
 try {
-    api_materials_client_key((string)($in['client_key'] ?? ''));
+    $clientKey = api_materials_client_key((string)($in['client_key'] ?? ''));
     $saved = api_materials_mark(
         $user,
         (int)($in['material_id'] ?? 0),
-        api_materials_date((string)($in['date'] ?? '')),
+        api_materials_date((string)($in['date'] ?? ''), null, $clientKey !== ''),
         (string)($in['condition_code'] ?? ''),
         (string)($in['notes'] ?? ''),
     );

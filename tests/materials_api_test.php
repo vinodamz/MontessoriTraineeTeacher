@@ -43,6 +43,8 @@ expect_same(api_materials_date('today', $today), '2026-10-21', 'today keyword');
 expect_same(api_materials_date('2026-10-20', $today), '2026-10-20', 'yesterday is allowed');
 expect_same(api_materials_date('2026-10-07', $today), '2026-10-07', '14 days back is allowed');
 expect_throw(fn () => api_materials_date('2026-10-06', $today), '15 days back is rejected');
+expect_same(api_materials_date('2026-09-01', $today, true), '2026-09-01', 'queued checks retain their original date after a long outage');
+expect_throw(fn () => api_materials_date('2026-10-22', $today, true), 'queued checks cannot use future dates');
 expect_throw(fn () => api_materials_date('2026-10-22', $today), 'future date is rejected');
 expect_throw(fn () => api_materials_date('2026-02-31', $today), 'impossible date is rejected');
 expect_throw(fn () => api_materials_date('21-10-2026', $today), 'wrong shape is rejected');

@@ -159,7 +159,13 @@ function api_logout(array $user): void
  */
 function api_app_modules(array $user): array
 {
-    $base = app_base_url();
+    require_once __DIR__ . '/materials.php';
+    require_once __DIR__ . '/plans.php';
+    return api_app_modules_for_access($user, app_base_url(), mm_can_daily_check($user), plan_can_access($user));
+}
+
+function api_app_modules_for_access(array $user, string $base, bool $materialsAllowed, bool $plansAllowed): array
+{
     $catalog = [
         'transport'  => ['Transport',   '/transport/index.php', true],
         'students'   => ['Students',    '/students/index.php',  false],
@@ -175,16 +181,32 @@ function api_app_modules(array $user): array
         'plans'      => ['Weekly Plans','/plans/index.php',     false],
         'daycare'    => ['Daycare',     '/daycare/index.php',   false],
         'recruitment'=> ['Recruitment', '/recruitment/index.php', false],
+        'wacrm'      => ['WhatsApp CRM', '/wacrm/index.php', false],
+        'n8n'        => ['Automations', '/n8n/index.php', false],
+        'my_day'     => ['My Day', '/today.php', false],
+        'duties'     => ['My duties', '/duties/index.php', false],
+        'my_leave'   => ['My leave', '/staff/leave.php', false],
+        'notifications' => ['Notifications', '/notifications.php', false],
+        'money'      => ['Money overview', '/money.php', false],
+        'duties_admin' => ['Duty lists', '/duties/admin.php', false],
+        'feedback'   => ['Feedback', '/feedback/index.php', false],
+        'surveys'    => ['Surveys', '/surveys/index.php', false],
+        'grades'     => ['Grades', '/grades.php', false],
+        'mcp_admin'  => ['MCP API', '/mcp_admin.php', false],
+        'admin'      => ['Admin', '/admin.php', false],
     ];
     $out = [];
     foreach ($catalog as $key => [$label, $path, $native]) {
-        $allowed = user_has_module($user, $key);
-        // A materials-check duty is enough on the website. Show the same
-        // native sheet in the app, even without the Materials module.
-        if (!$allowed && $key === 'materials') {
-            require_once __DIR__ . '/materials.php';
-            $allowed = mm_can_daily_check($user);
-        }
+        $allowed = match ($key) {
+            'duties', 'notifications' => true,
+            'my_leave' => !user_has_module($user, 'staff'),
+            'my_day' => user_has_module($user, 'students') || user_has_module($user, 'montessori'),
+            'money' => user_has_module($user, 'fees') || user_has_module($user, 'expenses') || user_has_module($user, 'students'),
+            'duties_admin', 'feedback', 'surveys', 'grades', 'mcp_admin', 'admin' => ($user['role'] ?? '') === 'admin',
+            'materials' => $materialsAllowed,
+            'plans' => $plansAllowed,
+            default => user_has_module($user, $key),
+        };
         if (!$allowed) continue;
         $out[] = ['key' => $key, 'label' => $label, 'native' => $native, 'web_url' => $base . $path];
     }

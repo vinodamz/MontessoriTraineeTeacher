@@ -12,7 +12,7 @@ require_once __DIR__ . '/api.php';
 require_once __DIR__ . '/materials.php';
 
 /** Blank or "today" is the school day. A late upload may name a recent day. */
-function api_materials_date(string $raw, ?DateTimeInterface $today = null): string
+function api_materials_date(string $raw, ?DateTimeInterface $today = null, bool $queued = false): string
 {
     $now = $today !== null
         ? DateTimeImmutable::createFromInterface($today)->setTime(0, 0)
@@ -29,7 +29,7 @@ function api_materials_date(string $raw, ?DateTimeInterface $today = null): stri
     }
     if ($day > $now) throw new InvalidArgumentException('That date is in the future.');
     $oldest = $now->modify('-14 days');
-    if ($day < $oldest) throw new InvalidArgumentException('That check is too old to save from the app.');
+    if (!$queued && $day < $oldest) throw new InvalidArgumentException('That check is too old to save from the app.');
     return $raw;
 }
 

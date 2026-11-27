@@ -44,7 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $unit   = (string)($_POST['unit']         ?? '');
     $reord  = (float)($_POST['reorder_level'] ?? 0);
     $pdate  = trim((string)($_POST['purchase_date'] ?? '')) ?: null;
-    $cost   = $_POST['unit_cost'] === '' || $_POST['unit_cost'] === null ? null : (float)$_POST['unit_cost'];
+    $costIn = $_POST['unit_cost'] ?? '';
+    $cost   = $costIn === '' || $costIn === null ? null : (float)$costIn;
     $supp   = trim((string)($_POST['supplier'] ?? '')) ?: null;
     $loc    = (string)($_POST['location'] ?? '');
     $cond   = (string)($_POST['condition'] ?? 'good');
@@ -207,7 +208,7 @@ $val = fn(string $k, $d = '') => e((string)($row[$k] ?? $d));
             <input type="number" name="reorder_level" value="<?= e((string)($row['reorder_level'] ?? '0')) ?>" min="0" step="0.01">
         </div>
         <div class="field" style="flex:1 1 160px;"><label>Purchase cost (per unit)</label>
-            <input type="number" name="unit_cost" value="<?= e($row['unit_cost'] === null ? '' : (string)$row['unit_cost']) ?>" min="0" step="0.01" placeholder="₹">
+            <input type="number" name="unit_cost" value="<?= e((string)($row['unit_cost'] ?? '')) ?>" min="0" step="0.01" placeholder="₹">
         </div>
     </div>
 
