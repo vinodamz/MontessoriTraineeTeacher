@@ -217,14 +217,15 @@ require __DIR__ . '/../includes/header.php';
                         </label>
                     <?php endforeach; ?>
                 </div>
-                <div class="att-notes">
-                    <input type="text" name="mark[<?= $sid ?>][notes]" maxlength="255" placeholder="Notes (optional)" value="<?= e($s['notes'] ?? '') ?>">
-                </div>
+                <details class="att-notes"<?= trim((string)($s['notes'] ?? '')) !== '' ? ' open' : '' ?>>
+                    <summary>Add a note</summary>
+                    <input type="text" name="mark[<?= $sid ?>][notes]" maxlength="255" placeholder="Note for <?= e($s['first_name']) ?> (optional)" aria-label="Note for <?= e($full) ?>" value="<?= e($s['notes'] ?? '') ?>">
+                </details>
             </li>
         <?php endforeach; ?>
     </ul>
 
-    <div class="actions section-h-spaced">
+    <div class="actions att-savebar">
         <button class="btn btn-primary" type="submit">Save attendance</button>
     </div>
 </form>
