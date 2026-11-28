@@ -28,7 +28,7 @@ if ($user['role'] !== 'admin'
     exit;
 }
 
-$VALID_STATUSES = ['present', 'absent', 'late', 'excused', 'holiday'];
+$VALID_STATUSES = ['present', 'absent', 'late', 'excused', 'holiday']; // = CLASS_ATTENDANCE_STATUSES
 $today    = (new DateTime('today'))->format('Y-m-d');
 $niceDate = (new DateTime('today'))->format('l, j M');
 
@@ -40,45 +40,13 @@ try {
     $todayAttendance = $stmt->fetch() ?: null;
 } catch (Throwable $e) { /* staff module may not be provisioned */ }
 
-// ---- 2. My class + today's marks --------------------------------------------
-$stmt = db()->prepare("
-    SELECT s.id, s.first_name, s.last_name, s.grade, s.dob,
-           a.status, a.notes
-    FROM students s
-    LEFT JOIN attendance a ON a.student_id = s.id AND a.attendance_date = :d
-    WHERE COALESCE(s.is_active, 1) = 1
-      AND COALESCE(s.enrollment_status, 'enrolled') = 'enrolled'
-      AND s.teacher_id = :uid
-    ORDER BY " . grade_sql_order('s.grade') . ", s.first_name, s.last_name
-");
-$stmt->execute([':d' => $today, ':uid' => (int)$user['id']]);
-$myClass = $stmt->fetchAll();
-
-$unmarked = 0;
-foreach ($myClass as $row) {
-    if (empty($row['status'])) $unmarked++;
-}
+// ---- 2. My class + today's marks (shared with the app's Today screen) ------
+require_once __DIR__ . '/includes/class_attendance.php';
+$myClass  = class_attendance_my_class((int)$user['id'], $today);
+$unmarked = class_attendance_counts($myClass)['unsaved'];
 
 // ---- 3. Pending assessments this month --------------------------------------
-$pendingAssess = 0;
-$hasMontess = user_has_module($user, 'montessori');
-if ($hasMontess && $myClass) {
-    try {
-        $month = current_month_year();
-        $stmt = db()->prepare("
-            SELECT COUNT(*) FROM students s
-            WHERE s.teacher_id = :u
-              AND COALESCE(s.is_active, 1) = 1
-              AND COALESCE(s.enrollment_status, 'enrolled') = 'enrolled'
-              AND NOT EXISTS (
-                  SELECT 1 FROM evaluation_cards e
-                  WHERE e.student_id = s.id AND e.month_year = :m AND e.teacher_id = :u2
-              )
-        ");
-        $stmt->execute([':u' => $user['id'], ':m' => $month, ':u2' => $user['id']]);
-        $pendingAssess = (int)$stmt->fetchColumn();
-    } catch (Throwable $e) {}
-}
+$pendingAssess = $myClass ? class_attendance_pending_assessments($user) : 0;
 
 // ---- 5. Today's birthdays (school-wide) --------------------------------------
 $birthdays = [];

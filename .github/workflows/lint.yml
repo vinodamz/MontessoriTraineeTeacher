@@ -46,6 +46,7 @@ jobs:
         run: |
           php tests/api_cors_test.php
           php tests/app_workspace_test.php
+          php tests/class_attendance_test.php
       - name: Assessment rating round-trip and comment carry-forward
         env:
           ASSESSMENT_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=mtt_test
