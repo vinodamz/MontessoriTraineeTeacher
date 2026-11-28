@@ -173,8 +173,9 @@ $out = $todayAttendance['check_out'] ?? null;
 <?php if (!$myClass): ?>
     <div class="empty">
         <p>No class is assigned to you yet.
-        <?php if ($user['role'] === 'admin'): ?>
-            Mark attendance for the whole school on the <a href="/students/attendance.php">attendance page</a>.
+        <?php if ($user['role'] === 'admin' || user_has_module($user, 'students')): ?>
+            Covering a class today?</p>
+        <p><a class="btn btn-primary" href="/students/attendance.php">Mark class attendance</a>
         <?php else: ?>
             Ask an admin to assign students to you.
         <?php endif; ?>
