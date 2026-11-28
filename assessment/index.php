@@ -134,13 +134,21 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($hasBl): ?><span class="pill">First assessment ✓</span><?php endif; ?>
             </div>
             <div class="student-actions">
-                <a class="btn btn-primary" href="assess.php?student_id=<?= $sid ?>&amp;month=<?= e(urlencode($currentMonth)) ?>">Monthly assessment</a>
-                <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress/history</a>
-                <?php if (!$hasBl): ?>
-                    <a class="btn btn-ghost" href="baseline.php?student_id=<?= $sid ?>">Add first assessment</a>
-                <?php endif; ?>
-                <?php if ($editUrl = student_edit_url($user, $sid)): ?>
-                    <a class="btn btn-ghost" href="<?= e($editUrl) ?>" title="Correct name, grade or other details">Edit</a>
+                <a class="btn <?= $isCurrent ? '' : 'btn-primary' ?>" href="assess.php?student_id=<?= $sid ?>&amp;month=<?= e(urlencode($currentMonth)) ?>"><?= $isCurrent ? 'Review this month' : 'Assess ' . e(month_year_label($currentMonth)) ?></a>
+                <a class="btn" href="progress.php?student_id=<?= $sid ?>">Progress</a>
+                <?php $editUrl = student_edit_url($user, $sid); ?>
+                <?php if (!$hasBl || $editUrl): ?>
+                    <details class="student-more">
+                        <summary class="btn btn-ghost" aria-label="More for <?= e($fullName) ?>">More</summary>
+                        <div class="student-more-menu">
+                            <?php if (!$hasBl): ?>
+                                <a href="baseline.php?student_id=<?= $sid ?>">Add first (baseline) assessment</a>
+                            <?php endif; ?>
+                            <?php if ($editUrl): ?>
+                                <a href="<?= e($editUrl) ?>">Edit child details</a>
+                            <?php endif; ?>
+                        </div>
+                    </details>
                 <?php endif; ?>
             </div>
         </li>

@@ -262,6 +262,17 @@ body.landing { background: var(--bg); }
 .student-status { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--ink-soft); flex-wrap: wrap; }
 .student-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
 .student-actions .btn { flex: 1; padding: .45rem .6rem; font-size: .85rem; }
+.student-more { position: relative; flex: 0 0 auto; }
+.student-more > summary { list-style: none; cursor: pointer; }
+.student-more > summary::-webkit-details-marker { display: none; }
+.student-more-menu {
+    position: absolute; right: 0; top: calc(100% + .25rem); z-index: 10; min-width: 14rem;
+    display: flex; flex-direction: column; padding: .35rem;
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+}
+.student-more-menu a { padding: .6rem .7rem; border-radius: var(--radius-sm); color: var(--ink); font-size: .9rem; }
+.student-more-menu a:hover, .student-more-menu a:focus-visible { background: var(--bg-soft); }
 .student-card.is-inactive { opacity: .55; }
 .student-card.is-inactive .student-name a { text-decoration: line-through; }
 .student-name a { color: inherit; }
@@ -404,6 +415,22 @@ body.landing { background: var(--bg); }
 .att-excused.is-on  { background: #2D6BA0; border-color: #235280; }
 .att-holiday.is-on  { background: #8e8a82; border-color: #74716a; }
 .att-notes input { width: 100%; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-card); }
+/* Notes are rarely needed: keep them one tap away so the list stays short. */
+details.att-notes > summary {
+    cursor: pointer; list-style: none; display: inline-block;
+    font-size: .8rem; font-weight: 600; color: var(--accent); padding: .25rem 0;
+}
+details.att-notes > summary::-webkit-details-marker { display: none; }
+details.att-notes > summary::before { content: "+ "; }
+details.att-notes[open] > summary { display: none; }
+/* Save stays in reach however long the class list is. */
+.att-savebar {
+    position: sticky; bottom: 0; z-index: 5;
+    margin-top: .75rem; padding: .6rem 0;
+    background: linear-gradient(to bottom, transparent, var(--bg-card) 35%);
+}
+.att-savebar .btn { width: 100%; }
+@media (min-width: 721px) { .att-savebar .btn { width: auto; } }
 
 /* pill variants used in day summary + history */
 .att-pill { text-transform: capitalize; }

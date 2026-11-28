@@ -35,10 +35,12 @@ require __DIR__ . '/../includes/header.php';
         <h1>Weekly Plans</h1>
         <p class="muted">Plan Mon–Sat ahead, note materials, and send a message to the Principal.</p>
     </div>
+    <?php if ($isAdmin): /* Teachers get the same two weeks as cards below. */ ?>
     <div class="actionbar">
         <a class="btn btn-ghost" href="/plans/edit.php?week=<?= e(rawurlencode(plan_current_week_key())) ?>">This week’s plan</a>
         <a class="btn btn-primary" href="/plans/edit.php?week=<?= e(rawurlencode(plan_next_week_key())) ?>">Next week’s plan</a>
     </div>
+    <?php endif; ?>
 </div>
 
 <?php if ($isAdmin): ?>

@@ -128,7 +128,7 @@ require __DIR__ . '/includes/header.php';
         <h1>My Day</h1>
         <p class="muted"><strong><?= e($niceDate) ?></strong>
             <?php if ($myClass): ?> · <?= count($myClass) ?> in my class<?php endif; ?>
-            <?php if ($unmarked > 0): ?> · <span class="pill pill-warn"><?= $unmarked ?> unmarked</span>
+            <?php if ($unmarked > 0): ?> · <span class="pill pill-warn"><?= $unmarked ?> attendance not saved</span>
             <?php elseif ($myClass): ?> · <span class="pill">attendance done ✓</span><?php endif; ?>
         </p>
     </div>
@@ -168,6 +168,91 @@ $out = $todayAttendance['check_out'] ?? null;
         </form>
     </div>
 </div>
+
+<?php /* ---- My class attendance, inline ---- */ ?>
+<?php if (!$myClass): ?>
+    <div class="empty">
+        <p>No class is assigned to you yet.
+        <?php if ($user['role'] === 'admin'): ?>
+            Mark attendance for the whole school on the <a href="/students/attendance.php">attendance page</a>.
+        <?php else: ?>
+            Ask an admin to assign students to you.
+        <?php endif; ?>
+        </p>
+    </div>
+<?php else: ?>
+<form method="post" action="/students/attendance.php" class="card">
+    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+    <input type="hidden" name="date"  value="<?= e($today) ?>">
+    <input type="hidden" name="grade" value="">
+    <input type="hidden" name="return_to" value="/today.php">
+
+    <div class="att-actionbar">
+        <strong style="margin-right:auto;">My class — today's attendance</strong>
+        <button class="btn" type="button" data-att-all="present">All present</button>
+        <a class="btn btn-ghost" href="/students/attendance.php">Full page</a>
+    </div>
+
+    <ul class="att-grid">
+        <?php foreach ($myClass as $s):
+            $sid    = (int)$s['id'];
+            $status = $s['status'] ?? 'present';
+            $full   = trim($s['first_name'] . ' ' . $s['last_name']);
+        ?>
+            <li class="att-row" style="--card: <?= e(user_color($sid)) ?>;">
+                <div class="att-who">
+                    <span class="student-avatar"><?= e(user_initials($full)) ?></span>
+                    <div>
+                        <div class="att-name"><a href="/students/view.php?id=<?= $sid ?>"><?= e($full) ?></a></div>
+                        <div class="muted small">
+                            <span class="<?= e(grade_badge_class($s['grade'])) ?>"><?= e($s['grade']) ?></span>
+                            <?php if (empty($s['status'])): ?> · <span class="pill pill-warn">not saved yet</span><?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="att-status">
+                    <?php foreach ($VALID_STATUSES as $st): ?>
+                        <label class="att-opt att-<?= e($st) ?> <?= $status === $st ? 'is-on' : '' ?>">
+                            <input type="radio" name="mark[<?= $sid ?>][status]" value="<?= e($st) ?>" <?= $status === $st ? 'checked' : '' ?>>
+                            <?= e(ucfirst($st)) ?>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+                <details class="att-notes"<?= trim((string)($s['notes'] ?? '')) !== '' ? ' open' : '' ?>>
+                    <summary>Add a note</summary>
+                    <input type="text" name="mark[<?= $sid ?>][notes]" maxlength="255" placeholder="Note for <?= e($s['first_name']) ?> (optional)" aria-label="Note for <?= e($full) ?>" value="<?= e($s['notes'] ?? '') ?>">
+                </details>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+
+    <div class="actions att-savebar">
+        <button class="btn btn-primary btn-big" type="submit">Save attendance</button>
+    </div>
+</form>
+
+<script>
+(() => {
+    document.querySelectorAll('.att-row').forEach(row => {
+        row.addEventListener('change', e => {
+            if (e.target.matches('input[type=radio]')) {
+                row.querySelectorAll('.att-opt').forEach(l => l.classList.toggle('is-on', l.querySelector('input').checked));
+            }
+        });
+    });
+    document.querySelectorAll('[data-att-all]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.attAll;
+            document.querySelectorAll('.att-row').forEach(row => {
+                const radio = row.querySelector(`input[type=radio][value="${target}"]`);
+                if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+            });
+        });
+    });
+})();
+</script>
+<?php endif; ?>
+
 
 <?php /* ---- My leave ----
          Next to check-in, because both are things a person does about their own
@@ -250,89 +335,6 @@ try {
         <span class="muted small">(<?= e($b['grade']) ?>, turns <?= (int)$b['turns'] ?>)</span>
     <?php endforeach; ?>
 </div>
-<?php endif; ?>
-
-<?php /* ---- My class attendance, inline ---- */ ?>
-<?php if (!$myClass): ?>
-    <div class="empty">
-        <p>No class is assigned to you yet.
-        <?php if ($user['role'] === 'admin'): ?>
-            Mark attendance for the whole school on the <a href="/students/attendance.php">attendance page</a>.
-        <?php else: ?>
-            Ask an admin to assign students to you.
-        <?php endif; ?>
-        </p>
-    </div>
-<?php else: ?>
-<form method="post" action="/students/attendance.php" class="card">
-    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-    <input type="hidden" name="date"  value="<?= e($today) ?>">
-    <input type="hidden" name="grade" value="">
-    <input type="hidden" name="return_to" value="/today.php">
-
-    <div class="att-actionbar">
-        <strong style="margin-right:auto;">My class — today's attendance</strong>
-        <button class="btn" type="button" data-att-all="present">All present</button>
-        <a class="btn btn-ghost" href="/students/attendance.php">Full page</a>
-    </div>
-
-    <ul class="att-grid">
-        <?php foreach ($myClass as $s):
-            $sid    = (int)$s['id'];
-            $status = $s['status'] ?? 'present';
-            $full   = trim($s['first_name'] . ' ' . $s['last_name']);
-        ?>
-            <li class="att-row" style="--card: <?= e(user_color($sid)) ?>;">
-                <div class="att-who">
-                    <span class="student-avatar"><?= e(user_initials($full)) ?></span>
-                    <div>
-                        <div class="att-name"><a href="/students/view.php?id=<?= $sid ?>"><?= e($full) ?></a></div>
-                        <div class="muted small">
-                            <span class="<?= e(grade_badge_class($s['grade'])) ?>"><?= e($s['grade']) ?></span>
-                            <?php if (empty($s['status'])): ?> · <span class="pill pill-warn">unmarked</span><?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-                <div class="att-status">
-                    <?php foreach ($VALID_STATUSES as $st): ?>
-                        <label class="att-opt att-<?= e($st) ?> <?= $status === $st ? 'is-on' : '' ?>">
-                            <input type="radio" name="mark[<?= $sid ?>][status]" value="<?= e($st) ?>" <?= $status === $st ? 'checked' : '' ?>>
-                            <?= e(ucfirst($st)) ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
-                <div class="att-notes">
-                    <input type="text" name="mark[<?= $sid ?>][notes]" maxlength="255" placeholder="Notes (optional)" value="<?= e($s['notes'] ?? '') ?>">
-                </div>
-            </li>
-        <?php endforeach; ?>
-    </ul>
-
-    <div class="actions section-h-spaced">
-        <button class="btn btn-primary btn-big" type="submit">Save attendance</button>
-    </div>
-</form>
-
-<script>
-(() => {
-    document.querySelectorAll('.att-row').forEach(row => {
-        row.addEventListener('change', e => {
-            if (e.target.matches('input[type=radio]')) {
-                row.querySelectorAll('.att-opt').forEach(l => l.classList.toggle('is-on', l.querySelector('input').checked));
-            }
-        });
-    });
-    document.querySelectorAll('[data-att-all]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.attAll;
-            document.querySelectorAll('.att-row').forEach(row => {
-                const radio = row.querySelector(`input[type=radio][value="${target}"]`);
-                if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
-            });
-        });
-    });
-})();
-</script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
