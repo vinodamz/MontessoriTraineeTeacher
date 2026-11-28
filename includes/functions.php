@@ -348,7 +348,7 @@ function flash_get(): array
 
 function user_color(int $id): string
 {
-    static $palette = ['#EC407A', '#5BA547', '#F5B342', '#2D6BA0', '#A05C7B', '#5DA8A2', '#E07A5F', '#7E57C2'];
+    static $palette = ['#E5447D', '#1FBF6B', '#F7A23B', '#2B2F77', '#A05C7B', '#2FB9C4', '#E07A5F', '#7E57C2'];
     return $palette[$id % count($palette)];
 }
 

@@ -219,8 +219,8 @@ require __DIR__ . '/../includes/header.php';
 <script>
 (() => {
     if (typeof Chart === 'undefined') return;   // CDN failed — leave the page usable
-    const PINK = '#e91e63', PINK_SOFT = 'rgba(233,30,99,.18)', GREEN = '#66bb6a',
-          PALETTE = ['#e91e63','#66bb6a','#42a5f5','#f5b342','#ab47bc','#26a69a','#ef5350','#8d6e63'];
+    const PINK = '#E5447D', PINK_SOFT = 'rgba(229,68,125,.18)', GREEN = '#1FBF6B',
+          PALETTE = ['#E5447D','#1FBF6B','#2FB9C4','#F7A23B','#ab47bc','#26a69a','#ef5350','#8d6e63'];
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 
     // Funnel — horizontal bars, click-through to the board.

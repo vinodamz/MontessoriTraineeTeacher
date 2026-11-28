@@ -245,7 +245,7 @@ foreach ($clients as $c) {
     <h3 style="margin-top:0;">Registered applications</h3>
 
     <?php if ($freshClient): ?>
-        <div class="card" style="background:#fff5fa;border:2px solid #ad1457;">
+        <div class="card" style="background:#FBE5EE;border:2px solid #B81F56;">
             <p style="margin:0 0 .5rem;"><strong>Copy these into the application's settings now.</strong>
                <?php if ($freshClient['client_secret'] !== null): ?>
                    The secret is shown once and is not stored in a form that can show it again.
@@ -277,7 +277,7 @@ foreach ($clients as $c) {
             <?php endif; ?>
         </p>
     <?php else: ?>
-        <p class="small" style="color:#ad1457;">
+        <p class="small" style="color:#B81F56;">
             <strong>Self-registration is off.</strong> Only the applications listed below can
             start a sign-in. Anything else is turned away before the consent screen, so a new
             assistant needs an ID and secret created here and typed into its settings.

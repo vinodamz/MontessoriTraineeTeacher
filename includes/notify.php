@@ -245,12 +245,12 @@ function _notify_email_html(string $appName, string $title, string $body, ?strin
     $btn    = '';
     if ($link) {
         $linkE = htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $btn = '<p style="margin: 20px 0;"><a href="' . $linkE . '" style="display:inline-block;background:#EC407A;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600;">Open in ' . $appE . '</a></p>';
+        $btn = '<p style="margin: 20px 0;"><a href="' . $linkE . '" style="display:inline-block;background:#E5447D;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600;">Open in ' . $appE . '</a></p>';
     }
     return '
 <!doctype html>
 <html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:24px;background:#FFF8F0;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#2A2316;">
+<body style="margin:0;padding:24px;background:#FFFAF0;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#38384a;">
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #E9DDC9;border-radius:14px;">
 <tr><td style="padding:24px;">
 <p style="margin:0 0 4px;font-size:13px;color:#5A4F40;letter-spacing:.06em;text-transform:uppercase;">' . $appE . '</p>

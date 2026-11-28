@@ -863,7 +863,7 @@ endif;
         <div class="empty">No tasks match your filters.</div>
     <?php else: ?>
         <ul class="task-list">
-            <?php foreach ($tasks as $t): $colColor = $t['column_color'] ?? '#EC407A'; ?>
+            <?php foreach ($tasks as $t): $colColor = $t['column_color'] ?? '#E5447D'; ?>
                 <li class="task" style="border-left-color: <?= e($colColor) ?>;">
                     <div class="task-head">
                         <span class="task-status-pill" style="background: <?= e($colColor) ?>22; color: <?= e($colColor) ?>;">

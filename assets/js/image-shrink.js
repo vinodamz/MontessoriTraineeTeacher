@@ -60,7 +60,7 @@
         if (!el) {
             el = document.createElement('span');
             el.className = 'shrink-hint';
-            el.style.cssText = 'display:block;font-size:.78rem;color:#66bb6a;margin-top:.2rem;';
+            el.style.cssText = 'display:block;font-size:.78rem;color:#11854A;margin-top:.2rem;';
             input.insertAdjacentElement('afterend', el);
         }
         return el;

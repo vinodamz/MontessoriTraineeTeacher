@@ -50,7 +50,7 @@ if (!$payment) {
 <title>Receipt not found · <?= e($appName) ?></title></head>
 <body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff5fa;display:flex;min-height:100vh;align-items:center;justify-content:center;">
 <div style="text-align:center;padding:2rem;max-width:420px;">
-<h1 style="color:#ad1457;font-size:1.2rem;">This receipt link isn't active.</h1>
+<h1 style="color:#B81F56;font-size:1.2rem;">This receipt link isn't active.</h1>
 <p style="color:#666;">Please contact the school for a fresh link.</p>
 </div></body></html>
     <?php
@@ -74,11 +74,13 @@ $receiptNo   = 'R-' . str_pad((string)(int)$payment['id'], 5, '0', STR_PAD_LEFT)
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Receipt <?= e($receiptNo) ?> · <?= e($appName) ?></title>
+<link rel="icon" href="/assets/img/logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap">
 <style>
-  :root { --pink: #e91e63; --pink-dark: #ad1457; --green: #66bb6a; color-scheme: light; }
+  :root { --pink: #E5447D; --pink-dark: #B81F56; --green: #1FBF6B; color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         background: #f4eef1; color: #1a1a1a; }
+  body { margin: 0; font: 15px/1.5 "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #FFFAF0; color: #38384a; }
   .toolbar { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #e9c2d3;
              padding: .6rem 1rem; text-align: right; }
   .btn { display: inline-block; padding: .45rem .9rem; background: var(--pink); color: #fff;

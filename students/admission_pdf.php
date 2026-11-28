@@ -129,19 +129,20 @@ if ($logoPath && is_file($logoPath)) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admission Form — <?= e($full) ?></title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
 <style>
   /* Theme: Little Graduates pink + green from the school logo. */
   :root {
-    --tlg-pink: #e91e63;
-    --tlg-pink-dark: #ad1457;
-    --tlg-pink-wash: #fce4ec;
-    --tlg-green: #66bb6a;
+    --tlg-pink: #E5447D;
+    --tlg-pink-dark: #B81F56;
+    --tlg-pink-wash: #FBE5EE;
+    --tlg-green: #1FBF6B;
     color-scheme: light;
   }
   * { box-sizing: border-box; }
-  html, body { background: #f4eef1; margin: 0; padding: 0;
-               font: 11pt/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-               color: #1a1a1a; }
+  html, body { background: #FFFAF0; margin: 0; padding: 0;
+               font: 11pt/1.4 "Nunito", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+               color: #38384a; }
   .sheet { background: #fff; width: 210mm; min-height: 297mm; margin: 1.5rem auto;
            padding: 14mm 14mm 18mm; box-shadow: 0 2px 12px rgba(0,0,0,.12); position: relative;
            border-top: 6px solid var(--tlg-pink); }
